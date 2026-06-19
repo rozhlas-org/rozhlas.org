@@ -267,8 +267,10 @@ export async function showView(slug: string): Promise<ViewResult> {
     audioBlock = `<ol class="parts">${items}</ol>`;
   } else {
     const playable = show.audio.find((a) => a.streamable && a.streamUrl);
+    const singleDur = playable?.durationSec ?? show.durationSec;
+    const singleDurEl = singleDur ? `<span class="part__dur">${esc(formatDuration(singleDur))}</span>` : "";
     audioBlock = playable
-      ? `<div class="part part--single part--playable" data-slug="${attr(show.slug)}" data-idx="single"><button class="part__play" type="button" aria-label="Přehrát">▶</button><span class="part__title">${esc(show.title)}</span></div>${
+      ? `<div class="part part--single part--playable" data-slug="${attr(show.slug)}" data-idx="single"><button class="part__play" type="button" aria-label="Přehrát">▶</button><div class="part__body"><span class="part__title">${esc(show.title)}</span>${singleDurEl}</div></div>${
           playable.cid ? `<p class="show-detail__cid">IPFS: <code>${esc(playable.cid)}</code></p>` : ""
         }`
       : `<p class="notice">Audio se zpracovává…</p>`;
