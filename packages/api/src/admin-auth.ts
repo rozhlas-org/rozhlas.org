@@ -14,6 +14,7 @@ const log = createLogger("admin-auth");
 const COOKIE = "rozhlas_admin";
 const LOGIN_PATH = "/admin/login";
 const LOGOUT_PATH = "/admin/logout";
+const ADMIN_HOME = "/admin"; // operator dashboard
 const TTL_MS = config.SESSION_TTL_HOURS * 3600 * 1000;
 
 const enabled = Boolean(config.ADMIN_PASSWORD && config.SESSION_SECRET);
@@ -87,7 +88,7 @@ export const adminAuthRoutes = new Hono();
 
 adminAuthRoutes.get(LOGIN_PATH, (c) => {
   if (!enabled) return c.text("Admin disabled: ADMIN_PASSWORD/SESSION_SECRET not set", 503);
-  if (tokenValid(getCookie(c, COOKIE))) return c.redirect(config.BULL_BOARD_PATH, 302);
+  if (tokenValid(getCookie(c, COOKIE))) return c.redirect(ADMIN_HOME, 302);
   return c.html(loginPage());
 });
 
@@ -106,7 +107,7 @@ adminAuthRoutes.post(LOGIN_PATH, async (c) => {
     path: "/admin",
     maxAge: Math.floor(TTL_MS / 1000),
   });
-  return c.redirect(config.BULL_BOARD_PATH, 302);
+  return c.redirect(ADMIN_HOME, 302);
 });
 
 adminAuthRoutes.get(LOGOUT_PATH, (c) => {

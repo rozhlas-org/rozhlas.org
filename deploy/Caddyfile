@@ -29,9 +29,9 @@ api.rozhlas.org {
 admin.rozhlas.org {
 	import cf_tls
 	encode zstd gzip
-	# Land visitors on the dashboard; the app redirects to the login if needed.
+	# Land visitors on the operator dashboard; the app redirects to login if needed.
 	@root path /
-	redir @root /admin/jobs 302
+	redir @root /admin 302
 	reverse_proxy 127.0.0.1:3000
 }
 

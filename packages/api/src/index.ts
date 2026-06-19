@@ -8,6 +8,7 @@ import { connection, mountBullBoard } from "@rozhlas/jobs";
 import { apiRoutes } from "./routes/api.ts";
 import { pageRoutes } from "./routes/pages.tsx";
 import { adminAuth, adminAuthRoutes } from "./admin-auth.ts";
+import { adminDashboard } from "./admin/dashboard.tsx";
 
 const log = createLogger("api");
 const app = new Hono();
@@ -55,10 +56,13 @@ app.get("/styles.css", () =>
 // JSON API.
 app.route("/api", apiRoutes);
 
-// Admin dashboard, gated by a login+session. Login routes first, then the guard
-// on /admin/*, then the Bull Board itself.
-app.route("/", adminAuthRoutes);
+// Admin, gated by a login+session. The guard runs for every /admin path (it
+// whitelists the login/logout routes); then the operator dashboard at /admin,
+// then the Bull Board at /admin/jobs.
+app.use("/admin", adminAuth);
 app.use("/admin/*", adminAuth);
+app.route("/", adminAuthRoutes);
+app.route("/admin", adminDashboard);
 mountBullBoard(app, config.BULL_BOARD_PATH, serveStatic);
 
 // Public server-rendered site (mounted last; owns the remaining routes).
