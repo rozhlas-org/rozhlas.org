@@ -324,6 +324,36 @@ button:active,
   color: var(--muted);
 }
 
+/* serialized show — list of díly, each with its own player */
+.parts {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  counter-reset: dil;
+}
+.part {
+  border: var(--border-thin);
+  background: var(--paper);
+  padding: 14px 16px;
+  margin-bottom: var(--gap);
+}
+.part__title {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.25px;
+  font-size: 18px;
+}
+.part__dur {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.part .player { margin: 0.75rem 0 0; box-shadow: 4px 4px 0 var(--cyan); }
+
 /* ===== omnisearch ===== */
 .omni__hint { font-size: 13px; max-width: 60ch; }
 .omni__form { display: flex; gap: 0.8rem; margin: 1.5rem 0; }
