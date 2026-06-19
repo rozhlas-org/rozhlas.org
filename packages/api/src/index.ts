@@ -1,14 +1,31 @@
 import { join } from "node:path";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
 import { sql } from "drizzle-orm";
 import { config, createLogger, db } from "@rozhlas/core";
 import { connection, mountBullBoard } from "@rozhlas/jobs";
 import { apiRoutes } from "./routes/api.ts";
 import { pageRoutes } from "./routes/pages.tsx";
+import { adminAuth, adminAuthRoutes } from "./admin-auth.ts";
 
 const log = createLogger("api");
 const app = new Hono();
+
+// CORS for the static frontend (GitHub Pages). Configured origins + any localhost.
+const allowedOrigins = config.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
+app.use(
+  "/api/*",
+  cors({
+    origin: (origin) => {
+      if (!origin) return undefined;
+      if (allowedOrigins.includes(origin)) return origin;
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return origin;
+      return undefined;
+    },
+    allowMethods: ["GET", "OPTIONS"],
+  }),
+);
 
 app.get("/healthz", async (c) => {
   const checks: Record<string, "ok" | "error"> = {};
@@ -35,8 +52,13 @@ app.get("/styles.css", () =>
   }),
 );
 
-// JSON API + admin dashboard.
+// JSON API.
 app.route("/api", apiRoutes);
+
+// Admin dashboard, gated by a login+session. Login routes first, then the guard
+// on /admin/*, then the Bull Board itself.
+app.route("/", adminAuthRoutes);
+app.use("/admin/*", adminAuth);
 mountBullBoard(app, config.BULL_BOARD_PATH, serveStatic);
 
 // Public server-rendered site (mounted last; owns the remaining routes).
