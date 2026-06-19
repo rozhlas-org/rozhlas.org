@@ -1,0 +1,16 @@
+[Unit]
+Description=rozhlas.org API/web (Hono on Bun)
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/rozhlas.org
+EnvironmentFile=/root/rozhlas.org/.env
+ExecStart=/root/.bun/bin/bun run packages/api/src/index.ts
+Restart=on-failure
+RestartSec=2
+# Health: the app applies DB migrations on boot, then serves /healthz.
+
+[Install]
+WantedBy=multi-user.target
