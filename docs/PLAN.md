@@ -22,19 +22,29 @@ apps. The site is read-only and public.
   collection page)
 - …more added over time as independent scraper plugins.
 
-### How content is actually reached (recon)
-Listing/archive page → **show detail page** → the audio is exposed as **`.m4s`
-segments** (fragmented MP4, i.e. DASH/HLS streaming), **not** a direct mp3. Acquiring it
-means fetching the manifest + segments and assembling them with **ffmpeg** — a
-long-running, failure-prone step, which is the whole reason for the job/queue system.
-Every source/page is structured differently, so **each gets its own scrape strategy**
-(see §5).
+### How content is actually reached (recon, 2026-06-19)
+`hledani.rozhlas.cz/iradio` is a **search surface** in front of official APIs — prefer
+the APIs over HTML scraping where they exist:
+- **Podcasts:** `https://api.rozhlas.cz/data/v2/podcast/show/<id>.rss` → episodes with
+  **direct `.mp3` enclosures** (via a `dts.podtrac.com/redirect.mp3/...` CDN). No ffmpeg.
+- **mujRozhlas (modern platform / audioarchiv):** JSON API at
+  `https://www.mujrozhlas.cz/rapi/...` (RSS `<link>` points to
+  `…/rapi/view/show/<uuid>`). Its on-demand **streaming audio is DASH/HLS `.m4s`**
+  (fragmented MP4) — this is the case that needs **ffmpeg** to fetch the manifest +
+  segments and assemble a file. Long-running and failure-prone → hence the job/queue.
+
+**Acquisition is therefore per-source:** use the official API + direct file when exposed;
+fall back to ffmpeg DASH/HLS assembly only when audio is m4s-only. Every source/page is
+structured differently, so **each gets its own scrape strategy** (see §5).
 
 ## 2. Decisions locked in
 - **Runtime/language:** TypeScript on **Bun**.
-- **Audio acquisition:** source is **DASH/HLS `.m4s` segments** reached from each show's
-  detail page — fetched & assembled with **ffmpeg** in the `acquire-audio` job. ffmpeg
-  ships in the worker Docker image.
+- **Audio acquisition (per-source):** prefer the official API + **direct `.mp3`**
+  (podcasts) — no transcode. For m4s-only streaming (mujRozhlas/audioarchiv), use
+  **ffmpeg** to assemble the DASH/HLS segments in the `acquire-audio` job (ffmpeg ships in
+  the worker image). **Store each show in its native codec** — mp3 stays mp3; AAC-in-m4s
+  is **remuxed to `.m4a` (stream-copy, lossless, no re-encode)**. Don't force a single
+  container; the web player handles both mp3 and m4a/AAC.
 - **Metadata store:** **SQLite** (single source of truth for app data).
 - **Jobs/queue:** **BullMQ** (Redis-backed) with the **Bull Board** dashboard for
   planned/active/failed/completed visibility. Scrapers run as scheduled (repeatable)
@@ -157,7 +167,7 @@ Bull Board:
 |------|---------|------|
 | `discover` | repeatable (per-source cron) | crawl listing → enqueue `fetch-metadata` |
 | `fetch-metadata` | from discover | scrape show page → upsert show + relations |
-| `acquire-audio` | after metadata, if new/changed | **ffmpeg** fetches the DASH/HLS manifest + `.m4s` segments and assembles them → single temp file |
+| `acquire-audio` | after metadata, if new/changed | two paths: **(a)** direct `.mp3` download (podcasts); **(b)** **ffmpeg** assembles DASH/HLS `.m4s` → `.m4a` (stream-copy). Native codec, → temp file |
 | `extract-tags` | after acquire | tags/artwork/parts → DB; embed metadata into the file |
 | `ipfs-add` | after extract | add+pin to Kubo, save CID, **delete temp** |
 | `ipfs-verify` | after add | gateway range request → set `streamable` |
@@ -223,10 +233,14 @@ Notes:
   hybrid retrieval, `/api/omnisearch`; explore transcripts/ASR.
 
 ## 12. Open questions to revisit
-- **Output container/codec:** the source is AAC-in-`.m4s`. Prefer **remux to `.m4a`
-  (stream copy, no re-encode → fast, lossless)** over transcoding to mp3; revisit if mp3
-  + ID3 is specifically required. Decide tagging approach per container.
-- Copyright/access posture (fully public vs gated) — affects auth + caching.
+- ~~Output container/codec~~ → **Resolved:** store native codec per source (mp3 stays
+  mp3; AAC-m4s remuxed to `.m4a`, stream-copy). Tagging approach differs per container
+  (ID3 for mp3, MP4 atoms for m4a) — handle in `extract-tags`.
+- **Copyright/access posture (fully public vs gated)** — still open; biggest risk.
+  Affects auth, caching, and whether IPFS CIDs are exposed publicly.
+- Whether to lean on `mujrozhlas.cz/rapi` JSON as the primary metadata source for
+  audioarchiv (likely yes — richer + more stable than HTML), with HTML scraping only as a
+  fallback. Confirm the rapi shape when building the strategy.
 - Embedding model/provider choice and cost ceiling for the archive size.
 - Whether to add ASR transcripts (storage + compute) for richer RAG.
 - IPFS durability: stay self-hosted only, or add remote pinning later for redundancy.
