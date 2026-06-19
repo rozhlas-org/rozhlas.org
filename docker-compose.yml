@@ -14,14 +14,18 @@ services:
       retries: 5
 
   ipfs:
-    image: ipfs/kubo:latest
+    # Pinned to match the existing repo version (v16); bind-mounts the existing
+    # node so pins + identity are preserved. Runs as root to read /root/.ipfs.
+    image: ipfs/kubo:v0.32.1
+    user: "0:0"
     restart: unless-stopped
-    # 4001 = swarm (p2p), 5001 = RPC API (internal only), 8080 = gateway
+    # 4001 = swarm (p2p), 5001 = RPC API (compose-internal only), 8080 = gateway
     ports:
       - "4001:4001"
+      - "4001:4001/udp"
       - "127.0.0.1:8080:8080"
     volumes:
-      - ipfs-data:/data/ipfs
+      - /root/.ipfs:/data/ipfs
     healthcheck:
       test: ["CMD", "ipfs", "id"]
       interval: 15s
@@ -60,14 +64,15 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       IPFS_API_URL: http://ipfs:5001
-      IPFS_GATEWAY_URL: http://ipfs:8080
+      # PUBLIC gateway — the API hands these URLs to browsers.
+      IPFS_GATEWAY_URL: https://ipfs.rozhlas.org
       INTENT_PROVIDER: ollama
       OLLAMA_URL: http://ollama:11434
       DATABASE_PATH: /data/rozhlas.db
     ports:
       - "3000:3000"
     volumes:
-      - app-data:/data
+      - ./data:/data
     healthcheck:
       test:
         ["CMD", "bun", "-e", "process.exit((await fetch('http://localhost:3000/healthz').then(r=>r.ok).catch(()=>false))?0:1)"]
@@ -91,10 +96,13 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       IPFS_API_URL: http://ipfs:5001
+      # INTERNAL gateway — verify streamability against the local node (no proxy needed).
       IPFS_GATEWAY_URL: http://ipfs:8080
+      INTENT_PROVIDER: ollama
+      OLLAMA_URL: http://ollama:11434
       DATABASE_PATH: /data/rozhlas.db
     volumes:
-      - app-data:/data
+      - ./data:/data
     depends_on:
       redis:
         condition: service_healthy
@@ -105,6 +113,6 @@ services:
 
 volumes:
   redis-data:
-  ipfs-data:
-  app-data:
   ollama-data:
+  # ipfs repo and app data are host bind-mounts (/root/.ipfs, ./data) to reuse
+  # the existing pinned node and SQLite DB.
