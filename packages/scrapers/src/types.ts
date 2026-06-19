@@ -61,6 +61,10 @@ export interface ScrapeCtx {
   options?: Record<string, unknown>;
   /** Heartbeat during a crawl — wired to job.updateProgress for queue visibility. */
   onProgress?: (info: { found: number; fetched: number }) => void;
+  /** Abort the crawl (watchdog/job timeout). The crawler stops and returns partial. */
+  signal?: AbortSignal;
+  /** Hard cap on HTTP fetches per run, so runtime stays bounded. */
+  maxFetches?: number;
 }
 
 /**
