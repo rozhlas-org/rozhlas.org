@@ -45,15 +45,19 @@ const EnvSchema = z.object({
   // $0.02/M). Avoid legacy voyage-3.x — those get zero free tokens.
   VOYAGE_MODEL: z.string().default("voyage-4-lite"),
   EMBEDDING_DIMS: z.coerce.number().int().positive().default(1024),
-  // Omnisearch intent parsing: "ollama" (local, no API cost), "claude" (API),
-  // or "heuristic" (no LLM). Falls back to heuristic on any provider error.
-  INTENT_PROVIDER: z.enum(["heuristic", "ollama", "claude"]).default("ollama"),
+  // Omnisearch intent parsing: "heuristic" (no LLM — default), "claude" (API),
+  // or "ollama" (local). Default is heuristic: small local models mangle Czech
+  // (invent non-words, drop diacritics → 0 FTS hits), and Voyage's multilingual
+  // embeddings carry the semantic search anyway — see omnisearch.ts. Falls back
+  // to heuristic on any provider error.
+  INTENT_PROVIDER: z.enum(["heuristic", "ollama", "claude"]).default("heuristic"),
   // Local Ollama (intent provider "ollama").
   OLLAMA_URL: z.string().url().default("http://localhost:11434"),
   OLLAMA_MODEL: z.string().default("qwen2.5:3b"),
-  // Claude (intent provider "claude").
+  // Claude (intent provider "claude"). Haiku is plenty for short query rewriting
+  // and the cheapest/fastest tier (~$0.0005/query); set ANTHROPIC_API_KEY to use.
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default("claude-opus-4-8"),
+  ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5"),
 });
 
 export type Config = z.infer<typeof EnvSchema>;
