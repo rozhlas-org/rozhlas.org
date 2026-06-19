@@ -32,6 +32,13 @@ export interface AudioFile {
   streamUrl: string | null;
 }
 
+export interface ShowPart {
+  idx: number;
+  title: string | null;
+  durationSec: number | null;
+  audio: AudioFile | null;
+}
+
 export interface ShowDetail {
   slug: string;
   title: string;
@@ -43,6 +50,8 @@ export interface ShowDetail {
   artworkUrl: string | null;
   people: { name: string; role: string | null }[];
   categories: { key: string; title: string }[];
+  // Serialized shows (četba) have parts (one audio per díl); podcasts use `audio`.
+  parts: ShowPart[];
   audio: AudioFile[];
 }
 

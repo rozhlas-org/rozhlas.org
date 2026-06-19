@@ -163,24 +163,42 @@ export async function showView(slug: string): Promise<ViewResult> {
   if (!show) {
     return { title: "Nenalezeno", html: `<section><h1>Pořad nenalezen</h1></section>` };
   }
-  const playable = show.audio.find((a) => a.streamable && a.streamUrl);
+  const hasParts = show.parts.length > 0;
   const art = show.artworkUrl ? `<img class="show-detail__art" src="${attr(show.artworkUrl)}" alt="" />` : "";
   const programme = show.showName
     ? `<a class="show-detail__programme" href="/programme/${encodeURIComponent(show.showName)}">${esc(show.showName)}</a>`
     : "";
-  const meta = `${esc(formatDate(show.publishedAt))}${show.durationSec ? ` · ${esc(formatDuration(show.durationSec))}` : ""}`;
-  const player = playable
-    ? `<audio class="player" controls preload="none" src="${attr(playable.streamUrl)}"></audio>`
-    : `<p class="notice">Audio se zpracovává…</p>`;
+  const meta = `${esc(formatDate(show.publishedAt))}${show.durationSec ? ` · ${esc(formatDuration(show.durationSec))}` : ""}${hasParts ? ` · ${show.parts.length} dílů` : ""}`;
   const people = show.people.length
     ? `<p class="show-detail__people">${esc(show.people.map((p) => p.name).join(", "))}</p>`
     : "";
   const desc = show.description
     ? `<p class="show-detail__desc">${esc(stripHtml(show.description))}</p>`
     : "";
-  const cid = playable?.cid
-    ? `<p class="show-detail__cid">IPFS: <code>${esc(playable.cid)}</code></p>`
-    : "";
+
+  // Serialized show → render the díl list, each with its own player.
+  let audioBlock: string;
+  if (hasParts) {
+    const items = show.parts
+      .map((p) => {
+        const player =
+          p.audio?.streamable && p.audio.streamUrl
+            ? `<audio class="player" controls preload="none" src="${attr(p.audio.streamUrl)}"></audio>`
+            : `<span class="notice">zpracovává se…</span>`;
+        const dur = p.durationSec ? `<span class="part__dur">${esc(formatDuration(p.durationSec))}</span>` : "";
+        return `<li class="part"><span class="part__title">${esc(p.title ?? `${p.idx}. díl`)}</span>${dur}${player}</li>`;
+      })
+      .join("");
+    audioBlock = `<ol class="parts">${items}</ol>`;
+  } else {
+    const playable = show.audio.find((a) => a.streamable && a.streamUrl);
+    audioBlock = playable
+      ? `<audio class="player" controls preload="none" src="${attr(playable.streamUrl)}"></audio>${
+          playable.cid ? `<p class="show-detail__cid">IPFS: <code>${esc(playable.cid)}</code></p>` : ""
+        }`
+      : `<p class="notice">Audio se zpracovává…</p>`;
+  }
+
   return {
     title: show.title,
     html: `
@@ -190,10 +208,9 @@ export async function showView(slug: string): Promise<ViewResult> {
           ${programme}
           <h1>${esc(show.title)}</h1>
           <p class="show-detail__meta">${meta}</p>
-          ${player}
-          ${people}
           ${desc}
-          ${cid}
+          ${people}
+          ${audioBlock}
         </div>
       </article>`,
   };

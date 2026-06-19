@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
@@ -6,7 +5,6 @@ import { sql } from "drizzle-orm";
 import { config, createLogger, db } from "@rozhlas/core";
 import { connection, mountBullBoard } from "@rozhlas/jobs";
 import { apiRoutes } from "./routes/api.ts";
-import { pageRoutes } from "./routes/pages.tsx";
 import { adminAuth, adminAuthRoutes } from "./admin-auth.ts";
 import { adminDashboard } from "./admin/dashboard.tsx";
 
@@ -45,12 +43,10 @@ app.get("/healthz", async (c) => {
   return c.json({ status: healthy ? "ok" : "degraded", checks }, healthy ? 200 : 503);
 });
 
-// Base stylesheet (cwd-independent; design system replaces public/styles.css).
-const STYLES_PATH = join(import.meta.dir, "public/styles.css");
-app.get("/styles.css", () =>
-  new Response(Bun.file(STYLES_PATH), {
-    headers: { "content-type": "text/css; charset=utf-8" },
-  }),
+// Root → API info (this service is API + admin only; the public site is the
+// Astro frontend on GitHub Pages at rozhlas.org).
+app.get("/", (c) =>
+  c.json({ service: "rozhlas.org API", api: "/api", admin: config.BULL_BOARD_PATH }),
 );
 
 // JSON API.
@@ -64,9 +60,6 @@ app.use("/admin/*", adminAuth);
 app.route("/", adminAuthRoutes);
 app.route("/admin", adminDashboard);
 mountBullBoard(app, config.BULL_BOARD_PATH, serveStatic);
-
-// Public server-rendered site (mounted last; owns the remaining routes).
-app.route("/", pageRoutes);
 
 log.info("api listening", { port: config.API_PORT, board: config.BULL_BOARD_PATH });
 
