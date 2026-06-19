@@ -19,6 +19,7 @@ export interface ApiEpisode {
     title?: string;
     description?: string;
     since?: string;
+    till?: string;
     part?: number | string;
     asset?: { url?: string };
     mirroredSerial?: { title?: string; totalParts?: number };

@@ -23,6 +23,16 @@ export interface ApiScraperConfig {
   hub?: HubConfig;
 }
 
+/** Episode duration from since/till (the API leaves `duration` null). */
+function episodeDuration(ep: ApiEpisode): number | undefined {
+  const { since, till } = ep.attributes;
+  if (!since || !till) return undefined;
+  const s = new Date(since).getTime();
+  const t = new Date(till).getTime();
+  if (Number.isNaN(s) || Number.isNaN(t) || t <= s) return undefined;
+  return Math.round((t - s) / 1000);
+}
+
 /** Pick a playable manifest from an episode's audioLinks (prefer DASH, like the HTML path). */
 function episodeMedia(ep: ApiEpisode): MediaSource | undefined {
   const links = ep.attributes.audioLinks ?? [];
@@ -37,6 +47,8 @@ interface SerialAcc {
   sourceId: string;
   showName: string;
   title: string;
+  description?: string;
+  descPart: number; // part number the description came from (prefer the earliest)
   publishedAt?: Date;
   artworkUrl?: string;
   parts: ScrapedPart[];
@@ -72,6 +84,8 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
             const a = ep.attributes;
             const since = a.since ? new Date(a.since) : undefined;
             const pub = since && !Number.isNaN(since.getTime()) ? since : undefined;
+            const dur = episodeDuration(ep);
+            const idx = a.part != null ? Number(a.part) : undefined;
             const serialId = ep.relationships?.serial?.data?.id;
 
             if (serialId) {
@@ -81,16 +95,18 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
                   sourceId: serialId,
                   showName: show.name,
                   title: a.mirroredSerial?.title ?? a.title ?? "(untitled)",
+                  descPart: Infinity,
                   parts: [],
                 };
                 serials.set(serialId, g);
               }
-              g.parts.push({
-                idx: a.part != null ? Number(a.part) : g.parts.length + 1,
-                title: a.title,
-                durationSec: undefined,
-                media,
-              });
+              const partIdx = idx ?? g.parts.length + 1;
+              g.parts.push({ idx: partIdx, title: a.title, durationSec: dur, media });
+              // Serial-level description: take it from the earliest part that has one.
+              if (a.description && partIdx < g.descPart) {
+                g.description = a.description;
+                g.descPart = partIdx;
+              }
               if (pub && (!g.publishedAt || pub > g.publishedAt)) g.publishedAt = pub;
               if (!g.artworkUrl && a.asset?.url) g.artworkUrl = a.asset.url;
             } else {
@@ -100,6 +116,7 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
                 description: a.description,
                 showName: show.name,
                 publishedAt: pub,
+                durationSec: dur,
                 artworkUrl: a.asset?.url,
                 media,
                 raw: { showUuid: show.uuid, episode: ep.id },
@@ -117,8 +134,10 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
         ...[...serials.values()].map((g) => ({
           sourceId: g.sourceId,
           title: g.title,
+          description: g.description,
           showName: g.showName,
           publishedAt: g.publishedAt,
+          durationSec: g.parts.reduce((n, p) => n + (p.durationSec ?? 0), 0) || undefined,
           artworkUrl: g.artworkUrl,
           parts: g.parts.sort((a, b) => a.idx - b.idx),
           raw: { serial: g.sourceId, parts: g.parts.length },
