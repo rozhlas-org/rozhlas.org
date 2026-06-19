@@ -19,4 +19,5 @@ export const pohadkaScraper = makeStationScraper({
   // episodes are linked directly. Depth 1 keeps us inside them — depth 2 would
   // follow links into unrelated Dvojka shows (music/talk) and ingest those.
   maxDepth: 1,
+  delayMs: 500, // Dvojka throttles (403s) — crawl it more gently than other stations
 });

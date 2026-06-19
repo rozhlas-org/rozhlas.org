@@ -9,15 +9,24 @@ import * as repo from "./repo.ts";
 
 const log = createLogger("worker:pipeline");
 
+// Hard ceiling for a discover crawl; on timeout the crawler returns its partial
+// results so the job always completes (no more wedged, never-ending runs).
+const DISCOVER_HARD_MS = 10 * 60_000;
+
 /** discover → upsert shows + audio rows, enqueue acquire for anything not yet pinned. */
 async function discover(job: Job<JobData["discover"]>) {
   const { sourceKey, limit, options } = job.data;
   const scraper = getScraper(sourceKey);
+  // Watchdog: a hung crawl must never freeze the job forever. On timeout the
+  // signal aborts and the crawler returns what it has so far (graceful partial).
+  const ac = new AbortController();
+  const watchdog = setTimeout(() => ac.abort(), DISCOVER_HARD_MS);
   // Heartbeat while crawling so the job shows live progress in Bull Board.
   const ctx = createScrapeCtx({
     log: log.child(sourceKey),
     limit,
     options,
+    signal: ac.signal,
     onProgress: (p) => void job.updateProgress({ stage: "crawl", ...p }),
   });
   const runId = await repo.startScrapeRun(sourceKey);
@@ -25,6 +34,7 @@ async function discover(job: Job<JobData["discover"]>) {
   try {
     await job.updateProgress({ stage: "crawl", found: 0, fetched: 0 });
     const scraped = await scraper.discover(ctx);
+    clearTimeout(watchdog); // crawl finished (or returned partial on abort)
     let enqueued = 0;
     let mirrored = 0;
     for (const [i, s] of scraped.entries()) {
@@ -59,6 +69,7 @@ async function discover(job: Job<JobData["discover"]>) {
     log.info("discover done", { sourceKey, shows: scraped.length, enqueued, mirrored });
     return { shows: scraped.length, enqueued, mirrored };
   } catch (err) {
+    clearTimeout(watchdog);
     await repo.finishScrapeRun(runId, { status: "error", error: String(err).slice(0, 500) });
     throw err;
   }
