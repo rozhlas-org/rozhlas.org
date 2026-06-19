@@ -406,6 +406,40 @@ button:active,
   margin: 1.5rem 0;
 }
 
+/* ===== filter (full-width pořady filter) ===== */
+.filter { display: flex; gap: 0.8rem; margin: 0 0 1.5rem; }
+.filter__input {
+  flex: 1;
+  font-family: var(--font-body);
+  font-size: 16px;
+  padding: 14px 16px;
+  border: var(--border);
+  background: var(--paper);
+}
+.filter__input::placeholder { color: var(--muted); }
+.filter__input:focus { outline: none; box-shadow: 5px 5px 0 var(--cyan); }
+.filter button { box-shadow: 4px 4px 0 var(--magenta); }
+.filter button:hover { box-shadow: 6px 6px 0 var(--magenta); }
+
+/* ===== loading bar — shows during slow view loads (esp. Podle nálady) ===== */
+#app[aria-busy="true"]::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  z-index: 2000;
+  background: linear-gradient(90deg, transparent 0%, var(--magenta) 50%, transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: loading-sweep 1s linear infinite;
+}
+@keyframes loading-sweep {
+  0% { background-position: -40% 0; }
+  100% { background-position: 140% 0; }
+}
+
 /* ===== responsive ===== */
 @media (max-width: 760px) {
   .site-header, .site-main, .site-footer { padding-left: 20px; padding-right: 20px; }

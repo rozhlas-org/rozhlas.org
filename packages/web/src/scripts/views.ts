@@ -95,9 +95,24 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
   const base = `/?${qs.toString()}${qs.toString() ? "&" : ""}`;
 
   const heading = programme ?? "Nejnovější pořady";
+  const filter = `
+    <form class="filter" action="/" method="get" role="search">
+      <input class="filter__input" type="search" name="q" value="${attr(q ?? "")}"
+        placeholder="Filtrovat pořady — autor, název, téma…" aria-label="Filtrovat pořady" />
+      ${source ? `<input type="hidden" name="source" value="${attr(source)}" />` : ""}
+      <button type="submit">Filtrovat</button>
+    </form>`;
   return {
     title: programme ?? "Pořady",
-    html: moodBox("", "h2") + listSection(heading, `${data.total} pořadů`, data, base),
+    html:
+      moodBox("", "h2") +
+      `<section>
+        <h1>${esc(heading)}</h1>
+        ${filter}
+        <p class="result-count">${esc(`${data.total} pořadů`)}</p>
+        ${showGrid(data.items)}
+        ${pagination(data.page, data.pageSize, data.total, base)}
+      </section>`,
   };
 }
 
@@ -140,8 +155,8 @@ export async function programmesView(): Promise<ViewResult> {
     )
     .join("");
   return {
-    title: "Pořady",
-    html: `<section><h1>Pořady</h1><ul class="programme-list">${items}</ul></section>`,
+    title: "Řady",
+    html: `<section><h1>Řady</h1><ul class="programme-list">${items}</ul></section>`,
   };
 }
 
