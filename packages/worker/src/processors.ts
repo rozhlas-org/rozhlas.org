@@ -55,26 +55,43 @@ async function discover(job: Job<JobData["discover"]>) {
   }
 }
 
+// Hard ceiling for a single acquire job; the watchdog aborts the download/ffmpeg
+// so a wedged source fails → retries instead of holding a worker slot forever.
+const ACQUIRE_HARD_MS = 5 * 60_000;
+
 /** acquire-audio → download mp3 / ffmpeg-assemble m4s, probe, store metadata. */
 async function acquire(job: Job<JobData["acquire-audio"]>) {
   const { audioFileId } = job.data;
   const audio = await repo.getAudio(audioFileId);
   if (!audio?.manifestUrl) throw new Error(`audio ${audioFileId}: no manifest url`);
 
-  const acquired = await acquireAudio(
-    { kind: (audio.manifestKind as "file" | "dash" | "hls") ?? "file", url: audio.manifestUrl },
-    `af${audioFileId}`,
-  );
-  await repo.setAudioMeta(audioFileId, {
-    container: acquired.container,
-    codec: acquired.codec,
-    bitrate: acquired.bitrate,
-    durationSec: acquired.durationSec,
-    sizeBytes: acquired.sizeBytes,
-    checksum: acquired.checksum,
-  });
-  await enqueue("ipfs-add", { audioFileId, tempPath: acquired.path });
-  return { path: acquired.path, sizeBytes: acquired.sizeBytes, codec: acquired.codec };
+  const ac = new AbortController();
+  const watchdog = setTimeout(() => ac.abort(), ACQUIRE_HARD_MS);
+  try {
+    await job.updateProgress({ stage: "start", percent: 0 });
+    const acquired = await acquireAudio(
+      { kind: (audio.manifestKind as "file" | "dash" | "hls") ?? "file", url: audio.manifestUrl },
+      `af${audioFileId}`,
+      {
+        signal: ac.signal,
+        // Surface real download progress (and a heartbeat) into Bull Board.
+        onProgress: (p) => void job.updateProgress(p),
+      },
+    );
+    await repo.setAudioMeta(audioFileId, {
+      container: acquired.container,
+      codec: acquired.codec,
+      bitrate: acquired.bitrate,
+      durationSec: acquired.durationSec,
+      sizeBytes: acquired.sizeBytes,
+      checksum: acquired.checksum,
+    });
+    await job.updateProgress({ stage: "done", percent: 100 });
+    await enqueue("ipfs-add", { audioFileId, tempPath: acquired.path });
+    return { path: acquired.path, sizeBytes: acquired.sizeBytes, codec: acquired.codec };
+  } finally {
+    clearTimeout(watchdog);
+  }
 }
 
 /** ipfs-add → pin to Kubo, record CID, delete the temp file (audio never kept on disk). */
