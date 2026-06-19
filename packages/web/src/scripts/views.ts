@@ -71,9 +71,9 @@ function listSection(heading: string, sub: string, data: ListResult, base: strin
 /** "Podle nálady" (omnisearch) entry box — natural-language mood search. */
 function moodBox(q = "", heading: "h1" | "h2" = "h1"): string {
   return `
-    <section class="omni">
-      <${heading}>Podle nálady</${heading}>
-      <p class="omni__hint">Popište náladu nebo situaci — např. „jedu sám v noci a potřebuju něco napínavého".</p>
+    <section class="mood">
+      <${heading} class="mood__title">Podle nálady</${heading}>
+      <p class="omni__hint">Popište náladu nebo situaci — třeba „jedu sám v noci a potřebuju něco napínavého" — a najdeme k tomu četbu.</p>
       <form class="omni__form" action="/omnisearch" method="get">
         <textarea name="q" rows="2" placeholder="Co máte chuť poslouchat?">${esc(q)}</textarea>
         <button type="submit">Najít</button>
@@ -98,17 +98,18 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
   const filter = `
     <form class="filter" action="/" method="get" role="search">
       <input class="filter__input" type="search" name="q" value="${attr(q ?? "")}"
-        placeholder="Filtrovat pořady — autor, název, téma…" aria-label="Filtrovat pořady" />
+        placeholder="Filtrovat…" aria-label="Filtrovat pořady" />
       ${source ? `<input type="hidden" name="source" value="${attr(source)}" />` : ""}
-      <button type="submit">Filtrovat</button>
     </form>`;
   return {
     title: programme ?? "Pořady",
     html:
       moodBox("", "h2") +
       `<section>
-        <h1>${esc(heading)}</h1>
-        ${filter}
+        <div class="browse__head">
+          <h1>${esc(heading)}</h1>
+          ${filter}
+        </div>
         <p class="result-count">${esc(`${data.total} pořadů`)}</p>
         ${showGrid(data.items)}
         ${pagination(data.page, data.pageSize, data.total, base)}
@@ -155,8 +156,8 @@ export async function programmesView(): Promise<ViewResult> {
     )
     .join("");
   return {
-    title: "Řady",
-    html: `<section><h1>Řady</h1><ul class="programme-list">${items}</ul></section>`,
+    title: "Kategorie",
+    html: `<section><h1>Kategorie</h1><ul class="programme-list">${items}</ul></section>`,
   };
 }
 

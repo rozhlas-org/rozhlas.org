@@ -406,20 +406,41 @@ button:active,
   margin: 1.5rem 0;
 }
 
-/* ===== filter (full-width pořady filter) ===== */
-.filter { display: flex; gap: 0.8rem; margin: 0 0 1.5rem; }
-.filter__input {
-  flex: 1;
-  font-family: var(--font-body);
-  font-size: 16px;
-  padding: 14px 16px;
+/* ===== Podle nálady — featured hero (primary search) ===== */
+.mood {
   border: var(--border);
   background: var(--paper);
+  box-shadow: 10px 10px 0 var(--cyan);
+  padding: clamp(24px, 4vw, 48px);
+  margin: 0 0 64px;
 }
-.filter__input::placeholder { color: var(--muted); }
-.filter__input:focus { outline: none; box-shadow: 5px 5px 0 var(--cyan); }
-.filter button { box-shadow: 4px 4px 0 var(--magenta); }
-.filter button:hover { box-shadow: 6px 6px 0 var(--magenta); }
+.mood__title { font-size: clamp(32px, 5vw, 60px); margin: 0; }
+.mood .omni__hint { margin-top: 0.75rem; max-width: 64ch; }
+.mood .omni__form { margin: 1.75rem 0 0; }
+.mood .omni__form textarea { font-size: 18px; min-height: 72px; }
+
+/* ===== browse head: heading + small, understated filter ===== */
+.browse__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.filter { display: flex; margin: 0; }
+.filter__input {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  padding: 9px 12px;
+  width: 14rem;
+  max-width: 100%;
+  border: var(--border-thin);
+  background: var(--paper);
+}
+.filter__input::placeholder { color: var(--muted); text-transform: uppercase; }
+.filter__input:focus { outline: none; box-shadow: 3px 3px 0 var(--cyan); }
 
 /* ===== loading bar — shows during slow view loads (esp. Podle nálady) ===== */
 #app[aria-busy="true"]::before {
