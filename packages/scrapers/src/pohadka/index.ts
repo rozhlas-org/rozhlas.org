@@ -15,4 +15,8 @@ export const pohadkaScraper = makeStationScraper({
   schedule: "0 6 * * *", // nightly, offset from cetba (04:00) and wave (05:00)
   origin: "https://dvojka.rozhlas.cz",
   seeds: ["/hajaja-7230824", "/pohadka-7230814"],
+  // Dvojka is a mixed station; the seeds ARE the two fairy-tale programmes, whose
+  // episodes are linked directly. Depth 1 keeps us inside them — depth 2 would
+  // follow links into unrelated Dvojka shows (music/talk) and ingest those.
+  maxDepth: 1,
 });
