@@ -18,6 +18,7 @@ export function attr(s: unknown): string {
 
 export function formatDuration(sec?: number | null): string {
   if (!sec || sec <= 0) return "";
+  sec = Math.floor(sec); // positions are floats (audio.currentTime) — keep mm:ss clean
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;

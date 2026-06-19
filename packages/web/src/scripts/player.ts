@@ -9,11 +9,13 @@
 
 import { api } from "./api.ts";
 import { formatDuration } from "./format.ts";
+import { getProgress } from "./progress.ts";
 
 interface Track {
   idx: string | number;
   title: string;
   streamUrl: string;
+  durationSec: number | null;
 }
 interface Queue {
   slug: string;
@@ -24,6 +26,42 @@ interface Queue {
 }
 
 let q: Queue | null = null;
+
+// Remember what's playing so a reload can re-open the bar at the same track.
+const NOW_NS = "rozhlas:nowplaying:v1";
+
+function rememberNow(): void {
+  if (!q) return;
+  try {
+    localStorage.setItem(NOW_NS, JSON.stringify({ slug: q.slug, idx: q.parts[q.index]!.idx }));
+  } catch {
+    /* best-effort */
+  }
+}
+
+function forgetNow(): void {
+  try {
+    localStorage.removeItem(NOW_NS);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Streamable parts of a show as a play queue, in order. */
+function buildParts(show: Awaited<ReturnType<typeof api.show>>): Track[] {
+  if (show.parts.length) {
+    return show.parts
+      .filter((p) => p.audio?.streamable && p.audio.streamUrl)
+      .map((p) => ({
+        idx: p.idx,
+        title: p.title ?? `${p.idx}. díl`,
+        streamUrl: p.audio!.streamUrl!,
+        durationSec: p.durationSec ?? p.audio!.durationSec ?? null,
+      }));
+  }
+  const a = show.audio.find((x) => x.streamable && x.streamUrl);
+  return a ? [{ idx: "single", title: show.title, streamUrl: a.streamUrl!, durationSec: a.durationSec ?? null }] : [];
+}
 
 // Shell elements (resolved in initPlayer).
 let bar: HTMLElement;
@@ -55,21 +93,37 @@ export async function playFromSlug(slug: string, idx: string | number): Promise<
   const show = await api.show(slug).catch(() => null);
   if (!show) return;
 
-  let parts: Track[];
-  if (show.parts.length) {
-    parts = show.parts
-      .filter((p) => p.audio?.streamable && p.audio.streamUrl)
-      .map((p) => ({ idx: p.idx, title: p.title ?? `${p.idx}. díl`, streamUrl: p.audio!.streamUrl! }));
-  } else {
-    const a = show.audio.find((x) => x.streamable && x.streamUrl);
-    parts = a ? [{ idx: "single", title: show.title, streamUrl: a.streamUrl! }] : [];
-  }
+  const parts = buildParts(show);
   if (!parts.length) return;
 
   let start = parts.findIndex((p) => String(p.idx) === String(idx));
   if (start < 0) start = 0;
   q = { slug, showTitle: show.title, programme: show.showName, parts, index: start };
   load(true);
+  bar.hidden = false;
+  document.body.classList.add("has-player");
+}
+
+/**
+ * Reopen the bar on the last-played track after a reload — paused, parked at
+ * where the listener left off (progress.ts seeks the <audio> on first play).
+ */
+async function restoreNowPlaying(): Promise<void> {
+  let saved: { slug: string; idx: string | number } | null = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(NOW_NS) || "null");
+  } catch {
+    saved = null;
+  }
+  if (!saved?.slug) return;
+  const show = await api.show(saved.slug).catch(() => null);
+  if (!show) return;
+  const parts = buildParts(show);
+  if (!parts.length) return;
+  let start = parts.findIndex((p) => String(p.idx) === String(saved!.idx));
+  if (start < 0) start = 0;
+  q = { slug: saved.slug, showTitle: show.title, programme: show.showName, parts, index: start };
+  load(false); // no autoplay — just show where we left off
   bar.hidden = false;
   document.body.classList.add("has-player");
 }
@@ -85,11 +139,19 @@ function load(autoplay: boolean): void {
   titleLink.href = `/show/${encodeURIComponent(q.slug)}`;
   prevBtn.disabled = q.index === 0 && audio.currentTime < 3;
   nextBtn.disabled = q.index >= q.parts.length - 1;
-  seek.value = "0";
-  timeEl.textContent = "0:00 / 0:00";
+  rememberNow(); // survive a reload
+  const dur = t.durationSec ?? 0;
   if (autoplay) {
+    seek.value = "0";
+    timeEl.textContent = `0:00 / ${clock(dur)}`;
     audio.play().catch(() => {});
     void api.recordPlay(q.slug); // count a play per track start (knows the slug)
+  } else {
+    // Restored after a reload: reflect the saved resume position right away.
+    const saved = getProgress(pkey(q.slug, t.idx));
+    const pos = saved && !saved.done ? saved.t : 0;
+    seek.value = dur ? String(Math.round((pos / dur) * 1000)) : "0";
+    timeEl.textContent = `${clock(pos)} / ${clock(dur)}`;
   }
   syncNowPlaying();
 }
@@ -161,6 +223,7 @@ export function initPlayer(): void {
     bar.hidden = true;
     document.body.classList.remove("has-player");
     q = null;
+    forgetNow();
     syncNowPlaying();
   });
 
@@ -209,7 +272,11 @@ export function initPlayer(): void {
       if (q.index < q.parts.length - 1) {
         q.index++;
         load(true);
+      } else {
+        forgetNow(); // finished the last díl — nothing to restore
       }
     }
   });
+
+  void restoreNowPlaying(); // reopen the bar where we left off before a reload
 }

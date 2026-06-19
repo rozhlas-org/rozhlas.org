@@ -481,10 +481,23 @@ button:active,
 .player-bar__time { flex: none; font-family: var(--font-mono); font-size: 13px; color: var(--paper); white-space: nowrap; }
 body.has-player { padding-bottom: 92px; }
 @media (max-width: 640px) {
-  .player-bar { gap: 10px; padding: 10px 14px; }
-  .player-bar__nav, .player-bar__time { display: none; }
-  .player-bar__meta { min-width: 0; max-width: 48vw; }
-  body.has-player { padding-bottom: 80px; }
+  /* Two rows: full-width timeline on top, controls below. Wrapping lets the
+     seek bar own a whole line so it's a real touch target, and keeps the
+     fixed-width play button + the duration from fighting the title for space. */
+  .player-bar { flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px; }
+  .player-bar__nav { display: none; } /* drop prev/next on small screens */
+  .player-bar__seek {
+    order: -1; /* render above the control row */
+    flex: 1 0 100%;
+    width: 100%;
+    min-width: 0;
+    height: 22px; /* taller = easier to drag with a thumb */
+  }
+  /* flex-basis 0 so the nowrap title doesn't inflate this box and shove the
+     time onto its own line — it grows to fill the row and ellipsizes instead. */
+  .player-bar__meta { flex: 1 1 0; min-width: 0; max-width: none; }
+  .player-bar__time { display: block; flex: none; font-size: 12px; } /* keep the length on screen */
+  body.has-player { padding-bottom: 104px; } /* bar is two rows tall now */
 }
 
 /* ===== omnisearch ===== */
