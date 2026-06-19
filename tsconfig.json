@@ -2,6 +2,8 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
     "paths": {
       "@rozhlas/core": ["packages/core/src/index.ts"],
       "@rozhlas/core/*": ["packages/core/src/*"],
@@ -9,5 +11,10 @@
       "@rozhlas/jobs/*": ["packages/jobs/src/*"]
     }
   },
-  "include": ["packages/*/src/**/*.ts", "packages/*/*.config.ts", "scripts/**/*.ts"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
+    "packages/*/*.config.ts",
+    "scripts/**/*.ts"
+  ]
 }

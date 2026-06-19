@@ -1,18 +1,14 @@
+import { join } from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { sql } from "drizzle-orm";
 import { config, createLogger, db } from "@rozhlas/core";
 import { connection, mountBullBoard } from "@rozhlas/jobs";
+import { apiRoutes } from "./routes/api.ts";
+import { pageRoutes } from "./routes/pages.tsx";
 
 const log = createLogger("api");
 const app = new Hono();
-
-app.get("/", (c) =>
-  c.json({
-    service: "rozhlas.org api",
-    docs: "/healthz, " + config.BULL_BOARD_PATH,
-  }),
-);
 
 app.get("/healthz", async (c) => {
   const checks: Record<string, "ok" | "error"> = {};
@@ -23,8 +19,7 @@ app.get("/healthz", async (c) => {
     checks.db = "error";
   }
   try {
-    const pong = await connection.ping();
-    checks.redis = pong === "PONG" ? "ok" : "error";
+    checks.redis = (await connection.ping()) === "PONG" ? "ok" : "error";
   } catch {
     checks.redis = "error";
   }
@@ -32,18 +27,21 @@ app.get("/healthz", async (c) => {
   return c.json({ status: healthy ? "ok" : "degraded", checks }, healthy ? 200 : 503);
 });
 
-// Placeholder for the public JSON API (Phase 2).
-app.get("/api", (c) => c.json({ message: "rozhlas.org API — coming in Phase 2" }));
+// Base stylesheet (cwd-independent; design system replaces public/styles.css).
+const STYLES_PATH = join(import.meta.dir, "public/styles.css");
+app.get("/styles.css", () =>
+  new Response(Bun.file(STYLES_PATH), {
+    headers: { "content-type": "text/css; charset=utf-8" },
+  }),
+);
 
-// Admin: Bull Board job dashboard.
+// JSON API + admin dashboard.
+app.route("/api", apiRoutes);
 mountBullBoard(app, config.BULL_BOARD_PATH, serveStatic);
 
-log.info("api listening", {
-  port: config.API_PORT,
-  board: config.BULL_BOARD_PATH,
-});
+// Public server-rendered site (mounted last; owns the remaining routes).
+app.route("/", pageRoutes);
 
-export default {
-  port: config.API_PORT,
-  fetch: app.fetch,
-};
+log.info("api listening", { port: config.API_PORT, board: config.BULL_BOARD_PATH });
+
+export default { port: config.API_PORT, fetch: app.fetch };

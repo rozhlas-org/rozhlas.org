@@ -7,6 +7,17 @@
 
 ## 1. Purpose & scope
 
+**Primary focus: četba / čtení** — Czech Radio literary spoken-word (serialized readings,
+short stories, radio plays/drama, audiobooks). General content is secondary; the browse and
+(later) AI search should surface and boost literary programmes.
+
+**Archive taxonomy (recon):** the iRadio archive has **no flat genre taxonomy**. It filters on
+two axes — **stanice** (26 stations; literary content concentrates on **Vltava** & **Dvojka**)
+and **pořad** (615 programmes — the effective "category"; genre is implied by the programme).
+In our schema: **programme = `shows.showName`**, **station = a source/category**. Key literary
+programmes to prioritize: Četba na pokračování, Čtení na pokračování, Povídka/Současná povídka,
+Radiokniha, Rozhlasová hra, Sobotní/Večerní drama, Počteníčko, pohádky, Čtenářský deník.
+
 **Goal:** continuously archive radio shows and make them explorable two ways:
 
 1. **Classic** — list, paginate, filter by category/date/show, full-text search.

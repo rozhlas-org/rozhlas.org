@@ -56,8 +56,15 @@ bun run worker        # processes the pipeline queues
 | `bun run scripts/smoke.ts` | Enqueue a job and confirm a worker processes it |
 
 ## Status
-**Phase 1 complete** — the `iradio` scrape → IPFS pipeline works end-to-end:
-discover (rozhlas v2 podcast API) → upsert metadata → download mp3 → pin to IPFS →
-verify streamable via the gateway → (FTS indexing is Phase 2). Audio is never kept on
-the server disk. Verify locally with `bun run scripts/verify-phase1.ts` (needs Redis +
-a local IPFS daemon). Next: Phase 2 — public site + API + classic search (docs/PLAN.md §11).
+**Phase 2 complete** — public site + JSON API + classic search on top of the Phase 1
+pipeline:
+- **JSON API**: `/api/shows` (paginate + filter by programme/source/`q`),
+  `/api/shows/:slug`, `/api/search`, `/api/programmes`, `/api/sources`.
+- **Site** (server-rendered, plain/semantic — a design system replaces
+  `packages/api/src/public/styles.css`): home grid, programme listing/filter, search,
+  show detail with an audio player streaming from the IPFS gateway.
+- **Search**: accent-insensitive FTS5 over title/description/programme, trigger-synced.
+
+The archive's taxonomy is **station + programme** (no flat genres); the app's focus is
+**četba/čtení** (literary readings). Phase 1's pipeline still works end-to-end (audio
+never kept on the server disk). Next: Phase 4 — AI omnisearch (docs/PLAN.md §9, §11).
