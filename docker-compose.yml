@@ -70,7 +70,9 @@ services:
       OLLAMA_URL: http://ollama:11434
       DATABASE_PATH: /data/rozhlas.db
     ports:
-      - "3000:3000"
+      # Bind to loopback only — public access goes through Caddy (443).
+      # Defense-in-depth behind the Hetzner firewall; keeps :3000 off public interfaces.
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./data:/data
     healthcheck:
