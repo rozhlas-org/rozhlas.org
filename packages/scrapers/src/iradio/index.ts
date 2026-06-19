@@ -43,6 +43,7 @@ export const iradioScraper: Scraper = {
         const episodes = parsePodcastFeed(xml).slice(0, perFeedLimit);
         ctx.log.info("parsed feed", { feed, episodes: episodes.length });
         all.push(...episodes);
+        ctx.onProgress?.({ found: all.length, fetched: feeds.indexOf(feed) + 1 });
       } catch (err) {
         ctx.log.error("feed error", { feed, err: String(err) });
       }
