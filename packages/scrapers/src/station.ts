@@ -9,6 +9,20 @@ const BROWSER_UA =
 const NAV =
   /^\/(o-stanici|o-nas|kontakt|kontakty|program|audioarchiv|kamery|playlisty|lide|dokumenty|hudba|video|page|tag|kategorie|moderator|porady|podcast)\b/;
 
+// Listing pages paginate via ?page=N. Safety cap on how far to page a listing.
+const MAX_LISTING_PAGES = 80;
+// Polite gap between requests so a backfill doesn't hammer the source (PLAN §10).
+const REQUEST_DELAY_MS = Number(process.env.SCRAPE_DELAY_MS ?? 300);
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Return `url` with its `page` query param set to `n`. */
+function withPage(url: string, n: number): string {
+  const u = new URL(url);
+  u.searchParams.set("page", String(n));
+  return u.toString();
+}
+
 export interface StationConfig {
   key: string;
   title: string;
@@ -58,20 +72,25 @@ export function makeStationScraper(cfg: StationConfig): Scraper {
 
     async discover(ctx: ScrapeCtx): Promise<ScrapedShow[]> {
       const seeds = (ctx.options?.seeds as string[] | undefined) ?? cfg.seeds;
-      const limit = ctx.limit ?? 20; // max books per run
+      // Default high enough to drain a full archive (hundreds of episodes across
+      // paginated listings); already-pinned items short-circuit on re-runs.
+      const limit = ctx.limit ?? 1000;
       const maxDepth = cfg.maxDepth ?? 2;
       const visited = new Set<string>();
       const seenIds = new Set<string>();
       const out: ScrapedShow[] = [];
-      const queue: { url: string; programme?: string; depth: number }[] = seeds.map((u) => ({
-        url: abs(u),
-        depth: 0,
-      }));
+      const queue: { url: string; programme?: string; depth: number; page: number }[] = seeds.map(
+        (u) => ({ url: abs(u), depth: 0, page: 1 }),
+      );
 
+      let fetches = 0;
       while (queue.length && out.length < limit) {
-        const { url, programme, depth } = queue.shift()!;
+        const { url, programme, depth, page } = queue.shift()!;
         if (visited.has(url)) continue;
         visited.add(url);
+
+        // Be a polite crawler: small gap between requests (PLAN §10).
+        if (fetches++ > 0) await sleep(REQUEST_DELAY_MS);
 
         let html: string;
         try {
@@ -94,9 +113,18 @@ export function makeStationScraper(cfg: StationConfig): Scraper {
         // Listing/programme page → enqueue child links (up to maxDepth hops).
         if (depth >= maxDepth) continue;
         const childProgramme = cleanTitle(metaContent(html, "og:title")) ?? programme;
-        for (const link of candidateLinks(html).slice(0, 40)) {
+        const links = candidateLinks(html).slice(0, 60);
+        for (const link of links) {
           const a = abs(link);
-          if (!visited.has(a)) queue.push({ url: a, programme: childProgramme, depth: depth + 1 });
+          if (!visited.has(a)) queue.push({ url: a, programme: childProgramme, depth: depth + 1, page: 1 });
+        }
+        // Paginate the listing itself (?page=N) — same depth, not a deeper hop.
+        // Self-terminating: a page with no content links enqueues no further page.
+        if (links.length > 0 && page < MAX_LISTING_PAGES) {
+          const next = withPage(url, page + 1);
+          if (!visited.has(next)) {
+            queue.push({ url: next, programme: childProgramme, depth, page: page + 1 });
+          }
         }
       }
       return out.slice(0, limit);
