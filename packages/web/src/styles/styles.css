@@ -368,14 +368,24 @@ button:active,
   color: var(--magenta);
 }
 .part__title {
-  display: block;
+  display: inline;
   font-family: var(--font-display);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: -0.25px;
   font-size: 18px;
 }
+/* díl number, inline before the title */
+.part__idx {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--magenta);
+  margin-right: 0.45em;
+}
 .part__dur {
+  display: block;
+  margin-top: 4px;
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 1px;

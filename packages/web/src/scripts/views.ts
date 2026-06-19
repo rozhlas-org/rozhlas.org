@@ -254,13 +254,14 @@ export async function showView(slug: string): Promise<ViewResult> {
           ? `<button class="part__play" type="button" aria-label="Přehrát">▶</button>`
           : `<span class="notice">zpracovává se…</span>`;
         const check = `<span class="part__check" aria-hidden="true">✓</span>`;
+        const num = `<span class="part__idx">${esc(String(p.idx))}.</span>`;
         const dur = p.durationSec ? `<span class="part__dur">${esc(formatDuration(p.durationSec))}</span>` : "";
         const resume = resumeAt
           ? `<span class="part__resume">pokračovat od ${esc(formatDuration(resumeAt))}</span>`
           : "";
         const cls = `part${played ? " part--played" : ""}${canPlay ? " part--playable" : ""}`;
         const data = canPlay ? ` data-slug="${attr(show.slug)}" data-idx="${attr(String(p.idx))}"` : "";
-        return `<li class="${cls}"${data}>${play}${check}<span class="part__title">${esc(p.title ?? `${p.idx}. díl`)}</span>${dur}${resume}</li>`;
+        return `<li class="${cls}"${data}>${play}${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span>${dur}${resume}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
