@@ -406,6 +406,10 @@ button:active,
   cursor: pointer;
 }
 .part__play:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--key); }
+/* whole row is clickable to play */
+.part--playable { cursor: pointer; }
+.part--playable:hover { box-shadow: 4px 4px 0 var(--cyan); }
+.part--playable:hover .part__title { color: var(--cyan); }
 .part--playing { border-color: var(--magenta); box-shadow: 4px 4px 0 var(--magenta); }
 .part--playing .part__play { background: var(--magenta); color: var(--paper); }
 .part--single {
