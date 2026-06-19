@@ -1,0 +1,3 @@
+# Astro build + generated types
+dist/
+.astro/

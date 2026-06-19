@@ -1,0 +1,46 @@
+---
+// Static app shell. Header/footer are server-rendered into the static HTML;
+// the <main id="app"> is filled by the client router (scripts/app.ts).
+// index/search/omnisearch/programmes and 404.html all render this same shell.
+import "../styles/styles.css";
+---
+
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>rozhlas.org</title>
+    <meta name="description" content="Archiv pořadů Českého rozhlasu — zaměřeno na četbu a čtení. Audio přes IPFS." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700;800;900&family=Saira:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="site-header__brand" href="/">rozhlas<span class="accent">.org</span></a>
+      <nav class="site-nav">
+        <a href="/programmes">Pořady</a>
+        <a href="/?source=iradio">Archiv</a>
+        <a href="/omnisearch">Omnisearch</a>
+      </nav>
+      <form class="search" action="/search" method="get" role="search">
+        <input type="search" name="q" placeholder="Hledat četbu, autora, pořad…" aria-label="Hledat" />
+        <button type="submit">Hledat</button>
+      </form>
+    </header>
+    <main class="site-main" id="app" aria-busy="true">
+      <p class="notice">Načítám…</p>
+      <noscript>Tento web vyžaduje JavaScript pro zobrazení obsahu.</noscript>
+    </main>
+    <footer class="site-footer">
+      <p>Archiv pořadů Českého rozhlasu · audio přes IPFS · zaměřeno na četbu a čtení.</p>
+    </footer>
+    <script>
+      import "../scripts/app.ts";
+    </script>
+  </body>
+</html>

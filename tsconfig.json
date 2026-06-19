@@ -16,5 +16,9 @@
     "packages/*/src/**/*.tsx",
     "packages/*/*.config.ts",
     "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "packages/web"
   ]
 }
