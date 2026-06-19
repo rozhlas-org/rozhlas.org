@@ -14,9 +14,17 @@ export interface ScrapedPerson {
   role?: string;
 }
 
+/** One part (díl) of a serialized show, with its own audio. */
+export interface ScrapedPart {
+  idx: number;
+  title?: string;
+  durationSec?: number;
+  media: MediaSource;
+}
+
 /** A fully-scraped show/episode: metadata + how to fetch its audio. */
 export interface ScrapedShow {
-  /** Stable id within the source (e.g. RSS guid). */
+  /** Stable id within the source (e.g. RSS guid or reading-page id). */
   sourceId: string;
   title: string;
   description?: string;
@@ -29,7 +37,9 @@ export interface ScrapedShow {
   categories?: string[];
   tags?: string[];
   artworkUrl?: string;
-  media: MediaSource;
+  /** Single-audio shows (podcasts) set `media`; serialized shows set `parts`. */
+  media?: MediaSource;
+  parts?: ScrapedPart[];
   /** Original payload, persisted to `shows.rawJson` for later re-derivation. */
   raw?: unknown;
 }
