@@ -44,12 +44,16 @@ export const shows = sqliteTable(
     durationSec: integer("duration_sec"),
     language: text("language").default("cs"),
     rawJson: text("raw_json"), // original API/HTML-derived payload
+    plays: integer("plays").notNull().default(0), // times audio was played
+    displays: integer("displays").notNull().default(0), // times the detail was viewed
     ...timestamps,
   },
   (t) => ({
     sourceUnique: uniqueIndex("shows_source_unique").on(t.sourceKey, t.sourceId),
     publishedAtIdx: index("shows_published_at_idx").on(t.publishedAt),
     sourceKeyIdx: index("shows_source_key_idx").on(t.sourceKey),
+    createdAtIdx: index("shows_created_at_idx").on(t.createdAt),
+    playsIdx: index("shows_plays_idx").on(t.plays),
   }),
 );
 
