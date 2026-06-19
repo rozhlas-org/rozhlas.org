@@ -41,7 +41,9 @@ const EnvSchema = z.object({
   // --- AI / embeddings (Phase 4) ---
   // If VOYAGE_API_KEY is unset, a deterministic local fallback embedder is used.
   VOYAGE_API_KEY: z.string().optional(),
-  VOYAGE_MODEL: z.string().default("voyage-3.5"),
+  // voyage-4-lite: cheapest model with a free tier (200M free tokens, then
+  // $0.02/M). Avoid legacy voyage-3.x — those get zero free tokens.
+  VOYAGE_MODEL: z.string().default("voyage-4-lite"),
   EMBEDDING_DIMS: z.coerce.number().int().positive().default(1024),
   // Omnisearch intent parsing: "ollama" (local, no API cost), "claude" (API),
   // or "heuristic" (no LLM). Falls back to heuristic on any provider error.
