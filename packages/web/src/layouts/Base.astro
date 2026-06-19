@@ -23,13 +23,10 @@ import "../styles/styles.css";
     <header class="site-header">
       <a class="site-header__brand" href="/">rozhlas<span class="accent">.org</span></a>
       <nav class="site-nav">
-        <a href="/programmes">Pořady</a>
+        <a href="/">Pořady</a>
+        <a href="/programmes">Řady</a>
         <a href="/omnisearch">Podle nálady</a>
       </nav>
-      <form class="search" action="/search" method="get" role="search">
-        <input type="search" name="q" placeholder="Hledat četbu, autora, pořad…" aria-label="Hledat" />
-        <button type="submit">Hledat</button>
-      </form>
     </header>
     <main class="site-main" id="app" aria-busy="true">
       <p class="notice">Načítám…</p>
