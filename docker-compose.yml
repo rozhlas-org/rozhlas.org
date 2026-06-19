@@ -32,29 +32,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Local LLM for omnisearch intent parsing (no API cost). CPU-only is fine for a
-  # small model. The model is pulled once by the `ollama-pull` one-shot below.
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    volumes:
-      - ollama-data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-
-  ollama-pull:
-    image: ollama/ollama:latest
-    depends_on:
-      ollama:
-        condition: service_healthy
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["ollama", "pull", "qwen2.5:3b"]
-    restart: "no"
-
   web:
     build:
       context: .
@@ -87,8 +64,6 @@ services:
         condition: service_healthy
       ipfs:
         condition: service_started
-      ollama:
-        condition: service_started # intent falls back to heuristic until model is pulled
 
   worker:
     build:
@@ -114,6 +89,5 @@ services:
 
 volumes:
   redis-data:
-  ollama-data:
   # ipfs repo and app data are host bind-mounts (/root/.ipfs, ./data) to reuse
   # the existing pinned node and SQLite DB.
