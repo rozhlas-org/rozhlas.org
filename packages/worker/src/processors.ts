@@ -87,17 +87,28 @@ async function acquire(job: Job<JobData["acquire-audio"]>) {
 
   const ac = new AbortController();
   const watchdog = setTimeout(() => ac.abort(), ACQUIRE_HARD_MS);
+  // Hard backstop: if acquireAudio doesn't return shortly after the abort (e.g. a
+  // hung ffmpeg whose kill doesn't unblock the awaits), reject anyway so the slot
+  // frees and the job retries instead of wedging forever (the AbortController
+  // watchdog alone proved insufficient).
+  let bomb: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, rej) => {
+    bomb = setTimeout(() => rej(new Error("acquire timed out")), ACQUIRE_HARD_MS + 30_000);
+  });
   try {
     await job.updateProgress({ stage: "start", percent: 0 });
-    const acquired = await acquireAudio(
-      { kind: (audio.manifestKind as "file" | "dash" | "hls") ?? "file", url: audio.manifestUrl },
-      `af${audioFileId}`,
-      {
-        signal: ac.signal,
-        // Surface real download progress (and a heartbeat) into Bull Board.
-        onProgress: (p) => void job.updateProgress(p),
-      },
-    );
+    const acquired = await Promise.race([
+      acquireAudio(
+        { kind: (audio.manifestKind as "file" | "dash" | "hls") ?? "file", url: audio.manifestUrl },
+        `af${audioFileId}`,
+        {
+          signal: ac.signal,
+          // Surface real download progress (and a heartbeat) into Bull Board.
+          onProgress: (p) => void job.updateProgress(p),
+        },
+      ),
+      deadline,
+    ]);
     await repo.setAudioMeta(audioFileId, {
       container: acquired.container,
       codec: acquired.codec,
@@ -111,6 +122,7 @@ async function acquire(job: Job<JobData["acquire-audio"]>) {
     return { path: acquired.path, sizeBytes: acquired.sizeBytes, codec: acquired.codec };
   } finally {
     clearTimeout(watchdog);
+    if (bomb) clearTimeout(bomb);
   }
 }
 
