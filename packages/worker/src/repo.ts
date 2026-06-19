@@ -70,6 +70,9 @@ export async function upsertShow(
   }
 
   const slug = showSlug(s.title, sourceKey, s.sourceId);
+  // Denormalize díl titles so full-text search matches within a part's title.
+  const partsText =
+    s.parts?.map((p) => p.title?.trim()).filter(Boolean).join(" \n ") || null;
   const values = {
     sourceKey,
     sourceId: s.sourceId,
@@ -81,6 +84,7 @@ export async function upsertShow(
     durationSec: s.durationSec,
     language: s.language ?? "cs",
     rawJson: s.raw ? JSON.stringify(s.raw) : undefined,
+    partsText,
   };
   const [row] = await db
     .insert(shows)
@@ -94,6 +98,7 @@ export async function upsertShow(
         publishedAt: values.publishedAt,
         durationSec: values.durationSec,
         rawJson: values.rawJson,
+        partsText: values.partsText,
         updatedAt: new Date(),
       },
     })

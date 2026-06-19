@@ -22,6 +22,13 @@
       "when": 1781881519948,
       "tag": "0002_absurd_quentin_quire",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1781904376493,
+      "tag": "0003_icy_demogoblin",
+      "breakpoints": true
     }
   ]
 }
