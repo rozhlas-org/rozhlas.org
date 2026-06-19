@@ -9,8 +9,10 @@ const log = createLogger("worker");
 const processors = await buildProcessors();
 
 const concurrency: Partial<Record<QueueName, number>> = {
-  "acquire-audio": 2, // ffmpeg / downloads are heavy
-  "ipfs-add": 2,
+  // ffmpeg stream-copy is light CPU + I/O-bound; the box has 8 cores, so run more
+  // in parallel to drain the acquire backlog (a hung job self-heals via the watchdog).
+  "acquire-audio": 6,
+  "ipfs-add": 4,
 };
 
 function fallback(name: QueueName): Processor {
