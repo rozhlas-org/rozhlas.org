@@ -45,6 +45,9 @@ export async function finishScrapeRun(
 
 export interface UpsertShowResult {
   showId: number;
+  /** True when the show already exists under a *different* source (a station
+   *  mirror) and was left untouched — the caller should skip its audio. */
+  mirrored?: boolean;
 }
 
 /** Insert or update a show by (sourceKey, sourceId). */
@@ -52,6 +55,20 @@ export async function upsertShow(
   sourceKey: string,
   s: ScrapedShow,
 ): Promise<UpsertShowResult> {
+  // Cross-source dedup: a rozhlas node-id is globally unique across stations, so
+  // the same sourceId under a different source is the same content (e.g. a fairy
+  // tale airing on both Dvojka `pohadka` and `junior-pribehy`). Keep whichever
+  // source scraped it first; skip the mirror to avoid duplicate catalog rows and
+  // redundant audio acquisition.
+  const [mirror] = await db
+    .select({ id: shows.id, sourceKey: shows.sourceKey })
+    .from(shows)
+    .where(eq(shows.sourceId, s.sourceId))
+    .limit(1);
+  if (mirror && mirror.sourceKey !== sourceKey) {
+    return { showId: mirror.id, mirrored: true };
+  }
+
   const slug = showSlug(s.title, sourceKey, s.sourceId);
   const values = {
     sourceKey,
