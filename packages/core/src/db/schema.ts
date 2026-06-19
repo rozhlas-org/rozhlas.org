@@ -44,6 +44,7 @@ export const shows = sqliteTable(
     durationSec: integer("duration_sec"),
     language: text("language").default("cs"),
     rawJson: text("raw_json"), // original API/HTML-derived payload
+    partsText: text("parts_text"), // concatenated díl titles, for full-text search
     plays: integer("plays").notNull().default(0), // times audio was played
     displays: integer("displays").notNull().default(0), // times the detail was viewed
     ...timestamps,
