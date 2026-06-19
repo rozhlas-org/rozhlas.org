@@ -66,8 +66,9 @@ services:
       IPFS_API_URL: http://ipfs:5001
       # PUBLIC gateway — the API hands these URLs to browsers.
       IPFS_GATEWAY_URL: https://ipfs.rozhlas.org
-      INTENT_PROVIDER: ollama
-      OLLAMA_URL: http://ollama:11434
+      # Omnisearch intent defaults to "heuristic" (no LLM) — small local models
+      # mangle Czech; Voyage's multilingual embeddings carry the semantic search.
+      # Set INTENT_PROVIDER=claude + ANTHROPIC_API_KEY to enable Haiku rewriting.
       DATABASE_PATH: /data/rozhlas.db
     ports:
       # Bind to loopback only — public access goes through Caddy (443).
@@ -100,8 +101,6 @@ services:
       IPFS_API_URL: http://ipfs:5001
       # INTERNAL gateway — verify streamability against the local node (no proxy needed).
       IPFS_GATEWAY_URL: http://ipfs:8080
-      INTENT_PROVIDER: ollama
-      OLLAMA_URL: http://ollama:11434
       DATABASE_PATH: /data/rozhlas.db
     volumes:
       - ./data:/data
