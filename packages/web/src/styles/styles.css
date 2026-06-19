@@ -400,6 +400,7 @@ button:active,
   position: absolute;
   left: 14px;
   top: 12px;
+  flex: none; /* in the flex .part--single row, never let a long title shrink it */
   width: 40px;
   height: 40px;
   padding: 0;
