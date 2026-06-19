@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNull, sql, count } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, count } from "drizzle-orm";
 import { config, db, schema, toFtsQuery } from "@rozhlas/core";
 
-const { shows, audioFiles, artworks, people, showPeople, categories, showCategories, sources } =
+const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources } =
   schema;
 
 export interface ListFilters {
@@ -176,6 +176,34 @@ export async function getShowBySlug(slug: string) {
     .innerJoin(categories, eq(showCategories.categoryId, categories.id))
     .where(eq(showCategories.showId, show.id));
 
+  const mapAudio = (a: typeof audioFiles.$inferSelect | undefined) =>
+    a
+      ? {
+          container: a.container,
+          codec: a.codec,
+          durationSec: a.durationSec,
+          sizeBytes: a.sizeBytes,
+          streamable: a.streamable,
+          cid: a.ipfsCid,
+          streamUrl: streamUrl(a.ipfsCid),
+        }
+      : null;
+
+  // Parts (díly) for serialized shows, each with its own audio.
+  const partRows = await db
+    .select()
+    .from(showParts)
+    .where(eq(showParts.showId, show.id))
+    .orderBy(asc(showParts.idx));
+  const audioByPart = new Map<number, typeof audioFiles.$inferSelect>();
+  for (const a of audio) if (a.partId != null) audioByPart.set(a.partId, a);
+  const parts = partRows.map((p) => ({
+    idx: p.idx,
+    title: p.title,
+    durationSec: p.durationSec,
+    audio: mapAudio(audioByPart.get(p.id)),
+  }));
+
   return {
     slug: show.slug,
     title: show.title,
@@ -187,15 +215,8 @@ export async function getShowBySlug(slug: string) {
     artworkUrl: art.get(show.id) ?? null,
     people: ppl,
     categories: cats,
-    audio: audio.map((a) => ({
-      container: a.container,
-      codec: a.codec,
-      durationSec: a.durationSec,
-      sizeBytes: a.sizeBytes,
-      streamable: a.streamable,
-      cid: a.ipfsCid,
-      streamUrl: streamUrl(a.ipfsCid),
-    })),
+    parts,
+    audio: audio.map(mapAudio),
   };
 }
 

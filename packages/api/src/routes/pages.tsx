@@ -125,7 +125,9 @@ pageRoutes.get("/show/:slug", async (c) => {
   const show = await getShowBySlug(c.req.param("slug"));
   if (!show) return c.html(layout("Nenalezeno", <section><h1>Pořad nenalezen</h1></section>), 404);
 
-  const playable = show.audio.find((a) => a.streamable && a.streamUrl);
+  const audios = show.audio.filter((a): a is NonNullable<typeof a> => !!a);
+  const playable = audios.find((a) => a.streamable && a.streamUrl);
+  const hasParts = show.parts.length > 0;
   const content = (
     <article class="show-detail">
       {show.artworkUrl ? (
@@ -141,13 +143,8 @@ pageRoutes.get("/show/:slug", async (c) => {
         <p class="show-detail__meta">
           {formatDate(show.publishedAt)}
           {show.durationSec ? ` · ${formatDuration(show.durationSec)}` : ""}
+          {hasParts ? ` · ${show.parts.length} dílů` : ""}
         </p>
-
-        {playable ? (
-          <audio class="player" controls preload="none" src={playable.streamUrl!}></audio>
-        ) : (
-          <p class="notice">Audio se zpracovává…</p>
-        )}
 
         {show.people.length ? (
           <p class="show-detail__people">{show.people.map((p) => p.name).join(", ")}</p>
@@ -156,11 +153,24 @@ pageRoutes.get("/show/:slug", async (c) => {
           <p class="show-detail__desc">{stripHtml(show.description)}</p>
         ) : null}
 
-        {playable?.cid ? (
-          <p class="show-detail__cid">
-            IPFS: <code>{playable.cid}</code>
-          </p>
-        ) : null}
+        {hasParts ? (
+          <ol class="parts">
+            {show.parts.map((p) => (
+              <li class="part">
+                <span class="part__title">{p.title ?? `${p.idx}. díl`}</span>
+                {p.audio?.streamable && p.audio.streamUrl ? (
+                  <audio class="player" controls preload="none" src={p.audio.streamUrl}></audio>
+                ) : (
+                  <span class="notice">zpracovává se…</span>
+                )}
+              </li>
+            ))}
+          </ol>
+        ) : playable ? (
+          <audio class="player" controls preload="none" src={playable.streamUrl!}></audio>
+        ) : (
+          <p class="notice">Audio se zpracovává…</p>
+        )}
       </div>
     </article>
   );

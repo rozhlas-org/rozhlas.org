@@ -1,8 +1,8 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db, schema, showSlug, slugify } from "@rozhlas/core";
-import type { ScrapedShow } from "@rozhlas/scrapers";
+import type { ScrapedShow, ScrapedPart } from "@rozhlas/scrapers";
 
-const { shows, audioFiles, people, showPeople, categories, showCategories, artworks, sources } =
+const { shows, showParts, audioFiles, people, showPeople, categories, showCategories, artworks, sources } =
   schema;
 
 export async function upsertSource(key: string, title: string, schedule?: string) {
@@ -109,15 +109,20 @@ export interface AudioUpsertResult {
   needsAcquire: boolean;
 }
 
-/** Ensure a single audio_files row exists for the show; returns whether it still needs acquiring. */
-export async function upsertAudio(
+/** Upsert one audio_files row for a show (or a specific part); idempotent. */
+async function upsertAudioRow(
   showId: number,
   media: { kind: string; url: string },
+  partId: number | null,
 ): Promise<AudioUpsertResult> {
+  const cond =
+    partId == null
+      ? and(eq(audioFiles.showId, showId), isNull(audioFiles.partId))
+      : and(eq(audioFiles.showId, showId), eq(audioFiles.partId, partId));
   const existing = await db
     .select({ id: audioFiles.id, ipfsCid: audioFiles.ipfsCid })
     .from(audioFiles)
-    .where(and(eq(audioFiles.showId, showId), isNull(audioFiles.partId)))
+    .where(cond)
     .limit(1);
 
   if (existing.length) {
@@ -131,9 +136,30 @@ export async function upsertAudio(
 
   const [row] = await db
     .insert(audioFiles)
-    .values({ showId, manifestUrl: media.url, manifestKind: media.kind })
+    .values({ showId, partId, manifestUrl: media.url, manifestKind: media.kind })
     .returning({ id: audioFiles.id });
   return { audioFileId: row!.id, needsAcquire: true };
+}
+
+/** Single-audio show (podcasts). */
+export function upsertAudio(showId: number, media: { kind: string; url: string }) {
+  return upsertAudioRow(showId, media, null);
+}
+
+/** Upsert a part (díl) and its audio; returns the part's audio status. */
+export async function upsertPart(
+  showId: number,
+  part: ScrapedPart,
+): Promise<AudioUpsertResult> {
+  const [row] = await db
+    .insert(showParts)
+    .values({ showId, idx: part.idx, title: part.title, durationSec: part.durationSec })
+    .onConflictDoUpdate({
+      target: [showParts.showId, showParts.idx],
+      set: { title: part.title, durationSec: part.durationSec, updatedAt: new Date() },
+    })
+    .returning({ id: showParts.id });
+  return upsertAudioRow(showId, part.media, row!.id);
 }
 
 export async function getAudio(audioFileId: number) {

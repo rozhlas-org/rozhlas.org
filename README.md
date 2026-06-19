@@ -13,7 +13,7 @@ self-hosted **IPFS** (Kubo) · **Hono** API + **Astro** site (Phase 2) · Docker
 packages/
   core/      # config, logger, SQLite schema + migrations (Drizzle), utils
   jobs/      # BullMQ queues (pipeline stages) + Bull Board dashboard
-  scrapers/   # page-key -> strategy registry; iradio strategy (rozhlas v2 API)
+  scrapers/   # page-key -> strategy registry; cetba (literary, multi-part DASH) + iradio (podcasts)
   media/      # audio acquisition: mp3 download + ffmpeg DASH/HLS remux, ffprobe
   ipfs/       # Kubo RPC client: add/pin + gateway stream verification
   embeddings/ # Voyage AI provider + offline local fallback; embed + vector search

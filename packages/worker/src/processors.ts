@@ -19,10 +19,21 @@ async function discover(job: Job<JobData["discover"]>) {
   let enqueued = 0;
   for (const s of scraped) {
     const { showId } = await repo.upsertShow(sourceKey, s);
-    const { audioFileId, needsAcquire } = await repo.upsertAudio(showId, s.media);
-    if (needsAcquire) {
-      await enqueue("acquire-audio", { audioFileId });
-      enqueued++;
+    // Serialized shows have parts (one audio each); podcasts have a single media.
+    if (s.parts?.length) {
+      for (const part of s.parts) {
+        const { audioFileId, needsAcquire } = await repo.upsertPart(showId, part);
+        if (needsAcquire) {
+          await enqueue("acquire-audio", { audioFileId });
+          enqueued++;
+        }
+      }
+    } else if (s.media) {
+      const { audioFileId, needsAcquire } = await repo.upsertAudio(showId, s.media);
+      if (needsAcquire) {
+        await enqueue("acquire-audio", { audioFileId });
+        enqueued++;
+      }
     }
   }
   await repo.touchSourceRun(sourceKey);
