@@ -19,8 +19,14 @@ async function discover(job: Job<JobData["discover"]>) {
   try {
     const scraped = await scraper.discover(ctx);
     let enqueued = 0;
+    let mirrored = 0;
     for (const s of scraped) {
-      const { showId } = await repo.upsertShow(sourceKey, s);
+      const { showId, mirrored: isMirror } = await repo.upsertShow(sourceKey, s);
+      if (isMirror) {
+        // Already owned by another source (station mirror) — skip its audio.
+        mirrored++;
+        continue;
+      }
       // Serialized shows have parts (one audio each); podcasts have a single media.
       if (s.parts?.length) {
         for (const part of s.parts) {
@@ -41,8 +47,8 @@ async function discover(job: Job<JobData["discover"]>) {
     await repo.touchSourceRun(sourceKey);
     // discovered = shows seen this run; succeeded = NEW audio queued (the "diff").
     await repo.finishScrapeRun(runId, { status: "ok", discovered: scraped.length, succeeded: enqueued });
-    log.info("discover done", { sourceKey, shows: scraped.length, enqueued });
-    return { shows: scraped.length, enqueued };
+    log.info("discover done", { sourceKey, shows: scraped.length, enqueued, mirrored });
+    return { shows: scraped.length, enqueued, mirrored };
   } catch (err) {
     await repo.finishScrapeRun(runId, { status: "error", error: String(err).slice(0, 500) });
     throw err;
