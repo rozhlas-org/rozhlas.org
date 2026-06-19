@@ -12,6 +12,7 @@ import {
   showView,
   type ViewResult,
 } from "./views.ts";
+import { wireAudioProgress } from "./progress.ts";
 
 const app = document.getElementById("app")!;
 
@@ -104,5 +105,8 @@ document.addEventListener("submit", (e) => {
 });
 
 window.addEventListener("popstate", render);
+
+// Persist/restore per-díl playback progress (capture-phase, covers re-rendered audio).
+wireAudioProgress();
 
 render();

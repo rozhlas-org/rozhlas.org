@@ -4,6 +4,7 @@
 
 import { api, type ListResult, type ShowListItem } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
+import { getProgress } from "./progress.ts";
 
 export interface ViewResult {
   title: string;
@@ -181,19 +182,31 @@ export async function showView(slug: string): Promise<ViewResult> {
   if (hasParts) {
     const items = show.parts
       .map((p) => {
+        // Played state is read from localStorage at render time, so a reload
+        // shows the right checkmarks/resume hints with no flash. progress.ts
+        // keeps them live as you listen.
+        const key = `${show.slug}#${p.idx}`;
+        const prog = getProgress(key);
+        const played = prog?.done ?? false;
+        const resumeAt = !played && prog && prog.t > 1 ? prog.t : 0;
         const player =
           p.audio?.streamable && p.audio.streamUrl
-            ? `<audio class="player" controls preload="none" src="${attr(p.audio.streamUrl)}"></audio>`
+            ? `<audio class="player" controls preload="none" data-pkey="${attr(key)}" src="${attr(p.audio.streamUrl)}"></audio>`
             : `<span class="notice">zpracovává se…</span>`;
+        const check = `<span class="part__check" aria-hidden="true">✓</span>`;
         const dur = p.durationSec ? `<span class="part__dur">${esc(formatDuration(p.durationSec))}</span>` : "";
-        return `<li class="part"><span class="part__title">${esc(p.title ?? `${p.idx}. díl`)}</span>${dur}${player}</li>`;
+        const resume = resumeAt
+          ? `<span class="part__resume">pokračovat od ${esc(formatDuration(resumeAt))}</span>`
+          : "";
+        const cls = `part${played ? " part--played" : ""}`;
+        return `<li class="${cls}">${check}<span class="part__title">${esc(p.title ?? `${p.idx}. díl`)}</span>${dur}${resume}${player}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
   } else {
     const playable = show.audio.find((a) => a.streamable && a.streamUrl);
     audioBlock = playable
-      ? `<audio class="player" controls preload="none" src="${attr(playable.streamUrl)}"></audio>${
+      ? `<audio class="player" controls preload="none" data-pkey="${attr(`${show.slug}#single`)}" src="${attr(playable.streamUrl)}"></audio>${
           playable.cid ? `<p class="show-detail__cid">IPFS: <code>${esc(playable.cid)}</code></p>` : ""
         }`
       : `<p class="notice">Audio se zpracovává…</p>`;
