@@ -2,7 +2,7 @@
 // Each exported view is async: it fetches from the API and returns an HTML string
 // (plus the document <title>). The router in app.ts swaps the result into #app.
 
-import { api, type ListResult, type ShowListItem } from "./api.ts";
+import { api, type ListResult, type ShowListItem, type SortKey } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
 
@@ -30,7 +30,37 @@ function showCard(s: ShowListItem): string {
       </a>
       ${programme}
       <p class="show-card__meta">${esc(formatDate(s.publishedAt))}${dur}</p>
+      ${statsLine(s.plays, s.displays)}
     </article>`;
+}
+
+/** Plays + displays counters (mono, muted). ▶ = přehrání, plus zobrazení. */
+function statsLine(plays: number, displays: number): string {
+  return `<p class="stats">
+    <span class="stats__item" title="Přehrání">▶ ${plays}</span>
+    <span class="stats__item" title="Zobrazení">${displays} zobrazení</span>
+  </p>`;
+}
+
+/** Sort control — added (default, newest first) / plays / alphabet. */
+function sortControl(current: SortKey, params: URLSearchParams): string {
+  const opts: [SortKey, string][] = [
+    ["added", "Nejnovější"],
+    ["plays", "Nejpřehrávanější"],
+    ["alpha", "Abecedně"],
+  ];
+  const links = opts
+    .map(([key, label]) => {
+      const p = new URLSearchParams(params);
+      if (key === "added") p.delete("sort");
+      else p.set("sort", key);
+      p.delete("page");
+      const qs = p.toString();
+      const active = current === key ? " is-active" : "";
+      return `<a class="sort__opt${active}" href="${attr(`/${qs ? `?${qs}` : ""}`)}">${esc(label)}</a>`;
+    })
+    .join("");
+  return `<div class="sort"><span class="sort__label">Řadit</span>${links}</div>`;
 }
 
 function showGrid(items: ShowListItem[]): string {
@@ -85,13 +115,16 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
   const q = params.get("q") ?? undefined;
   const programme = params.get("programme") ?? undefined;
   const source = params.get("source") ?? undefined;
+  const sortRaw = params.get("sort");
+  const sort: SortKey = sortRaw === "plays" || sortRaw === "alpha" ? sortRaw : "added";
   const page = params.get("page") ? Number(params.get("page")) : 1;
-  const data = await api.shows({ q, programme, source, page });
+  const data = await api.shows({ q, programme, source, sort, page });
 
   const qs = new URLSearchParams();
   if (q) qs.set("q", q);
   if (programme) qs.set("programme", programme);
   if (source) qs.set("source", source);
+  if (sort !== "added") qs.set("sort", sort);
   const base = `/?${qs.toString()}${qs.toString() ? "&" : ""}`;
 
   const heading = programme ?? "Nejnovější pořady";
@@ -100,6 +133,7 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
       <input class="filter__input" type="search" name="q" value="${attr(q ?? "")}"
         placeholder="Filtrovat…" aria-label="Filtrovat pořady" />
       ${source ? `<input type="hidden" name="source" value="${attr(source)}" />` : ""}
+      ${sort !== "added" ? `<input type="hidden" name="sort" value="${attr(sort)}" />` : ""}
     </form>`;
   return {
     title: programme ?? "Pořady",
@@ -110,7 +144,10 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
           <h1>${esc(heading)}</h1>
           ${filter}
         </div>
-        <p class="result-count">${esc(`${data.total} pořadů`)}</p>
+        <div class="browse__bar">
+          <p class="result-count">${esc(`${data.total} pořadů`)}</p>
+          ${sortControl(sort, params)}
+        </div>
         ${showGrid(data.items)}
         ${pagination(data.page, data.pageSize, data.total, base)}
       </section>`,
@@ -184,6 +221,7 @@ export async function showView(slug: string): Promise<ViewResult> {
   if (!show) {
     return { title: "Nenalezeno", html: `<section><h1>Pořad nenalezen</h1></section>` };
   }
+  api.recordDisplay(slug); // count this detail view (fire-and-forget)
   const hasParts = show.parts.length > 0;
   const art = show.artworkUrl ? `<img class="show-detail__art" src="${attr(show.artworkUrl)}" alt="" />` : "";
   const programme = show.showName
@@ -241,6 +279,7 @@ export async function showView(slug: string): Promise<ViewResult> {
           ${programme}
           <h1>${esc(show.title)}</h1>
           <p class="show-detail__meta">${meta}</p>
+          ${statsLine(show.plays, show.displays)}
           ${desc}
           ${people}
           ${audioBlock}

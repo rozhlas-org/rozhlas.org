@@ -13,6 +13,7 @@ import {
   type ViewResult,
 } from "./views.ts";
 import { wireAudioProgress } from "./progress.ts";
+import { api } from "./api.ts";
 
 const app = document.getElementById("app")!;
 
@@ -105,6 +106,21 @@ document.addEventListener("submit", (e) => {
 });
 
 window.addEventListener("popstate", render);
+
+// Count a play the first time each audio element starts ('play' doesn't bubble →
+// capture). Once per element so pause/resume doesn't inflate the counter.
+document.addEventListener(
+  "play",
+  (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLAudioElement) || el.dataset.counted) return;
+    const m = location.pathname.match(/^\/show\/(.+)$/);
+    if (!m) return;
+    el.dataset.counted = "1";
+    api.recordPlay(decodeSeg(m[1]));
+  },
+  true,
+);
 
 // Persist/restore per-díl playback progress (capture-phase, covers re-rendered audio).
 wireAudioProgress();

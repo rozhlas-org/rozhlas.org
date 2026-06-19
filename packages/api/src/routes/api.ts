@@ -4,8 +4,13 @@ import {
   getShowBySlug,
   listProgrammes,
   listSources,
+  incrementPlays,
+  incrementDisplays,
+  type SortKey,
 } from "../queries.ts";
 import { omnisearch } from "../omnisearch.ts";
+
+const SORTS = new Set<SortKey>(["added", "plays", "alpha"]);
 
 export const apiRoutes = new Hono();
 
@@ -30,11 +35,12 @@ apiRoutes.get("/omnisearch", async (c) => {
 });
 
 apiRoutes.get("/shows", async (c) => {
-  const { q, programme, source, page, pageSize } = c.req.query();
+  const { q, programme, source, sort, page, pageSize } = c.req.query();
   const result = await listShows({
     q,
     programme,
     source,
+    sort: sort && SORTS.has(sort as SortKey) ? (sort as SortKey) : undefined,
     page: page ? Number(page) : undefined,
     pageSize: pageSize ? Number(pageSize) : undefined,
   });
@@ -45,6 +51,17 @@ apiRoutes.get("/shows/:slug", async (c) => {
   const show = await getShowBySlug(c.req.param("slug"));
   if (!show) return c.json({ error: "not found" }, 404);
   return c.json(show);
+});
+
+// Stat beacons (fire-and-forget from the frontend). 204, no body.
+apiRoutes.post("/shows/:slug/play", async (c) => {
+  await incrementPlays(c.req.param("slug"));
+  return c.body(null, 204);
+});
+
+apiRoutes.post("/shows/:slug/display", async (c) => {
+  await incrementDisplays(c.req.param("slug"));
+  return c.body(null, 204);
 });
 
 apiRoutes.get("/search", async (c) => {
