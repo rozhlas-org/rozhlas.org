@@ -22,6 +22,22 @@ const EnvSchema = z.object({
 
   BULL_BOARD_PATH: z.string().startsWith("/").default("/admin/jobs"),
 
+  // --- Public web / CORS ---
+  // Comma-separated list of browser origins allowed to call the JSON API
+  // (the static frontend on GitHub Pages). Localhost is always allowed for dev.
+  CORS_ORIGINS: z
+    .string()
+    .default("https://rozhlas.org,https://www.rozhlas.org"),
+
+  // --- Admin auth (Bull Board) ---
+  // Login+session gate in front of BULL_BOARD_PATH. If ADMIN_PASSWORD is unset
+  // the admin area is locked entirely (returns 503) rather than left open.
+  ADMIN_PASSWORD: z.string().optional(),
+  // Secret used to sign the admin session cookie. Required for admin to work.
+  SESSION_SECRET: z.string().optional(),
+  // Admin session lifetime in hours.
+  SESSION_TTL_HOURS: z.coerce.number().int().positive().default(168),
+
   // --- AI / embeddings (Phase 4) ---
   // If VOYAGE_API_KEY is unset, a deterministic local fallback embedder is used.
   VOYAGE_API_KEY: z.string().optional(),

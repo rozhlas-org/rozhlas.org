@@ -1,0 +1,15 @@
+[Unit]
+Description=rozhlas.org worker (BullMQ jobs: scrape, acquire-audio, embed)
+After=network-online.target redis-server.service rozhlas-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/rozhlas.org
+EnvironmentFile=/root/rozhlas.org/.env
+ExecStart=/root/.bun/bin/bun run packages/worker/src/index.ts
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
