@@ -442,6 +442,46 @@ button:active,
 .filter__input::placeholder { color: var(--muted); text-transform: uppercase; }
 .filter__input:focus { outline: none; box-shadow: 3px 3px 0 var(--cyan); }
 
+/* ===== stats (plays / displays) ===== */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.show-card__meta { margin-bottom: 5px; }
+.show-card .stats { margin: 0 16px 16px; }
+.show-detail__body .stats { font-size: 12px; margin: 0.5rem 0 1.25rem; }
+
+/* ===== sort control ===== */
+.browse__bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+.sort {
+  display: flex;
+  align-items: baseline;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.sort__label { color: var(--muted); }
+.sort__opt { color: var(--muted); padding-bottom: 2px; border-bottom: 2px solid transparent; }
+.sort__opt:hover { color: var(--key); }
+.sort__opt.is-active { color: var(--key); border-bottom-color: var(--magenta); }
+
 /* ===== loading bar — shows during slow view loads (esp. Podle nálady) ===== */
 #app[aria-busy="true"]::before {
   content: "";

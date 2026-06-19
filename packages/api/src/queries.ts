@@ -4,10 +4,13 @@ import { config, db, schema, toFtsQuery } from "@rozhlas/core";
 const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources } =
   schema;
 
+export type SortKey = "added" | "plays" | "alpha";
+
 export interface ListFilters {
   q?: string;
   programme?: string; // shows.showName
   source?: string; // shows.sourceKey
+  sort?: SortKey; // default "added" (newest added first)
   page?: number;
   pageSize?: number;
 }
@@ -22,6 +25,20 @@ export interface ShowListItem {
   artworkUrl: string | null;
   streamable: boolean;
   streamUrl: string | null;
+  plays: number;
+  displays: number;
+}
+
+function orderForSort(sort: SortKey) {
+  switch (sort) {
+    case "plays":
+      return [desc(shows.plays), desc(shows.createdAt)];
+    case "alpha":
+      return [asc(shows.title)];
+    case "added":
+    default:
+      return [desc(shows.createdAt), desc(shows.id)];
+  }
 }
 
 function streamUrl(cid: string | null): string | null {
@@ -61,10 +78,12 @@ export async function listShows(f: ListFilters) {
       source: shows.sourceKey,
       publishedAt: shows.publishedAt,
       durationSec: shows.durationSec,
+      plays: shows.plays,
+      displays: shows.displays,
     })
     .from(shows)
     .where(where)
-    .orderBy(desc(shows.publishedAt), desc(shows.id))
+    .orderBy(...orderForSort(f.sort ?? "added"))
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
@@ -84,6 +103,8 @@ export async function listShows(f: ListFilters) {
       artworkUrl: artByShow.get(r.id) ?? null,
       streamable: a?.streamable ?? false,
       streamUrl: streamUrl(a?.ipfsCid ?? null),
+      plays: r.plays,
+      displays: r.displays,
     };
   });
 
@@ -134,6 +155,8 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
       source: shows.sourceKey,
       publishedAt: shows.publishedAt,
       durationSec: shows.durationSec,
+      plays: shows.plays,
+      displays: shows.displays,
     })
     .from(shows)
     .where(inArray(shows.id, ids));
@@ -151,9 +174,27 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
       artworkUrl: art.get(r.id) ?? null,
       streamable: a?.streamable ?? false,
       streamUrl: a?.ipfsCid ? streamUrl(a.ipfsCid) : null,
+      plays: r.plays,
+      displays: r.displays,
     });
   }
   return map;
+}
+
+/** Increment the play counter for a show (fire-and-forget beacon target). */
+export async function incrementPlays(slug: string): Promise<void> {
+  await db
+    .update(shows)
+    .set({ plays: sql`${shows.plays} + 1` })
+    .where(eq(shows.slug, slug));
+}
+
+/** Increment the display (detail-view) counter for a show. */
+export async function incrementDisplays(slug: string): Promise<void> {
+  await db
+    .update(shows)
+    .set({ displays: sql`${shows.displays} + 1` })
+    .where(eq(shows.slug, slug));
 }
 
 export async function getShowBySlug(slug: string) {
@@ -213,6 +254,8 @@ export async function getShowBySlug(slug: string) {
     publishedAt: show.publishedAt,
     durationSec: show.durationSec,
     artworkUrl: art.get(show.id) ?? null,
+    plays: show.plays,
+    displays: show.displays,
     people: ppl,
     categories: cats,
     parts,
