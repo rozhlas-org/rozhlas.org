@@ -1,20 +1,17 @@
-import { makeStationScraper } from "../station.ts";
+import { makeApiScraper } from "../mujrozhlas/index.ts";
 
 /**
- * `junior-pribehy` — Rádio Junior's "Příběhy a pohádky" hub: serialized stories
- * (Čtení na pokračování) and fairy tales (Malá/Velká pohádka, …), same station-site
- * structure as cetba.
+ * `junior-pribehy` — Rádio Junior's "Příběhy a pohádky" hub (serialized stories +
+ * fairy tales). A category hub (no single show UUID), so we enumerate its shows
+ * from the hub page, then read episodes from the mujRozhlas JSON:API.
  *
- * Overlap note: ~a third of these episodes also air on Dvojka and carry the SAME
- * rozhlas node-id, so they collide with the `pohadka` source. upsertShow's
- * cross-source dedup skips any reading whose id already exists under another
- * source — so the Dvojka `pohadka` source keeps the mirrors and we scrape only
- * Junior's unique content here.
+ * Overlap with `pohadka` (Dvojka mirrors) de-dupes natively: both sources are now in
+ * the UUID namespace, so a shared serial/episode UUID is skipped by upsertShow's
+ * cross-source mirror check.
  */
-export const juniorPribehyScraper = makeStationScraper({
+export const juniorPribehyScraper = makeApiScraper({
   key: "junior-pribehy",
   title: "Rádio Junior — příběhy a pohádky",
   schedule: "0 7 * * *", // nightly, offset from cetba (04), wave (05), pohadka (06)
-  origin: "https://junior.rozhlas.cz",
-  seeds: ["/pribehy"],
+  hub: { origin: "https://junior.rozhlas.cz", seeds: ["/pribehy"] },
 });

@@ -1,0 +1,130 @@
+import type { ScrapeCtx } from "../types.ts";
+import type { ApiShowRef } from "./index.ts";
+
+// Enumerate the show UUIDs under a station "hub" (category listing like
+// /hry-a-cetba or /pribehy) that the JSON:API can't filter directly. We crawl the
+// hub's listing pages for sub-pages, then resolve each to its mujRozhlas show UUID
+// (the page embeds it) and confirm via /shows/<uuid>. The episode bulk then comes
+// from the API (cheap). Bounded by ctx.signal + a fetch cap so it always ends.
+
+const UA = "Mozilla/5.0 (compatible; rozhlas-org-bot/0.1; +https://github.com/rozhlas-org/rozhlas.org)";
+const ACCEPT_JSON = "application/vnd.api+json";
+const PER_FETCH_MS = 25_000;
+const DEFAULT_MAX_FETCHES = 4000;
+const MAX_HUB_PAGES = 80;
+const DELAY_MS = Number(process.env.SCRAPE_DELAY_MS ?? 150);
+
+const NAV =
+  /^\/(o-|kontakt|program|audioarchiv|kamery|playlisty|lide|dokumenty|hudba|video|page|tag|kategorie|moderator|porady|podcast|zive)\b/;
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+export interface HubConfig {
+  origin: string; // e.g. "https://vltava.rozhlas.cz"
+  seeds: string[]; // hub paths, e.g. ["/hry-a-cetba"]
+  maxPages?: number;
+}
+
+function combinedSignal(ctx: ScrapeCtx): AbortSignal {
+  const t = AbortSignal.timeout(PER_FETCH_MS);
+  return ctx.signal ? AbortSignal.any([ctx.signal, t]) : t;
+}
+
+async function getText(ctx: ScrapeCtx, url: string): Promise<string> {
+  const res = await ctx.fetch(url, { headers: { "user-agent": UA }, signal: combinedSignal(ctx) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
+/** Return the show title if `uuid` is a mujRozhlas show, else null. */
+async function showTitle(ctx: ScrapeCtx, uuid: string): Promise<string | null> {
+  try {
+    const res = await ctx.fetch(`https://api.mujrozhlas.cz/shows/${uuid}`, {
+      headers: { accept: ACCEPT_JSON },
+      signal: combinedSignal(ctx),
+    });
+    if (!res.ok) return null;
+    const j: any = await res.json();
+    return j?.data?.type === "show" ? (j.data.attributes?.title ?? uuid) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Top-N most-frequent UUIDs on a page (the show uuid recurs; episode/related ones don't). */
+function topUuids(html: string, n: number): string[] {
+  const counts = new Map<string, number>();
+  for (const u of html.match(UUID_RE) ?? []) counts.set(u, (counts.get(u) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([u]) => u);
+}
+
+export async function enumerateShows(ctx: ScrapeCtx, hub: HubConfig): Promise<ApiShowRef[]> {
+  const abs = (u: string) => (u.startsWith("http") ? u : hub.origin + u);
+  const hostRe = hub.origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const linkRe = new RegExp(`href="((?:${hostRe})?\\/[a-z0-9-]+-\\d{5,})`, "g");
+  const maxPages = hub.maxPages ?? MAX_HUB_PAGES;
+  const maxFetches = ctx.maxFetches ?? DEFAULT_MAX_FETCHES;
+
+  const found = new Map<string, string>(); // show uuid -> title
+  const tried = new Set<string>();
+  const visited = new Set<string>();
+  let fetches = 0;
+  const beat = () => ctx.onProgress?.({ found: found.size, fetched: fetches });
+  const budgetLeft = () => !ctx.signal?.aborted && fetches < maxFetches;
+
+  // 1) collect candidate sub-pages across hub seeds + ?page=N pagination
+  const candidates = new Set<string>();
+  for (const seed of hub.seeds) {
+    for (let page = 1; page <= maxPages && budgetLeft(); page++) {
+      const base = abs(seed);
+      const url = page === 1 ? base : `${base}${base.includes("?") ? "&" : "?"}page=${page}`;
+      if (visited.has(url)) break;
+      visited.add(url);
+      if (fetches++ > 0) await sleep(DELAY_MS);
+      let html: string;
+      try {
+        html = await getText(ctx, url);
+      } catch {
+        break;
+      }
+      beat();
+      let added = 0;
+      for (const m of html.matchAll(linkRe)) {
+        const path = m[1]!.replace(hub.origin, "");
+        if (!NAV.test(path)) {
+          const a = abs(path);
+          if (!candidates.has(a)) {
+            candidates.add(a);
+            added++;
+          }
+        }
+      }
+      if (added === 0) break; // end of listing
+    }
+  }
+
+  // 2) resolve each candidate page to its show uuid (test the most-frequent uuids)
+  for (const url of candidates) {
+    if (!budgetLeft()) break;
+    if (fetches++ > 0) await sleep(DELAY_MS);
+    let html: string;
+    try {
+      html = await getText(ctx, url);
+    } catch {
+      continue;
+    }
+    beat();
+    for (const u of topUuids(html, 2)) {
+      if (found.has(u) || tried.has(u) || !budgetLeft()) continue;
+      tried.add(u);
+      fetches++;
+      const title = await showTitle(ctx, u);
+      beat();
+      if (title) found.set(u, title);
+    }
+  }
+
+  ctx.log.info("hub enumerated", { shows: found.size, candidates: candidates.size, fetched: fetches });
+  return [...found.entries()].map(([uuid, name]) => ({ uuid, name }));
+}

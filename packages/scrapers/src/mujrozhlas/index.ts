@@ -1,5 +1,6 @@
 import type { Scraper, ScrapeCtx, ScrapedShow, ScrapedPart, MediaSource } from "../types.ts";
 import { iterateEpisodes, type ApiEpisode } from "./api.ts";
+import { enumerateShows, type HubConfig } from "./hub.ts";
 
 // API-based station source: fetches a show's episodes from the mujRozhlas JSON:API
 // and groups them by `serial` into the same multi-part ScrapedShow shape the HTML
@@ -16,7 +17,10 @@ export interface ApiScraperConfig {
   key: string;
   title: string;
   schedule?: string;
-  shows: ApiShowRef[];
+  /** Explicit show UUIDs (single-programme sources like pohadka/wave). */
+  shows?: ApiShowRef[];
+  /** Or a category hub to enumerate show UUIDs from (cetba/junior). */
+  hub?: HubConfig;
 }
 
 /** Pick a playable manifest from an episode's audioLinks (prefer DASH, like the HTML path). */
@@ -46,6 +50,8 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
 
     async discover(ctx: ScrapeCtx): Promise<ScrapedShow[]> {
       const limit = ctx.limit ?? 5000;
+      // Single-programme sources pass shows[]; hub sources enumerate them first.
+      const shows = cfg.shows ?? (cfg.hub ? await enumerateShows(ctx, cfg.hub) : []);
       const serials = new Map<string, SerialAcc>();
       const standalone: ScrapedShow[] = [];
       let fetched = 0;
@@ -53,7 +59,7 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
       const beat = () =>
         ctx.onProgress?.({ found: serials.size + standalone.length, fetched });
 
-      for (const show of cfg.shows) {
+      for (const show of shows) {
         if (ctx.signal?.aborted) break;
         try {
           for await (const ep of iterateEpisodes(ctx, show.uuid, () => {
