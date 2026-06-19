@@ -10,7 +10,7 @@ export interface ListFilters {
   q?: string;
   programme?: string; // shows.showName
   source?: string; // shows.sourceKey
-  sort?: SortKey; // default "added" (newest added first)
+  sort?: SortKey; // default "added" (newest by broadcast date first)
   page?: number;
   pageSize?: number;
 }
@@ -32,12 +32,15 @@ export interface ShowListItem {
 function orderForSort(sort: SortKey) {
   switch (sort) {
     case "plays":
-      return [desc(shows.plays), desc(shows.createdAt)];
+      return [desc(shows.plays), desc(shows.publishedAt), desc(shows.id)];
     case "alpha":
       return [asc(shows.title)];
     case "added":
     default:
-      return [desc(shows.createdAt), desc(shows.id)];
+      // "Newest" = most recent broadcast date. createdAt (scrape time) is the
+      // same for the whole archive (bulk-scraped), so it can't order by recency;
+      // publishedAt is the real signal. Undated shows (NULL) sort last under DESC.
+      return [desc(shows.publishedAt), desc(shows.createdAt), desc(shows.id)];
   }
 }
 
