@@ -25,11 +25,109 @@ export interface AcquiredAudio {
   checksum: string;
 }
 
-async function run(cmd: string[]): Promise<{ ok: boolean; stderr: string }> {
+export interface AcquireProgress {
+  stage: "download" | "assemble" | "probe";
+  percent: number; // 0-100 (download has real %; assemble is coarse)
+}
+
+export interface AcquireOpts {
+  /** Aborts the whole acquire (download or ffmpeg) — wire a job watchdog here. */
+  signal?: AbortSignal;
+  /** Heartbeat callback (throttled to ~5% steps). */
+  onProgress?: (p: AcquireProgress) => void;
+  /** Abort a download if no bytes arrive for this long. Default 30s. */
+  stallMs?: number;
+  /** Hard cap for ffmpeg assembly. Default 300s. */
+  ffmpegTimeoutMs?: number;
+}
+
+const DEFAULT_STALL_MS = 30_000;
+const DEFAULT_FFMPEG_MS = 300_000;
+
+/** Run a child process; killable via signal or timeout (returns ok=false on kill). */
+async function run(
+  cmd: string[],
+  opts: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<{ ok: boolean; stderr: string }> {
   const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
-  const stderr = await new Response(proc.stderr).text();
-  const code = await proc.exited;
-  return { ok: code === 0, stderr };
+  const kill = () => {
+    try {
+      proc.kill();
+    } catch {
+      /* already exited */
+    }
+  };
+  const timer = opts.timeoutMs ? setTimeout(kill, opts.timeoutMs) : undefined;
+  if (opts.signal) {
+    if (opts.signal.aborted) kill();
+    else opts.signal.addEventListener("abort", kill, { once: true });
+  }
+  try {
+    const stderr = await new Response(proc.stderr).text();
+    const code = await proc.exited;
+    return { ok: code === 0, stderr };
+  } finally {
+    if (timer) clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", kill);
+  }
+}
+
+/**
+ * Stream a URL to a file with a stall watchdog: if no bytes arrive within
+ * `stallMs`, or the external signal fires, the download is aborted and throws
+ * (so the job fails → retries instead of hanging a worker slot forever).
+ */
+async function downloadToFile(
+  url: string,
+  dest: string,
+  headers: Record<string, string>,
+  opts: AcquireOpts,
+): Promise<void> {
+  const stallMs = opts.stallMs ?? DEFAULT_STALL_MS;
+  const ac = new AbortController();
+  const abort = () => ac.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) ac.abort();
+    else opts.signal.addEventListener("abort", abort, { once: true });
+  }
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  const armStall = () => {
+    if (stallTimer) clearTimeout(stallTimer);
+    stallTimer = setTimeout(abort, stallMs);
+  };
+  try {
+    armStall();
+    const res = await fetch(url, { headers, signal: ac.signal });
+    if (!res.ok) throw new Error(`download failed: ${res.status}`);
+    if (!res.body) throw new Error("download failed: empty body");
+    const total = Number(res.headers.get("content-length")) || 0;
+    const writer = Bun.file(dest).writer();
+    let received = 0;
+    let bucket = -1;
+    try {
+      for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+        writer.write(chunk);
+        received += chunk.byteLength;
+        armStall(); // got bytes — reset the stall clock
+        if (opts.onProgress && total) {
+          const percent = Math.min(99, Math.round((received / total) * 100));
+          const b = Math.floor(percent / 5);
+          if (b !== bucket) {
+            bucket = b;
+            opts.onProgress({ stage: "download", percent });
+          }
+        }
+      }
+    } finally {
+      await writer.end();
+    }
+    if (total && received < total) {
+      throw new Error(`incomplete download: ${received}/${total} bytes`);
+    }
+  } finally {
+    if (stallTimer) clearTimeout(stallTimer);
+    opts.signal?.removeEventListener("abort", abort);
+  }
 }
 
 /** ffprobe → format/codec/duration/bitrate. */
@@ -73,6 +171,7 @@ async function sha256(path: string): Promise<string> {
 export async function acquireAudio(
   input: AcquireInput,
   idHint: string,
+  opts: AcquireOpts = {},
 ): Promise<AcquiredAudio> {
   await mkdir(STAGING_DIR, { recursive: true });
   const safeId = idHint.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "audio";
@@ -84,16 +183,18 @@ export async function acquireAudio(
     container = "mp3";
     path = join(STAGING_DIR, `${safeId}.mp3`);
     log.info("downloading", { url: input.url });
-    const res = await fetch(input.url, {
-      headers: { "user-agent": USER_AGENT, ...input.headers },
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!res.ok) throw new Error(`download failed: ${res.status}`);
-    await Bun.write(path, res);
+    opts.onProgress?.({ stage: "download", percent: 0 });
+    await downloadToFile(
+      input.url,
+      path,
+      { "user-agent": USER_AGENT, ...input.headers },
+      opts,
+    );
   } else {
     container = "m4a";
     path = join(STAGING_DIR, `${safeId}.m4a`);
     log.info("assembling stream with ffmpeg", { kind: input.kind, url: input.url });
+    opts.onProgress?.({ stage: "assemble", percent: 0 });
     const headerArgs = input.headers
       ? ["-headers", Object.entries(input.headers).map(([k, v]) => `${k}: ${v}`).join("\r\n")]
       : [];
@@ -108,10 +209,14 @@ export async function acquireAudio(
       "-movflags", "+faststart",
       path,
     ];
-    const { ok, stderr } = await run(cmd);
-    if (!ok) throw new Error(`ffmpeg failed: ${stderr.slice(0, 500)}`);
+    const { ok, stderr } = await run(cmd, {
+      signal: opts.signal,
+      timeoutMs: opts.ffmpegTimeoutMs ?? DEFAULT_FFMPEG_MS,
+    });
+    if (!ok) throw new Error(`ffmpeg failed/timed out: ${stderr.slice(0, 500)}`);
   }
 
+  opts.onProgress?.({ stage: "probe", percent: 100 });
   const { size } = await stat(path);
   const meta = await probe(path);
   const checksum = await sha256(path);
