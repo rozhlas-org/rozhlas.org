@@ -68,6 +68,19 @@ function listSection(heading: string, sub: string, data: ListResult, base: strin
     </section>`;
 }
 
+/** "Podle nálady" (omnisearch) entry box — natural-language mood search. */
+function moodBox(q = "", heading: "h1" | "h2" = "h1"): string {
+  return `
+    <section class="omni">
+      <${heading}>Podle nálady</${heading}>
+      <p class="omni__hint">Popište náladu nebo situaci — např. „jedu sám v noci a potřebuju něco napínavého".</p>
+      <form class="omni__form" action="/omnisearch" method="get">
+        <textarea name="q" rows="2" placeholder="Co máte chuť poslouchat?">${esc(q)}</textarea>
+        <button type="submit">Najít</button>
+      </form>
+    </section>`;
+}
+
 export async function browseView(params: URLSearchParams): Promise<ViewResult> {
   const q = params.get("q") ?? undefined;
   const programme = params.get("programme") ?? undefined;
@@ -84,7 +97,7 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
   const heading = programme ?? "Nejnovější pořady";
   return {
     title: programme ?? "Pořady",
-    html: listSection(heading, `${data.total} pořadů`, data, base),
+    html: moodBox("", "h2") + listSection(heading, `${data.total} pořadů`, data, base),
   };
 }
 
@@ -145,17 +158,8 @@ export async function omnisearchView(params: URLSearchParams): Promise<ViewResul
       ${showGrid(result.items)}`
     : "";
   return {
-    title: "Omnisearch",
-    html: `
-      <section class="omni">
-        <h1>Omnisearch</h1>
-        <p class="omni__hint">Popište náladu nebo situaci — např. „jedu sám v noci a potřebuju něco napínavého".</p>
-        <form class="omni__form" action="/omnisearch" method="get">
-          <textarea name="q" rows="2" placeholder="Co máte chuť poslouchat?">${esc(q)}</textarea>
-          <button type="submit">Najít</button>
-        </form>
-        ${resultHtml}
-      </section>`,
+    title: "Podle nálady",
+    html: moodBox(q, "h1") + (resultHtml ? `<section class="omni">${resultHtml}</section>` : ""),
   };
 }
 
