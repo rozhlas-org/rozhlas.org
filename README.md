@@ -11,12 +11,15 @@ self-hosted **IPFS** (Kubo) · **Hono** API + **Astro** site (Phase 2) · Docker
 ## Monorepo layout
 ```
 packages/
-  core/    # config, logger, SQLite schema + migrations (Drizzle)
-  jobs/    # BullMQ queues (pipeline stages) + Bull Board dashboard
-  api/     # Hono API — /healthz, /api, Bull Board at /admin/jobs
-  worker/  # BullMQ workers (stage processors; stubs until Phase 1)
-docker/    # api + worker Dockerfiles
-scripts/   # dev/smoke scripts
+  core/      # config, logger, SQLite schema + migrations (Drizzle), utils
+  jobs/      # BullMQ queues (pipeline stages) + Bull Board dashboard
+  scrapers/  # page-key -> strategy registry; iradio strategy (rozhlas v2 API)
+  media/     # audio acquisition: mp3 download + ffmpeg DASH/HLS remux, ffprobe
+  ipfs/      # Kubo RPC client: add/pin + gateway stream verification
+  api/       # Hono API — /healthz, /api, Bull Board at /admin/jobs
+  worker/    # BullMQ pipeline processors + scheduler
+docker/      # api + worker Dockerfiles
+scripts/     # dev/smoke/verify scripts
 ```
 
 ## Run with Docker (full stack)
@@ -53,6 +56,8 @@ bun run worker        # processes the pipeline queues
 | `bun run scripts/smoke.ts` | Enqueue a job and confirm a worker processes it |
 
 ## Status
-**Phase 0 (foundations) complete** — bootable empty stack: monorepo, Docker Compose,
-DB schema + migrations, BullMQ queues, Bull Board, health checks. Next: Phase 1 — the
-`iradio` scrape → IPFS pipeline (see docs/PLAN.md §11).
+**Phase 1 complete** — the `iradio` scrape → IPFS pipeline works end-to-end:
+discover (rozhlas v2 podcast API) → upsert metadata → download mp3 → pin to IPFS →
+verify streamable via the gateway → (FTS indexing is Phase 2). Audio is never kept on
+the server disk. Verify locally with `bun run scripts/verify-phase1.ts` (needs Redis +
+a local IPFS daemon). Next: Phase 2 — public site + API + classic search (docs/PLAN.md §11).

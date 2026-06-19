@@ -43,6 +43,11 @@ services:
       - "3000:3000"
     volumes:
       - app-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     depends_on:
       redis:
         condition: service_healthy
@@ -67,6 +72,8 @@ services:
         condition: service_healthy
       ipfs:
         condition: service_started
+      web:
+        condition: service_healthy # web applies migrations before going healthy
 
 volumes:
   redis-data:

@@ -10,6 +10,9 @@
   "dependencies": {
     "@rozhlas/core": "workspace:*",
     "@rozhlas/jobs": "workspace:*",
+    "@rozhlas/scrapers": "workspace:*",
+    "@rozhlas/ipfs": "workspace:*",
+    "@rozhlas/media": "workspace:*",
     "bullmq": "^5.34.3"
   }
 }

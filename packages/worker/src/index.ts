@@ -1,31 +1,27 @@
-import { Worker, type Processor } from "bullmq";
+import { Worker, type Job, type Processor } from "bullmq";
 import { createLogger } from "@rozhlas/core";
 import { connection, QUEUE_NAMES, type QueueName } from "@rozhlas/jobs";
+import { buildProcessors } from "./processors.ts";
+import { setupSchedules } from "./scheduler.ts";
 
 const log = createLogger("worker");
 
-/**
- * Stage processors. Phase 0 ships stubs that log and succeed so the pipeline is
- * bootable end-to-end; real logic lands per stage in Phase 1+.
- */
-const processors: Partial<Record<QueueName, Processor>> = {
-  // e.g. discover: discoverProcessor (Phase 1)
-};
-
-function stub(name: QueueName): Processor {
-  return async (job) => {
-    log.warn(`stub: ${name} not implemented`, { jobId: job.id, data: job.data });
-    return { stub: true, stage: name };
-  };
-}
+const processors = await buildProcessors();
 
 const concurrency: Partial<Record<QueueName, number>> = {
-  "acquire-audio": 2, // ffmpeg is heavy
+  "acquire-audio": 2, // ffmpeg / downloads are heavy
   "ipfs-add": 2,
 };
 
+function fallback(name: QueueName): Processor {
+  return async (job: Job) => {
+    log.warn(`no processor registered for ${name}`, { jobId: job.id });
+    return { unhandled: name };
+  };
+}
+
 const workers = QUEUE_NAMES.map((name) => {
-  const w = new Worker(name, processors[name] ?? stub(name), {
+  const w = new Worker(name, processors[name] ?? fallback(name), {
     connection,
     concurrency: concurrency[name] ?? 5,
   });
@@ -36,6 +32,7 @@ const workers = QUEUE_NAMES.map((name) => {
   return w;
 });
 
+await setupSchedules();
 log.info("worker started", { queues: QUEUE_NAMES.length });
 
 async function shutdown(signal: string) {

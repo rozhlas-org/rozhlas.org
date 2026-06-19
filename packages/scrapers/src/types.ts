@@ -1,0 +1,66 @@
+import type { Logger } from "@rozhlas/core";
+
+/** How a show's audio is reached (PLAN §5). */
+export interface MediaSource {
+  /** `file` = a direct download (mp3); `dash`/`hls` = a streaming manifest (m4s). */
+  kind: "file" | "dash" | "hls";
+  url: string;
+  /** Optional headers a CDN may require (referer/cookies). */
+  headers?: Record<string, string>;
+}
+
+export interface ScrapedPerson {
+  name: string;
+  role?: string;
+}
+
+/** A fully-scraped show/episode: metadata + how to fetch its audio. */
+export interface ScrapedShow {
+  /** Stable id within the source (e.g. RSS guid). */
+  sourceId: string;
+  title: string;
+  description?: string;
+  /** Series / programme name. */
+  showName?: string;
+  publishedAt?: Date;
+  durationSec?: number;
+  language?: string;
+  people?: ScrapedPerson[];
+  categories?: string[];
+  tags?: string[];
+  artworkUrl?: string;
+  media: MediaSource;
+  /** Original payload, persisted to `shows.rawJson` for later re-derivation. */
+  raw?: unknown;
+}
+
+/** A lightweight pointer used by detail-page sources (discover → fetchShow). */
+export interface ShowRef {
+  sourceId: string;
+  url?: string;
+}
+
+/** Per-run context handed to a strategy. */
+export interface ScrapeCtx {
+  /** fetch wrapper with a polite User-Agent + timeout. */
+  fetch: typeof fetch;
+  log: Logger;
+  /** Cap items per source on a run (keeps runs bounded). */
+  limit?: number;
+  /** Source-specific options (e.g. podcast feed ids). */
+  options?: Record<string, unknown>;
+}
+
+/**
+ * A scrape strategy for one source/page-key. RSS-style sources implement
+ * `discover` to return fully-scraped shows directly; detail-page sources return
+ * refs from `discover` and resolve them in `fetchShow`.
+ */
+export interface Scraper {
+  key: string;
+  title?: string;
+  /** cron expression for the repeatable discover job. */
+  schedule?: string;
+  discover(ctx: ScrapeCtx): Promise<ScrapedShow[]>;
+  fetchShow?(ref: ShowRef, ctx: ScrapeCtx): Promise<ScrapedShow>;
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@rozhlas/scrapers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@rozhlas/core": "workspace:*",
+    "fast-xml-parser": "^4.5.0"
+  }
+}

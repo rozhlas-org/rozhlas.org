@@ -17,13 +17,19 @@ export const QUEUE_NAMES = [
 
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
-/** Typed payloads per queue. Refined as stages are implemented (Phase 1+). */
+/** Typed payloads per queue. */
 export interface JobData {
-  discover: { sourceKey: string };
+  discover: {
+    sourceKey: string;
+    limit?: number;
+    options?: Record<string, unknown>;
+  };
+  // Reserved for detail-page sources (mujRozhlas, Phase 3).
   "fetch-metadata": { sourceKey: string; sourceId: string; url?: string };
-  "acquire-audio": { showId: number };
-  "extract-tags": { showId: number; tempPath: string };
-  "ipfs-add": { showId: number; tempPath: string };
+  "acquire-audio": { audioFileId: number };
+  // Reserved: embed tags/artwork before ipfs-add (Phase 2+).
+  "extract-tags": { audioFileId: number; tempPath: string };
+  "ipfs-add": { audioFileId: number; tempPath: string };
   "ipfs-verify": { audioFileId: number };
   index: { showId: number };
 }
