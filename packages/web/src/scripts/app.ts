@@ -13,6 +13,7 @@ import {
   type ViewResult,
 } from "./views.ts";
 import { wireAudioProgress } from "./progress.ts";
+import { initPlayer, syncNowPlaying } from "./player.ts";
 
 const app = document.getElementById("app")!;
 
@@ -57,6 +58,7 @@ async function render() {
     if (mine !== token) return; // a newer navigation superseded this one
     document.title = `${view.title} — rozhlas.org`;
     app.innerHTML = view.html;
+    syncNowPlaying(); // re-mark the now-playing díl in the freshly rendered view
     window.scrollTo(0, 0);
   } catch (err) {
     if (mine !== token) return;
@@ -108,5 +110,7 @@ window.addEventListener("popstate", render);
 
 // Persist/restore per-díl playback progress (capture-phase, covers re-rendered audio).
 wireAudioProgress();
+// Persistent bottom player (lives in the shell, survives navigation).
+initPlayer();
 
 render();

@@ -35,6 +35,23 @@ import "../styles/styles.css";
     <footer class="site-footer">
       <p>Archiv pořadů Českého rozhlasu · audio přes IPFS · zaměřeno na četbu a čtení.</p>
     </footer>
+
+    <!-- Persistent player: lives in the shell (outside #app) so SPA navigation
+         never stops playback. Filled/controlled by scripts/player.ts. -->
+    <div id="player" class="player-bar" hidden aria-label="Přehrávač">
+      <button id="player-toggle" class="player-bar__btn player-bar__toggle" type="button" aria-label="Přehrát">▶</button>
+      <button id="player-prev" class="player-bar__btn player-bar__nav" type="button" aria-label="Předchozí díl">⏮</button>
+      <button id="player-next" class="player-bar__btn player-bar__nav" type="button" aria-label="Další díl">⏭</button>
+      <div class="player-bar__meta">
+        <div id="player-now" class="player-bar__now">Nyní hraje</div>
+        <a id="player-title" class="player-bar__title" href="#"></a>
+      </div>
+      <input id="player-seek" class="player-bar__seek" type="range" min="0" max="1000" value="0" aria-label="Pozice ve stopě" />
+      <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
+      <button id="player-close" class="player-bar__btn player-bar__close" type="button" aria-label="Zavřít přehrávač">✕</button>
+      <audio id="player-audio" preload="none"></audio>
+    </div>
+
     <script>
       import "../scripts/app.ts";
     </script>

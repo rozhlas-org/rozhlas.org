@@ -197,21 +197,22 @@ export async function showView(slug: string): Promise<ViewResult> {
     ? `<p class="show-detail__desc">${esc(stripHtml(show.description))}</p>`
     : "";
 
-  // Serialized show → render the díl list, each with its own player.
+  // Serialized show → díl list; each row hands its track to the shell player.
   let audioBlock: string;
   if (hasParts) {
     const items = show.parts
       .map((p) => {
         // Played state is read from localStorage at render time, so a reload
         // shows the right checkmarks/resume hints with no flash. progress.ts
-        // keeps them live as you listen.
+        // keeps them live as you listen; player.ts marks the now-playing díl.
         const key = `${show.slug}#${p.idx}`;
         const prog = getProgress(key);
         const played = prog?.done ?? false;
         const resumeAt = !played && prog && prog.t > 1 ? prog.t : 0;
-        const player =
+        // Play button → persistent shell player (player.ts), via event delegation.
+        const play =
           p.audio?.streamable && p.audio.streamUrl
-            ? `<audio class="player" controls preload="none" data-pkey="${attr(key)}" src="${attr(p.audio.streamUrl)}"></audio>`
+            ? `<button class="part__play" type="button" data-slug="${attr(show.slug)}" data-idx="${attr(String(p.idx))}" aria-label="Přehrát">▶</button>`
             : `<span class="notice">zpracovává se…</span>`;
         const check = `<span class="part__check" aria-hidden="true">✓</span>`;
         const dur = p.durationSec ? `<span class="part__dur">${esc(formatDuration(p.durationSec))}</span>` : "";
@@ -219,14 +220,14 @@ export async function showView(slug: string): Promise<ViewResult> {
           ? `<span class="part__resume">pokračovat od ${esc(formatDuration(resumeAt))}</span>`
           : "";
         const cls = `part${played ? " part--played" : ""}`;
-        return `<li class="${cls}">${check}<span class="part__title">${esc(p.title ?? `${p.idx}. díl`)}</span>${dur}${resume}${player}</li>`;
+        return `<li class="${cls}">${play}${check}<span class="part__title">${esc(p.title ?? `${p.idx}. díl`)}</span>${dur}${resume}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
   } else {
     const playable = show.audio.find((a) => a.streamable && a.streamUrl);
     audioBlock = playable
-      ? `<audio class="player" controls preload="none" data-pkey="${attr(`${show.slug}#single`)}" src="${attr(playable.streamUrl)}"></audio>${
+      ? `<div class="part part--single"><button class="part__play" type="button" data-slug="${attr(show.slug)}" data-idx="single" aria-label="Přehrát">▶</button><span class="part__title">${esc(show.title)}</span></div>${
           playable.cid ? `<p class="show-detail__cid">IPFS: <code>${esc(playable.cid)}</code></p>` : ""
         }`
       : `<p class="notice">Audio se zpracovává…</p>`;
