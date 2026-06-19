@@ -51,6 +51,8 @@ structured differently, so **each gets its own scrape strategy** (see §5).
   jobs.
 - **IPFS:** **self-hosted Kubo** node + local gateway. Audio is added & pinned locally;
   the server keeps no public copy outside IPFS.
+- **Access posture:** **fully public** — open site + API, IPFS CIDs/gateway links exposed
+  to anyone, no auth. (Copyright/ToS risk acknowledged in §10; this is the chosen posture.)
 - **Deployment:** **Docker Compose** on this server (web · worker · redis · ipfs · sqlite volume).
 - **Frontend:** **Astro** (static output) for the public site + **Hono** for the JSON API.
 - **AI (later):** **Voyage AI** embeddings (Anthropic has no embeddings endpoint) +
@@ -236,8 +238,9 @@ Notes:
 - ~~Output container/codec~~ → **Resolved:** store native codec per source (mp3 stays
   mp3; AAC-m4s remuxed to `.m4a`, stream-copy). Tagging approach differs per container
   (ID3 for mp3, MP4 atoms for m4a) — handle in `extract-tags`.
-- **Copyright/access posture (fully public vs gated)** — still open; biggest risk.
-  Affects auth, caching, and whether IPFS CIDs are exposed publicly.
+- ~~Copyright/access posture~~ → **Resolved: fully public** (no auth, CIDs exposed). The
+  copyright/ToS risk of rehosting ČRo audio is acknowledged and accepted as a known risk
+  (see §10); revisit if a takedown/legal concern arises.
 - Whether to lean on `mujrozhlas.cz/rapi` JSON as the primary metadata source for
   audioarchiv (likely yes — richer + more stable than HTML), with HTML scraping only as a
   fallback. Confirm the rapi shape when building the strategy.
