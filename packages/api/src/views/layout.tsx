@@ -16,6 +16,7 @@ export function layout(title: string, content: unknown, opts: { q?: string } = {
       <nav class="site-nav">
         <a href="/programmes">Pořady</a>
         <a href="/?source=iradio">Archiv</a>
+        <a href="/omnisearch">Omnisearch</a>
       </nav>
       <form class="search" action="/search" method="get" role="search">
         <input

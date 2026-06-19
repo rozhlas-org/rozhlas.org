@@ -121,6 +121,41 @@ async function artworkForShows(ids: number[]) {
   return map;
 }
 
+/** Hydrate ShowListItems for a set of ids (for omnisearch result ordering). */
+export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowListItem>> {
+  const map = new Map<number, ShowListItem>();
+  if (!ids.length) return map;
+  const rows = await db
+    .select({
+      id: shows.id,
+      slug: shows.slug,
+      title: shows.title,
+      showName: shows.showName,
+      source: shows.sourceKey,
+      publishedAt: shows.publishedAt,
+      durationSec: shows.durationSec,
+    })
+    .from(shows)
+    .where(inArray(shows.id, ids));
+  const audio = await audioForShows(ids);
+  const art = await artworkForShows(ids);
+  for (const r of rows) {
+    const a = audio.get(r.id);
+    map.set(r.id, {
+      slug: r.slug,
+      title: r.title,
+      showName: r.showName,
+      source: r.source,
+      publishedAt: r.publishedAt,
+      durationSec: r.durationSec ?? a?.durationSec ?? null,
+      artworkUrl: art.get(r.id) ?? null,
+      streamable: a?.streamable ?? false,
+      streamUrl: a?.ipfsCid ? streamUrl(a.ipfsCid) : null,
+    });
+  }
+  return map;
+}
+
 export async function getShowBySlug(slug: string) {
   const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1);
   if (!show) return null;

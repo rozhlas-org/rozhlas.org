@@ -13,11 +13,12 @@ self-hosted **IPFS** (Kubo) · **Hono** API + **Astro** site (Phase 2) · Docker
 packages/
   core/      # config, logger, SQLite schema + migrations (Drizzle), utils
   jobs/      # BullMQ queues (pipeline stages) + Bull Board dashboard
-  scrapers/  # page-key -> strategy registry; iradio strategy (rozhlas v2 API)
-  media/     # audio acquisition: mp3 download + ffmpeg DASH/HLS remux, ffprobe
-  ipfs/      # Kubo RPC client: add/pin + gateway stream verification
-  api/       # Hono API — /healthz, /api, Bull Board at /admin/jobs
-  worker/    # BullMQ pipeline processors + scheduler
+  scrapers/   # page-key -> strategy registry; iradio strategy (rozhlas v2 API)
+  media/      # audio acquisition: mp3 download + ffmpeg DASH/HLS remux, ffprobe
+  ipfs/       # Kubo RPC client: add/pin + gateway stream verification
+  embeddings/ # Voyage AI provider + offline local fallback; embed + vector search
+  api/        # Hono API + public site + omnisearch; Bull Board at /admin/jobs
+  worker/     # BullMQ pipeline processors + scheduler
 docker/      # api + worker Dockerfiles
 scripts/     # dev/smoke/verify scripts
 ```
@@ -56,15 +57,18 @@ bun run worker        # processes the pipeline queues
 | `bun run scripts/smoke.ts` | Enqueue a job and confirm a worker processes it |
 
 ## Status
-**Phase 2 complete** — public site + JSON API + classic search on top of the Phase 1
-pipeline:
-- **JSON API**: `/api/shows` (paginate + filter by programme/source/`q`),
-  `/api/shows/:slug`, `/api/search`, `/api/programmes`, `/api/sources`.
-- **Site** (server-rendered, plain/semantic — a design system replaces
-  `packages/api/src/public/styles.css`): home grid, programme listing/filter, search,
-  show detail with an audio player streaming from the IPFS gateway.
-- **Search**: accent-insensitive FTS5 over title/description/programme, trigger-synced.
+**Phase 4 complete** — AI omnisearch on top of Phases 0–2:
+- **Vector search**: shows embedded into **sqlite-vec**; `/api/omnisearch?q=` and the
+  `/omnisearch` page take a natural-language request → intent → semantic KNN merged with
+  keyword FTS (hybrid ranking). Embedding happens in the `index` pipeline stage; backfill
+  via `bun run scripts/embed-backfill.ts`.
+- **Providers**: real **Voyage AI** when `VOYAGE_API_KEY` is set; otherwise a deterministic
+  **local lexical fallback** so the whole pipeline runs offline (not truly semantic until
+  keyed). Intent parsing uses **Claude** (`ANTHROPIC_API_KEY`) with a heuristic fallback.
 
-The archive's taxonomy is **station + programme** (no flat genres); the app's focus is
-**četba/čtení** (literary readings). Phase 1's pipeline still works end-to-end (audio
-never kept on the server disk). Next: Phase 4 — AI omnisearch (docs/PLAN.md §9, §11).
+Earlier phases still hold: classic browse/search, the scrape→IPFS pipeline (audio never
+kept on the server disk), Bull Board jobs dashboard. The archive taxonomy is
+**station + programme**; the app's focus is **četba/čtení**.
+
+Next data step: swap the `iradio` seed feeds to the literary programmes (Četba na
+pokračování, Radiokniha, Rozhlasová hra, …) so the archive is genuinely četba-first.

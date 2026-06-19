@@ -11,6 +11,12 @@ export function slugify(input: string): string {
     .slice(0, 60);
 }
 
+/** Strip HTML tags to plain text (descriptions are untrusted third-party HTML). */
+export function stripHtml(s?: string | null): string {
+  if (!s) return "";
+  return s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
 /** Short stable hex digest — used to keep slugs unique. */
 export function shortHash(input: string, len = 6): string {
   const h = new Bun.CryptoHasher("sha256");

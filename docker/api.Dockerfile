@@ -1,5 +1,6 @@
-# Web/API service: Hono API + Bull Board dashboard
-FROM oven/bun:1-alpine
+# Web/API service: Hono API + public site + Bull Board dashboard.
+# Debian base (not alpine) so the sqlite-vec glibc prebuilt loads for omnisearch.
+FROM oven/bun:1
 
 WORKDIR /app
 
@@ -10,6 +11,7 @@ COPY packages/jobs/package.json ./packages/jobs/
 COPY packages/scrapers/package.json ./packages/scrapers/
 COPY packages/ipfs/package.json ./packages/ipfs/
 COPY packages/media/package.json ./packages/media/
+COPY packages/embeddings/package.json ./packages/embeddings/
 COPY packages/api/package.json ./packages/api/
 COPY packages/worker/package.json ./packages/worker/
 RUN bun install

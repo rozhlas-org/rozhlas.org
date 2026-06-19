@@ -44,9 +44,10 @@ services:
     volumes:
       - app-data:/data
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      test:
+        ["CMD", "bun", "-e", "process.exit((await fetch('http://localhost:3000/healthz').then(r=>r.ok).catch(()=>false))?0:1)"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 10
     depends_on:
       redis:

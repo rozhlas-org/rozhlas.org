@@ -1,9 +1,38 @@
 import { Hono } from "hono";
 import { listShows, getShowBySlug, listProgrammes } from "../queries.ts";
+import { omnisearch } from "../omnisearch.ts";
 import { layout } from "../views/layout.tsx";
 import { ShowGrid, Pagination, formatDate, formatDuration, stripHtml } from "../views/ui.tsx";
 
 export const pageRoutes = new Hono();
+
+pageRoutes.get("/omnisearch", async (c) => {
+  const q = c.req.query("q")?.trim() ?? "";
+  const result = q ? await omnisearch(q) : null;
+  const content = (
+    <section class="omni">
+      <h1>Omnisearch</h1>
+      <p class="omni__hint">
+        Popište náladu nebo situaci — např. „jedu sám v noci a potřebuju něco napínavého".
+      </p>
+      <form class="omni__form" action="/omnisearch" method="get">
+        <textarea name="q" rows={2} placeholder="Co máte chuť poslouchat?">{q}</textarea>
+        <button type="submit">Najít</button>
+      </form>
+      {result ? (
+        <>
+          <p class="omni__intent">
+            Hledám: <strong>{result.intent.searchText}</strong>
+            {result.intent.usedClaude ? " · intent: Claude" : " · intent: heuristika"} ·{" "}
+            {result.vectorHits} sémantických / {result.ftsHits} klíčových shod
+          </p>
+          <ShowGrid items={result.items} />
+        </>
+      ) : null}
+    </section>
+  );
+  return c.html(layout("Omnisearch", content, { q }));
+});
 
 pageRoutes.get("/", async (c) => {
   const { q, programme, source, page } = c.req.query();

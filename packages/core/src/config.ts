@@ -21,6 +21,15 @@ const EnvSchema = z.object({
   IPFS_GATEWAY_URL: z.string().url().default("http://localhost:8080"),
 
   BULL_BOARD_PATH: z.string().startsWith("/").default("/admin/jobs"),
+
+  // --- AI / embeddings (Phase 4) ---
+  // If VOYAGE_API_KEY is unset, a deterministic local fallback embedder is used.
+  VOYAGE_API_KEY: z.string().optional(),
+  VOYAGE_MODEL: z.string().default("voyage-3.5"),
+  EMBEDDING_DIMS: z.coerce.number().int().positive().default(1024),
+  // Claude for omnisearch intent parsing; heuristic fallback if unset.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default("claude-opus-4-8"),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

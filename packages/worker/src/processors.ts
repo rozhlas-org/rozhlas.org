@@ -4,6 +4,7 @@ import { enqueue, type JobData, type QueueName } from "@rozhlas/jobs";
 import { getScraper, createScrapeCtx } from "@rozhlas/scrapers";
 import { acquireAudio, discardTemp } from "@rozhlas/media";
 import { ipfs } from "@rozhlas/ipfs";
+import { getProvider, embedShows } from "@rozhlas/embeddings";
 import * as repo from "./repo.ts";
 
 const log = createLogger("worker:pipeline");
@@ -73,9 +74,15 @@ async function ipfsVerify(job: Job<JobData["ipfs-verify"]>) {
   return v;
 }
 
-/** index → search index. FTS5 lands in Phase 2; no-op for now. */
+/** index → FTS is trigger-maintained; here we add the vector embedding (Phase 4). */
 async function index(job: Job<JobData["index"]>) {
-  return { showId: job.data.showId, note: "FTS indexing in Phase 2" };
+  const { showId } = job.data;
+  try {
+    await embedShows(getProvider(), { showIds: [showId] });
+  } catch (err) {
+    log.warn("embed failed (search still works via FTS)", { showId, err: String(err) });
+  }
+  return { showId, embedded: true };
 }
 
 /** Reserved stages (detail-page sources / tag embedding) — Phase 2/3. */

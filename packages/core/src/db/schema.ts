@@ -193,6 +193,19 @@ export const scrapeRuns = sqliteTable("scrape_runs", {
   ...timestamps,
 });
 
+/** Bookkeeping for which shows are embedded + with which model (vectors live in vec_shows). */
+export const showEmbeddings = sqliteTable("show_embeddings", {
+  showId: integer("show_id")
+    .primaryKey()
+    .references(() => shows.id, { onDelete: "cascade" }),
+  model: text("model").notNull(),
+  dims: integer("dims").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date())
+    .notNull(),
+});
+
 export type Show = typeof shows.$inferSelect;
 export type NewShow = typeof shows.$inferInsert;
 export type AudioFile = typeof audioFiles.$inferSelect;

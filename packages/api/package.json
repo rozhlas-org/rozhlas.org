@@ -10,6 +10,7 @@
   "dependencies": {
     "@rozhlas/core": "workspace:*",
     "@rozhlas/jobs": "workspace:*",
+    "@rozhlas/embeddings": "workspace:*",
     "hono": "^4.6.14"
   }
 }

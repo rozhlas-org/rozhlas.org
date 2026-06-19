@@ -5,6 +5,7 @@ import {
   listProgrammes,
   listSources,
 } from "../queries.ts";
+import { omnisearch } from "../omnisearch.ts";
 
 export const apiRoutes = new Hono();
 
@@ -15,11 +16,18 @@ apiRoutes.get("/", (c) =>
       "/api/shows?q=&programme=&source=&page=",
       "/api/shows/:slug",
       "/api/search?q=",
+      "/api/omnisearch?q=",
       "/api/programmes",
       "/api/sources",
     ],
   }),
 );
+
+apiRoutes.get("/omnisearch", async (c) => {
+  const q = c.req.query("q") ?? "";
+  if (!q.trim()) return c.json({ error: "missing q" }, 400);
+  return c.json(await omnisearch(q));
+});
 
 apiRoutes.get("/shows", async (c) => {
   const { q, programme, source, page, pageSize } = c.req.query();
