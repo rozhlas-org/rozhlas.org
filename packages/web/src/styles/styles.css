@@ -431,6 +431,7 @@ button:active,
   margin-top: 1.25rem;
 }
 .part--single .part__play { position: static; }
+.part--single .part__body { flex: 1; min-width: 0; } /* title + length stack beside the button */
 
 /* ===== persistent player bar (shell, fixed bottom) ===== */
 .player-bar {
