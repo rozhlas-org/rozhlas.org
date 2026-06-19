@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, schema, showSlug, slugify } from "@rozhlas/core";
 import type { ScrapedShow, ScrapedPart } from "@rozhlas/scrapers";
 
-const { shows, showParts, audioFiles, people, showPeople, categories, showCategories, artworks, sources } =
+const { shows, showParts, audioFiles, people, showPeople, categories, showCategories, artworks, sources, scrapeRuns } =
   schema;
 
 export async function upsertSource(key: string, title: string, schedule?: string) {
@@ -14,6 +14,33 @@ export async function upsertSource(key: string, title: string, schedule?: string
 
 export async function touchSourceRun(key: string) {
   await db.update(sources).set({ lastRunAt: new Date() }).where(eq(sources.key, key));
+}
+
+/** Open a scrape_runs audit row; returns its id to close later. */
+export async function startScrapeRun(sourceKey: string): Promise<number> {
+  const [row] = await db
+    .insert(scrapeRuns)
+    .values({ sourceKey, startedAt: new Date(), status: "running" })
+    .returning({ id: scrapeRuns.id });
+  return row!.id;
+}
+
+/** Close a scrape_runs row with the outcome counts (the "last run diff"). */
+export async function finishScrapeRun(
+  runId: number,
+  outcome: { status: "ok" | "error"; discovered?: number; succeeded?: number; failed?: number; error?: string },
+) {
+  await db
+    .update(scrapeRuns)
+    .set({
+      finishedAt: new Date(),
+      status: outcome.status,
+      discovered: outcome.discovered ?? 0,
+      succeeded: outcome.succeeded ?? 0,
+      failed: outcome.failed ?? 0,
+      error: outcome.error ?? null,
+    })
+    .where(eq(scrapeRuns.id, runId));
 }
 
 export interface UpsertShowResult {
