@@ -108,6 +108,9 @@ document.addEventListener("submit", (e) => {
 
 window.addEventListener("popstate", render);
 
+// (Play counting lives in player.ts now — it records once per track start using
+// the playing track's slug, which is reliable across the single shared <audio>.)
+
 // Persist/restore per-díl playback progress (capture-phase, covers re-rendered audio).
 wireAudioProgress();
 // Persistent bottom player (lives in the shell, survives navigation).

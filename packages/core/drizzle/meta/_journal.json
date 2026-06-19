@@ -15,6 +15,13 @@
       "when": 1781857750723,
       "tag": "0001_same_zarda",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1781881519948,
+      "tag": "0002_absurd_quentin_quire",
+      "breakpoints": true
     }
   ]
 }

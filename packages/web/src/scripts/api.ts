@@ -3,6 +3,8 @@
 
 const API_BASE = (import.meta.env.PUBLIC_API_BASE ?? "https://api.rozhlas.org").replace(/\/$/, "");
 
+export type SortKey = "added" | "plays" | "alpha";
+
 export interface ShowListItem {
   slug: string;
   title: string;
@@ -13,6 +15,8 @@ export interface ShowListItem {
   artworkUrl: string | null;
   streamable: boolean;
   streamUrl: string | null;
+  plays: number;
+  displays: number;
 }
 
 export interface ListResult {
@@ -48,6 +52,8 @@ export interface ShowDetail {
   publishedAt: string | null;
   durationSec: number | null;
   artworkUrl: string | null;
+  plays: number;
+  displays: number;
   people: { name: string; role: string | null }[];
   categories: { key: string; title: string }[];
   // Serialized shows (četba) have parts (one audio per díl); podcasts use `audio`.
@@ -85,12 +91,23 @@ async function getJSON<T>(path: string, params?: Record<string, string | number 
   return (await res.json()) as T;
 }
 
+/** Fire-and-forget stat beacon (POST). Never throws — analytics must not break UX. */
+function beacon(path: string): void {
+  try {
+    fetch(API_BASE + path, { method: "POST", keepalive: true }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
 export const api = {
-  shows: (p: { q?: string; programme?: string; source?: string; page?: number }) =>
+  shows: (p: { q?: string; programme?: string; source?: string; sort?: SortKey; page?: number }) =>
     getJSON<ListResult>("/api/shows", p),
   show: (slug: string) => getJSON<ShowDetail>(`/api/shows/${encodeURIComponent(slug)}`),
   search: (q: string, page?: number) =>
     getJSON<{ query: string } & ListResult>("/api/search", { q, page }),
   omnisearch: (q: string) => getJSON<OmniResult>("/api/omnisearch", { q }),
   programmes: () => getJSON<Programme[]>("/api/programmes"),
+  recordPlay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/play`),
+  recordDisplay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/display`),
 };

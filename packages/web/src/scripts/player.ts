@@ -87,7 +87,10 @@ function load(autoplay: boolean): void {
   nextBtn.disabled = q.index >= q.parts.length - 1;
   seek.value = "0";
   timeEl.textContent = "0:00 / 0:00";
-  if (autoplay) audio.play().catch(() => {});
+  if (autoplay) {
+    audio.play().catch(() => {});
+    void api.recordPlay(q.slug); // count a play per track start (knows the slug)
+  }
   syncNowPlaying();
 }
 
