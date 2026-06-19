@@ -59,6 +59,8 @@ export interface ScrapeCtx {
   limit?: number;
   /** Source-specific options (e.g. podcast feed ids). */
   options?: Record<string, unknown>;
+  /** Heartbeat during a crawl — wired to job.updateProgress for queue visibility. */
+  onProgress?: (info: { found: number; fetched: number }) => void;
 }
 
 /**
