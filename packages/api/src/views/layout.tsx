@@ -8,11 +8,17 @@ export function layout(title: string, content: unknown, opts: { q?: string } = {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title} — rozhlas.org</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700;800;900&family=Saira:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="site-header">
-      <a class="site-header__brand" href="/">rozhlas.org</a>
+      <a class="site-header__brand" href="/">rozhlas<span class="accent">.org</span></a>
       <nav class="site-nav">
         <a href="/programmes">Pořady</a>
         <a href="/?source=iradio">Archiv</a>
