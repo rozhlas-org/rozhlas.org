@@ -22,8 +22,19 @@ apps. The site is read-only and public.
   collection page)
 - …more added over time as independent scraper plugins.
 
+### How content is actually reached (recon)
+Listing/archive page → **show detail page** → the audio is exposed as **`.m4s`
+segments** (fragmented MP4, i.e. DASH/HLS streaming), **not** a direct mp3. Acquiring it
+means fetching the manifest + segments and assembling them with **ffmpeg** — a
+long-running, failure-prone step, which is the whole reason for the job/queue system.
+Every source/page is structured differently, so **each gets its own scrape strategy**
+(see §5).
+
 ## 2. Decisions locked in
 - **Runtime/language:** TypeScript on **Bun**.
+- **Audio acquisition:** source is **DASH/HLS `.m4s` segments** reached from each show's
+  detail page — fetched & assembled with **ffmpeg** in the `acquire-audio` job. ffmpeg
+  ships in the worker Docker image.
 - **Metadata store:** **SQLite** (single source of truth for app data).
 - **Jobs/queue:** **BullMQ** (Redis-backed) with the **Bull Board** dashboard for
   planned/active/failed/completed visibility. Scrapers run as scheduled (repeatable)
@@ -43,9 +54,9 @@ apps. The site is read-only and public.
                 │                                                                │
   rozhlas.cz ──▶│  worker (BullMQ)                                              │
    (scrape)     │   ├─ discover  ─ scheduled per source → enqueues show jobs    │
-                │   ├─ fetch-metadata ─ scrape show page → upsert SQLite        │
-                │   ├─ download-audio ─ fetch mp3 to temp (ephemeral)           │
-                │   ├─ extract-tags ─ ID3/artwork/parts → SQLite                │
+                │   ├─ fetch-metadata ─ detail page → upsert SQLite + MediaSrc │
+                │   ├─ acquire-audio ─ ffmpeg: DASH/HLS .m4s → temp file        │
+                │   ├─ extract-tags ─ tags/artwork/parts → SQLite               │
                 │   ├─ ipfs-add ─ add+pin to Kubo, store CID, delete temp       │
                 │   ├─ ipfs-verify ─ gateway range request → streamable?        │
                 │   └─ index ─ FTS5 now, embeddings later                       │
@@ -81,22 +92,40 @@ rozhlas.org/
 └─ docs/PLAN.md       # this file
 ```
 
-## 5. Scraper plugin contract
+## 5. Scraper plugin contract — a page-key → strategy registry
 
-Each source is an independent module so new scrapers can be dropped in continuously.
+Every source/page is laid out differently, so the system is a **registry mapping a
+simplified page-key to a scrape strategy**. New pages are added by registering a new
+key + strategy — no changes elsewhere.
 
 ```ts
+// registry: simplified page-key → how to scrape it
+const SCRAPERS: Record<string, Scraper> = {
+  "iradio":          iradioStrategy,        // hledani.rozhlas.cz/iradio archive
+  "wave-audiobooks": waveAudiobookStrategy, // wave.rozhlas.cz collection page
+  // …add a key per page/source over time
+};
+
 interface Scraper {
-  id: string;                       // "iradio"
-  schedule: string;                 // cron, e.g. "0 */6 * * *"
-  discover(ctx): AsyncIterable<ShowRef>;   // crawl listing → show references
-  fetchShow(ref, ctx): Promise<ScrapedShow>; // parse a single show page
+  key: string;                              // "iradio"
+  schedule: string;                         // cron, e.g. "0 */6 * * *"
+  discover(ctx): AsyncIterable<ShowRef>;    // crawl listing/archive → show refs
+  fetchShow(ref, ctx): Promise<ScrapedShow>;// open detail page → metadata + MediaSource
+}
+
+// fetchShow returns the streaming descriptor, not a file
+interface MediaSource {
+  kind: "dash" | "hls" | "file";            // m4s segments are dash/hls
+  manifestUrl: string;                      // .mpd / .m3u8 (or direct URL for "file")
+  headers?: Record<string, string>;         // referer/cookies if the CDN needs them
 }
 ```
 - Static pages → `fetch` + `cheerio`. JS-rendered pages → **Playwright** (already
-  installed on this machine via gstack). Pick per-source.
+  installed on this machine via gstack). Pick per-strategy.
 - `discover` is idempotent and resumable; it enqueues `fetch-metadata` jobs deduped by
   `(source, source_id)`.
+- `fetchShow` resolves the **manifest/m4s URL** (and any required headers) into a
+  `MediaSource`; the actual download+assembly happens in the `acquire-audio` job (§7).
 - Be a good citizen: per-source rate limiting, concurrency caps, `User-Agent`, respect
   `robots.txt`, conditional requests / ETag where possible. See §10.
 
@@ -110,7 +139,8 @@ Core tables (indicative):
 - `people` — hosts/authors; `show_people` join (role).
 - `categories`, `tags` + join tables.
 - `artworks` — show_id, ipfs_cid|url, width/height, role (cover/thumb).
-- `audio_files` — show_id/part_id, ipfs_cid, format (mp3…), bitrate, size, duration,
+- `audio_files` — show_id/part_id, ipfs_cid, container/codec (e.g. m4a/AAC),
+  manifest_url + manifest_kind (dash/hls) of the source stream, bitrate, size, duration,
   streamable (bool, from ipfs-verify), checksum.
 - `shows_fts` — FTS5 virtual table (title, description, people, tags) for classic search.
 - **Later:** `embeddings` (object_id, model, vector via `sqlite-vec`), `transcripts`.
@@ -127,8 +157,8 @@ Bull Board:
 |------|---------|------|
 | `discover` | repeatable (per-source cron) | crawl listing → enqueue `fetch-metadata` |
 | `fetch-metadata` | from discover | scrape show page → upsert show + relations |
-| `download-audio` | after metadata, if new/changed | download mp3 → temp |
-| `extract-tags` | after download | ID3/artwork/parts → DB |
+| `acquire-audio` | after metadata, if new/changed | **ffmpeg** fetches the DASH/HLS manifest + `.m4s` segments and assembles them → single temp file |
+| `extract-tags` | after acquire | tags/artwork/parts → DB; embed metadata into the file |
 | `ipfs-add` | after extract | add+pin to Kubo, save CID, **delete temp** |
 | `ipfs-verify` | after add | gateway range request → set `streamable` |
 | `index` | after verify | refresh FTS row (+ embeddings later) |
@@ -193,6 +223,9 @@ Notes:
   hybrid retrieval, `/api/omnisearch`; explore transcripts/ASR.
 
 ## 12. Open questions to revisit
+- **Output container/codec:** the source is AAC-in-`.m4s`. Prefer **remux to `.m4a`
+  (stream copy, no re-encode → fast, lossless)** over transcoding to mp3; revisit if mp3
+  + ID3 is specifically required. Decide tagging approach per container.
 - Copyright/access posture (fully public vs gated) — affects auth + caching.
 - Embedding model/provider choice and cost ceiling for the archive size.
 - Whether to add ASR transcripts (storage + compute) for richer RAG.

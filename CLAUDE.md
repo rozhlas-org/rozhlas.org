@@ -14,8 +14,13 @@ now; AI natural-language "omnisearch" later.
   scheduled (repeatable) jobs; pipeline stages in PLAN §7.
 - **IPFS:** self-hosted Kubo. Audio temp files are deleted right after `ipfs-add` —
   never serve audio from the app's own disk; stream by CID via the gateway.
+- **Audio:** source is **DASH/HLS `.m4s` segments** from each show's detail page (not a
+  direct mp3) — fetched & assembled with **ffmpeg** in the `acquire-audio` job (PLAN §7);
+  ffmpeg lives in the worker image. Prefer remux to `.m4a` (stream copy) over re-encoding.
 - **Frontend:** Astro (static) + Hono (JSON API).
-- **Scrapers:** pluggable, one module per source (PLAN §5). Static → `fetch`+`cheerio`;
+- **Scrapers:** a **page-key → strategy registry** (PLAN §5) — every source/page is
+  different, so register a simplified key + its own scrape strategy. `fetchShow` returns
+  a `MediaSource` (manifest URL + headers), not a file. Static → `fetch`+`cheerio`;
   JS-rendered → Playwright (installed on this machine via gstack). Respect robots.txt,
   rate-limit, identify the crawler.
 - **Deploy:** Docker Compose on this server (web · worker · redis · ipfs · sqlite vol).
