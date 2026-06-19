@@ -13,6 +13,8 @@ const PER_FETCH_MS = 25_000;
 const DEFAULT_MAX_FETCHES = 4000;
 const MAX_HUB_PAGES = 80;
 const DELAY_MS = Number(process.env.SCRAPE_DELAY_MS ?? 150);
+// Concurrency for resolving candidate pages (these stations don't throttle like Dvojka).
+const CONCURRENCY = 12;
 
 const NAV =
   /^\/(o-|kontakt|program|audioarchiv|kamery|playlisty|lide|dokumenty|hudba|video|page|tag|kategorie|moderator|porady|podcast|zive)\b/;
@@ -104,26 +106,33 @@ export async function enumerateShows(ctx: ScrapeCtx, hub: HubConfig): Promise<Ap
     }
   }
 
-  // 2) resolve each candidate page to its show uuid (test the most-frequent uuids)
-  for (const url of candidates) {
-    if (!budgetLeft()) break;
-    if (fetches++ > 0) await sleep(DELAY_MS);
-    let html: string;
-    try {
-      html = await getText(ctx, url);
-    } catch {
-      continue;
-    }
-    beat();
-    for (const u of topUuids(html, 2)) {
-      if (found.has(u) || tried.has(u) || !budgetLeft()) continue;
-      tried.add(u);
+  // 2) resolve each candidate page to its show uuid (the most-frequent uuids).
+  // Bounded concurrency — a large hub (cetba ~800 candidates) resolved sequentially
+  // burns the whole job watchdog before any episodes load. The page fetch is the
+  // cost; a uuid that's already a known show skips the API lookup.
+  const queue = [...candidates];
+  let qi = 0;
+  const worker = async () => {
+    while (qi < queue.length && budgetLeft()) {
+      const url = queue[qi++]!;
       fetches++;
-      const title = await showTitle(ctx, u);
+      let html: string;
+      try {
+        html = await getText(ctx, url);
+      } catch {
+        continue;
+      }
+      for (const u of topUuids(html, 2)) {
+        if (found.has(u) || tried.has(u) || !budgetLeft()) continue;
+        tried.add(u); // claim before await so concurrent workers don't double-resolve
+        fetches++;
+        const title = await showTitle(ctx, u);
+        if (title) found.set(u, title);
+      }
       beat();
-      if (title) found.set(u, title);
     }
-  }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
   ctx.log.info("hub enumerated", { shows: found.size, candidates: candidates.size, fetched: fetches });
   return [...found.entries()].map(([uuid, name]) => ({ uuid, name }));
