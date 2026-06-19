@@ -27,7 +27,13 @@ const EnvSchema = z.object({
   VOYAGE_API_KEY: z.string().optional(),
   VOYAGE_MODEL: z.string().default("voyage-3.5"),
   EMBEDDING_DIMS: z.coerce.number().int().positive().default(1024),
-  // Claude for omnisearch intent parsing; heuristic fallback if unset.
+  // Omnisearch intent parsing: "ollama" (local, no API cost), "claude" (API),
+  // or "heuristic" (no LLM). Falls back to heuristic on any provider error.
+  INTENT_PROVIDER: z.enum(["heuristic", "ollama", "claude"]).default("ollama"),
+  // Local Ollama (intent provider "ollama").
+  OLLAMA_URL: z.string().url().default("http://localhost:11434"),
+  OLLAMA_MODEL: z.string().default("qwen2.5:3b"),
+  // Claude (intent provider "claude").
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-opus-4-8"),
 });

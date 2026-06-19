@@ -23,8 +23,9 @@ pageRoutes.get("/omnisearch", async (c) => {
         <>
           <p class="omni__intent">
             Hledám: <strong>{result.intent.searchText}</strong>
-            {result.intent.usedClaude ? " · intent: Claude" : " · intent: heuristika"} ·{" "}
-            {result.vectorHits} sémantických / {result.ftsHits} klíčových shod
+            {result.intent.themes.length ? ` · témata: ${result.intent.themes.join(", ")}` : ""}
+            {` · intent: ${result.intent.provider}`} · {result.vectorHits} sémantických /{" "}
+            {result.ftsHits} klíčových shod
           </p>
           <ShowGrid items={result.items} />
         </>

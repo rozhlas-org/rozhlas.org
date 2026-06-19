@@ -62,9 +62,11 @@ bun run worker        # processes the pipeline queues
   `/omnisearch` page take a natural-language request → intent → semantic KNN merged with
   keyword FTS (hybrid ranking). Embedding happens in the `index` pipeline stage; backfill
   via `bun run scripts/embed-backfill.ts`.
-- **Providers**: real **Voyage AI** when `VOYAGE_API_KEY` is set; otherwise a deterministic
-  **local lexical fallback** so the whole pipeline runs offline (not truly semantic until
-  keyed). Intent parsing uses **Claude** (`ANTHROPIC_API_KEY`) with a heuristic fallback.
+- **Embeddings**: real **Voyage AI** when `VOYAGE_API_KEY` is set; otherwise a deterministic
+  **local lexical fallback** so the whole pipeline runs offline (not truly semantic until keyed).
+- **Intent** is pluggable (`INTENT_PROVIDER`): **`ollama`** (local LLM on CPU, no API cost —
+  default; ships as a Compose service that pulls `qwen2.5:3b`), **`claude`** (paid API), or
+  **`heuristic`** (no LLM). Any provider error falls back to heuristic, so search never breaks.
 
 Earlier phases still hold: classic browse/search, the scrape→IPFS pipeline (audio never
 kept on the server disk), Bull Board jobs dashboard. The archive taxonomy is

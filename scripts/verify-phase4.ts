@@ -15,7 +15,7 @@ const queries = [
 for (const q of queries) {
   const r = await omnisearch(q, 5);
   console.log(
-    `\nQ: "${q}"\n  intent="${r.intent.searchText}" (claude=${r.intent.usedClaude}) vec=${r.vectorHits} fts=${r.ftsHits}`,
+    `\nQ: "${q}"\n  intent="${r.intent.searchText}" (provider=${r.intent.provider}) vec=${r.vectorHits} fts=${r.ftsHits}`,
   );
   for (const it of r.items) console.log(`  - ${it.title}  —  ${it.showName ?? ""}`);
 }
