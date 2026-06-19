@@ -1,0 +1,18 @@
+{
+  "name": "@rozhlas/jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./board": "./src/board.ts"
+  },
+  "dependencies": {
+    "@rozhlas/core": "workspace:*",
+    "@bull-board/api": "^6.5.3",
+    "@bull-board/hono": "^6.5.3",
+    "bullmq": "^5.34.3",
+    "hono": "^4.6.14",
+    "ioredis": "5.10.1"
+  }
+}

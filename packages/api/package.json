@@ -1,0 +1,15 @@
+{
+  "name": "@rozhlas/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@rozhlas/core": "workspace:*",
+    "@rozhlas/jobs": "workspace:*",
+    "hono": "^4.6.14"
+  }
+}

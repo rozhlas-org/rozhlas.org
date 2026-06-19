@@ -1,0 +1,3 @@
+[install]
+# Hoist workspace deps to the root node_modules
+linker = "hoisted"

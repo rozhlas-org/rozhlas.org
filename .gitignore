@@ -1,2 +1,11 @@
 # Secrets — never commit
 .env
+
+# Dependencies & build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Runtime data (SQLite db, IPFS staging, logs)
+data/
+*.log

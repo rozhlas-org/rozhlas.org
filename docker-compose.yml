@@ -1,0 +1,74 @@
+name: rozhlas
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  ipfs:
+    image: ipfs/kubo:latest
+    restart: unless-stopped
+    # 4001 = swarm (p2p), 5001 = RPC API (internal only), 8080 = gateway
+    ports:
+      - "4001:4001"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ipfs-data:/data/ipfs
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      IPFS_API_URL: http://ipfs:5001
+      IPFS_GATEWAY_URL: http://ipfs:8080
+      DATABASE_PATH: /data/rozhlas.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - app-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      ipfs:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      IPFS_API_URL: http://ipfs:5001
+      IPFS_GATEWAY_URL: http://ipfs:8080
+      DATABASE_PATH: /data/rozhlas.db
+    volumes:
+      - app-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      ipfs:
+        condition: service_started
+
+volumes:
+  redis-data:
+  ipfs-data:
+  app-data:

@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@rozhlas/core": ["packages/core/src/index.ts"],
+      "@rozhlas/core/*": ["packages/core/src/*"],
+      "@rozhlas/jobs": ["packages/jobs/src/index.ts"],
+      "@rozhlas/jobs/*": ["packages/jobs/src/*"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "packages/*/*.config.ts", "scripts/**/*.ts"]
+}
