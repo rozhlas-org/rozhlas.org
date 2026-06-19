@@ -33,11 +33,17 @@ export interface OmniResult {
 export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
   const intent = await parseIntent(query);
   const provider = getProvider();
+  // What to embed for the semantic leg: an LLM-rewritten phrase when one ran
+  // (claude/ollama), else the RAW query. Voyage is multilingual and matches a
+  // full Czech sentence better than keyword soup — and the heuristic's keyword
+  // list would only weaken the embedding. FTS always uses the (diacritic-
+  // preserving) keyword list so the keyword leg actually returns hits.
+  const vectorText = intent.provider === "heuristic" ? query : intent.searchText;
   // Semantic search is best-effort: if the embedding provider is down or rate
   // limited (e.g. Voyage 429), degrade to keyword (FTS) search instead of failing.
   let knn: KnnHit[] = [];
   try {
-    knn = await vectorSearch(provider, intent.searchText, 60);
+    knn = await vectorSearch(provider, vectorText, 60);
   } catch (err) {
     log.warn("vector search unavailable; using keyword search only", { err: String(err) });
   }
