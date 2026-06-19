@@ -14,31 +14,39 @@ async function discover(job: Job<JobData["discover"]>) {
   const { sourceKey, limit, options } = job.data;
   const scraper = getScraper(sourceKey);
   const ctx = createScrapeCtx({ log: log.child(sourceKey), limit, options });
+  const runId = await repo.startScrapeRun(sourceKey);
 
-  const scraped = await scraper.discover(ctx);
-  let enqueued = 0;
-  for (const s of scraped) {
-    const { showId } = await repo.upsertShow(sourceKey, s);
-    // Serialized shows have parts (one audio each); podcasts have a single media.
-    if (s.parts?.length) {
-      for (const part of s.parts) {
-        const { audioFileId, needsAcquire } = await repo.upsertPart(showId, part);
+  try {
+    const scraped = await scraper.discover(ctx);
+    let enqueued = 0;
+    for (const s of scraped) {
+      const { showId } = await repo.upsertShow(sourceKey, s);
+      // Serialized shows have parts (one audio each); podcasts have a single media.
+      if (s.parts?.length) {
+        for (const part of s.parts) {
+          const { audioFileId, needsAcquire } = await repo.upsertPart(showId, part);
+          if (needsAcquire) {
+            await enqueue("acquire-audio", { audioFileId });
+            enqueued++;
+          }
+        }
+      } else if (s.media) {
+        const { audioFileId, needsAcquire } = await repo.upsertAudio(showId, s.media);
         if (needsAcquire) {
           await enqueue("acquire-audio", { audioFileId });
           enqueued++;
         }
       }
-    } else if (s.media) {
-      const { audioFileId, needsAcquire } = await repo.upsertAudio(showId, s.media);
-      if (needsAcquire) {
-        await enqueue("acquire-audio", { audioFileId });
-        enqueued++;
-      }
     }
+    await repo.touchSourceRun(sourceKey);
+    // discovered = shows seen this run; succeeded = NEW audio queued (the "diff").
+    await repo.finishScrapeRun(runId, { status: "ok", discovered: scraped.length, succeeded: enqueued });
+    log.info("discover done", { sourceKey, shows: scraped.length, enqueued });
+    return { shows: scraped.length, enqueued };
+  } catch (err) {
+    await repo.finishScrapeRun(runId, { status: "error", error: String(err).slice(0, 500) });
+    throw err;
   }
-  await repo.touchSourceRun(sourceKey);
-  log.info("discover done", { sourceKey, shows: scraped.length, enqueued });
-  return { shows: scraped.length, enqueued };
 }
 
 /** acquire-audio → download mp3 / ffmpeg-assemble m4s, probe, store metadata. */
