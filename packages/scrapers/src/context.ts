@@ -23,6 +23,7 @@ export function createScrapeCtx(
     log?: Logger;
     limit?: number;
     options?: Record<string, unknown>;
+    onProgress?: (info: { found: number; fetched: number }) => void;
   } = {},
 ): ScrapeCtx {
   return {
@@ -30,5 +31,6 @@ export function createScrapeCtx(
     log: opts.log ?? createLogger("scrapers"),
     limit: opts.limit,
     options: opts.options,
+    onProgress: opts.onProgress,
   };
 }

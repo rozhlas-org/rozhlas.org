@@ -113,6 +113,7 @@ export function makeStationScraper(cfg: StationConfig): Scraper {
             seenIds.add(reading.sourceId);
             out.push(reading);
             ctx.log.info("reading", { title: reading.title.slice(0, 50), parts: reading.parts.length });
+            ctx.onProgress?.({ found: out.length, fetched: fetches });
           }
           continue;
         }

@@ -13,14 +13,22 @@ const log = createLogger("worker:pipeline");
 async function discover(job: Job<JobData["discover"]>) {
   const { sourceKey, limit, options } = job.data;
   const scraper = getScraper(sourceKey);
-  const ctx = createScrapeCtx({ log: log.child(sourceKey), limit, options });
+  // Heartbeat while crawling so the job shows live progress in Bull Board.
+  const ctx = createScrapeCtx({
+    log: log.child(sourceKey),
+    limit,
+    options,
+    onProgress: (p) => void job.updateProgress({ stage: "crawl", ...p }),
+  });
   const runId = await repo.startScrapeRun(sourceKey);
 
   try {
+    await job.updateProgress({ stage: "crawl", found: 0, fetched: 0 });
     const scraped = await scraper.discover(ctx);
     let enqueued = 0;
     let mirrored = 0;
-    for (const s of scraped) {
+    for (const [i, s] of scraped.entries()) {
+      if (i % 10 === 0) await job.updateProgress({ stage: "save", saved: i, total: scraped.length });
       const { showId, mirrored: isMirror } = await repo.upsertShow(sourceKey, s);
       if (isMirror) {
         // Already owned by another source (station mirror) — skip its audio.
@@ -47,6 +55,7 @@ async function discover(job: Job<JobData["discover"]>) {
     await repo.touchSourceRun(sourceKey);
     // discovered = shows seen this run; succeeded = NEW audio queued (the "diff").
     await repo.finishScrapeRun(runId, { status: "ok", discovered: scraped.length, succeeded: enqueued });
+    await job.updateProgress({ stage: "done", found: scraped.length, enqueued });
     log.info("discover done", { sourceKey, shows: scraped.length, enqueued, mirrored });
     return { shows: scraped.length, enqueued, mirrored };
   } catch (err) {
