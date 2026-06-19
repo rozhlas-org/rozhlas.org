@@ -12,7 +12,8 @@ const NAV =
 // Listing pages paginate via ?page=N. Safety cap on how far to page a listing.
 const MAX_LISTING_PAGES = 80;
 // Polite gap between requests so a backfill doesn't hammer the source (PLAN §10).
-const REQUEST_DELAY_MS = Number(process.env.SCRAPE_DELAY_MS ?? 300);
+// ~1.6 req/s; the source 403s a faster crawl.
+const REQUEST_DELAY_MS = Number(process.env.SCRAPE_DELAY_MS ?? 600);
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -49,8 +50,14 @@ export function makeStationScraper(cfg: StationConfig): Scraper {
   const hostRe = cfg.origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const linkRe = new RegExp(`href="((?:${hostRe})?\\/[a-z0-9-]+-\\d{5,})`, "g");
 
-  async function get(ctx: ScrapeCtx, url: string): Promise<string> {
+  // Retry on rate-limit / transient errors with exponential backoff, so a 403/429
+  // (the station throttling a bigger crawl) doesn't abort a listing's pagination.
+  async function get(ctx: ScrapeCtx, url: string, attempt = 0): Promise<string> {
     const res = await ctx.fetch(url, { headers: { "user-agent": BROWSER_UA } });
+    if ((res.status === 403 || res.status === 429 || res.status >= 500) && attempt < 3) {
+      await sleep(1500 * 2 ** attempt); // 1.5s, 3s, 6s
+      return get(ctx, url, attempt + 1);
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.text();
   }
