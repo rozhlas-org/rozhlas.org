@@ -247,25 +247,27 @@ export async function showView(slug: string): Promise<ViewResult> {
         const prog = getProgress(key);
         const played = prog?.done ?? false;
         const resumeAt = !played && prog && prog.t > 1 ? prog.t : 0;
-        // Play button → persistent shell player (player.ts), via event delegation.
-        const play =
-          p.audio?.streamable && p.audio.streamUrl
-            ? `<button class="part__play" type="button" data-slug="${attr(show.slug)}" data-idx="${attr(String(p.idx))}" aria-label="Přehrát">▶</button>`
-            : `<span class="notice">zpracovává se…</span>`;
+        // The whole row plays (player.ts delegates clicks on .part--playable);
+        // data-slug/data-idx live on the row so the title is clickable too.
+        const canPlay = p.audio?.streamable && p.audio.streamUrl;
+        const play = canPlay
+          ? `<button class="part__play" type="button" aria-label="Přehrát">▶</button>`
+          : `<span class="notice">zpracovává se…</span>`;
         const check = `<span class="part__check" aria-hidden="true">✓</span>`;
         const dur = p.durationSec ? `<span class="part__dur">${esc(formatDuration(p.durationSec))}</span>` : "";
         const resume = resumeAt
           ? `<span class="part__resume">pokračovat od ${esc(formatDuration(resumeAt))}</span>`
           : "";
-        const cls = `part${played ? " part--played" : ""}`;
-        return `<li class="${cls}">${play}${check}<span class="part__title">${esc(p.title ?? `${p.idx}. díl`)}</span>${dur}${resume}</li>`;
+        const cls = `part${played ? " part--played" : ""}${canPlay ? " part--playable" : ""}`;
+        const data = canPlay ? ` data-slug="${attr(show.slug)}" data-idx="${attr(String(p.idx))}"` : "";
+        return `<li class="${cls}"${data}>${play}${check}<span class="part__title">${esc(p.title ?? `${p.idx}. díl`)}</span>${dur}${resume}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
   } else {
     const playable = show.audio.find((a) => a.streamable && a.streamUrl);
     audioBlock = playable
-      ? `<div class="part part--single"><button class="part__play" type="button" data-slug="${attr(show.slug)}" data-idx="single" aria-label="Přehrát">▶</button><span class="part__title">${esc(show.title)}</span></div>${
+      ? `<div class="part part--single part--playable" data-slug="${attr(show.slug)}" data-idx="single"><button class="part__play" type="button" aria-label="Přehrát">▶</button><span class="part__title">${esc(show.title)}</span></div>${
           playable.cid ? `<p class="show-detail__cid">IPFS: <code>${esc(playable.cid)}</code></p>` : ""
         }`
       : `<p class="notice">Audio se zpracovává…</p>`;

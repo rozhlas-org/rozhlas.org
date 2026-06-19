@@ -190,12 +190,13 @@ export function syncNowPlaying(): void {
   });
   if (!q) return;
   const t = q.parts[q.index]!;
-  const btn = document.querySelector<HTMLButtonElement>(
-    `.part__play[data-slug="${CSS.escape(q.slug)}"][data-idx="${CSS.escape(String(t.idx))}"]`,
+  const row = document.querySelector(
+    `.part--playable[data-slug="${CSS.escape(q.slug)}"][data-idx="${CSS.escape(String(t.idx))}"]`,
   );
-  if (btn) {
-    btn.closest(".part")?.classList.add("part--playing");
-    if (!audio.paused) {
+  if (row) {
+    row.classList.add("part--playing");
+    const btn = row.querySelector<HTMLButtonElement>(".part__play");
+    if (btn && !audio.paused) {
       btn.textContent = "❚❚";
       btn.setAttribute("aria-label", "Pozastavit");
     }
@@ -227,13 +228,14 @@ export function initPlayer(): void {
     syncNowPlaying();
   });
 
-  // Delegated play buttons in the (re-rendered) page body.
+  // Delegated: a click anywhere on a playable row (button, title, duration…)
+  // plays that díl. Covers re-rendered rows since it's bound to document.
   document.addEventListener("click", (e) => {
-    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".part__play");
-    if (!btn) return;
+    const row = (e.target as HTMLElement).closest<HTMLElement>(".part--playable");
+    if (!row) return;
     e.preventDefault();
-    const slug = btn.dataset.slug;
-    const idx = btn.dataset.idx;
+    const slug = row.dataset.slug;
+    const idx = row.dataset.idx;
     if (slug && idx != null) void playFromSlug(slug, idx);
   });
 
@@ -266,8 +268,7 @@ export function initPlayer(): void {
     if (q) {
       const t = q.parts[q.index]!;
       document
-        .querySelector(`.part__play[data-slug="${CSS.escape(q.slug)}"][data-idx="${CSS.escape(String(t.idx))}"]`)
-        ?.closest(".part")
+        .querySelector(`.part--playable[data-slug="${CSS.escape(q.slug)}"][data-idx="${CSS.escape(String(t.idx))}"]`)
         ?.classList.add("part--played");
       if (q.index < q.parts.length - 1) {
         q.index++;
