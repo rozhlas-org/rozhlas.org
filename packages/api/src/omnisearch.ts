@@ -1,7 +1,9 @@
-import { sqlite, toFtsQuery } from "@rozhlas/core";
+import { createLogger, sqlite, toFtsQuery, type KnnHit } from "@rozhlas/core";
 import { getProvider, vectorSearch } from "@rozhlas/embeddings";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
 import { parseIntent, type Intent } from "./intent.ts";
+
+const log = createLogger("api:omnisearch");
 
 function ftsIds(text: string, limit = 100): number[] {
   const q = toFtsQuery(text);
@@ -31,7 +33,14 @@ export interface OmniResult {
 export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
   const intent = await parseIntent(query);
   const provider = getProvider();
-  const knn = await vectorSearch(provider, intent.searchText, 60);
+  // Semantic search is best-effort: if the embedding provider is down or rate
+  // limited (e.g. Voyage 429), degrade to keyword (FTS) search instead of failing.
+  let knn: KnnHit[] = [];
+  try {
+    knn = await vectorSearch(provider, intent.searchText, 60);
+  } catch (err) {
+    log.warn("vector search unavailable; using keyword search only", { err: String(err) });
+  }
   const fIds = ftsIds(intent.searchText, 100);
 
   const scores = new Map<number, number>();
