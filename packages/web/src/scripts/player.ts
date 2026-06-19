@@ -239,16 +239,62 @@ export function initPlayer(): void {
     if (slug && idx != null) void playFromSlug(slug, idx);
   });
 
-  // Seek bar (0..1000 fraction of duration).
+  // Seek bar (0..1000 fraction of duration). Commit the seek ONCE, on release.
+  // A type=range fires `input` continuously while dragging; writing currentTime on
+  // every event fires a storm of range-request seeks that can wedge the streamed
+  // <audio>. So during the drag we only preview the time, and seek on `change`.
+  const seekPos = () => (audio.duration ? (Number(seek.value) / 1000) * audio.duration : 0);
   seek.addEventListener("input", () => {
     seeking = true;
-    if (audio.duration) audio.currentTime = (Number(seek.value) / 1000) * audio.duration;
+    if (audio.duration) timeEl.textContent = `${clock(seekPos())} / ${clock(audio.duration)}`;
   });
   seek.addEventListener("change", () => {
+    if (audio.duration) audio.currentTime = seekPos();
     seeking = false;
   });
 
+  // Stall safeguard: if playback hangs (slow/aborted range request after a seek)
+  // with no progress for a while, reload the src and restore the position so the
+  // element self-heals — instead of needing a manual track switch to reset it.
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  let recovering = false;
+  const clearStall = () => {
+    if (stallTimer) clearTimeout(stallTimer);
+    stallTimer = undefined;
+  };
+  const recover = () => {
+    if (recovering || !audio.src) return;
+    recovering = true;
+    clearStall();
+    const pos = audio.currentTime;
+    const wasPlaying = !audio.paused;
+    const onMeta = () => {
+      audio.removeEventListener("loadedmetadata", onMeta);
+      try {
+        if (pos > 0 && audio.duration) audio.currentTime = Math.min(pos, audio.duration - 0.5);
+      } catch {
+        /* not seekable yet */
+      }
+      if (wasPlaying) audio.play().catch(() => {});
+      recovering = false;
+    };
+    audio.addEventListener("loadedmetadata", onMeta);
+    audio.load();
+  };
+  const armStall = () => {
+    if (recovering) return;
+    clearStall();
+    // Only fire if playback truly makes no progress (timeupdate/playing clear it).
+    stallTimer = setTimeout(() => { if (!audio.paused) recover(); }, 12_000);
+  };
+  audio.addEventListener("waiting", armStall);
+  audio.addEventListener("stalled", armStall);
+  audio.addEventListener("playing", clearStall);
+  audio.addEventListener("pause", clearStall);
+  audio.addEventListener("error", recover);
+
   audio.addEventListener("timeupdate", () => {
+    clearStall(); // real progress → not stuck
     if (!seeking && audio.duration) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
     timeEl.textContent = `${clock(audio.currentTime)} / ${clock(audio.duration)}`;
     if (q) prevBtn.disabled = q.index === 0 && audio.currentTime < 3;
