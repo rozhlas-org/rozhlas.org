@@ -683,7 +683,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
 }
 .queue-add:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--cyan); }
 .queue-add--done { background: var(--cyan); color: var(--key); }
-.show-card__add { position: absolute; top: 8px; right: 8px; z-index: 2; }
+.show-card__add { position: absolute; top: 8px; right: 8px; z-index: 2; width: 42px; height: 42px; font-size: 22px; }
 /* Multi-part shows show a text pill ("Vše do fronty (N)") instead of the icon. */
 .show-card__add--multi {
   width: auto;

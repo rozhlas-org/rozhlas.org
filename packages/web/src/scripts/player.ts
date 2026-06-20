@@ -15,11 +15,11 @@ import {
   enqueuePart,
   enqueueParts,
   getQueue,
-  jumpTo,
   onQueueChange,
   queuedPartCount,
   removePart,
   shiftNext,
+  takePart,
   type QueueItem,
   type QueuePart,
 } from "./queue.ts";
@@ -571,8 +571,8 @@ export function initPlayer(): void {
     const act = t.closest<HTMLElement>("[data-act]")?.dataset.act;
     if (act === "remove-part") removePart(slug, idx!);
     else if (t.closest(".qrow__play")) {
-      // Play this díl now: skip the ones before it, keep the ones after queued.
-      const item = jumpTo(slug, idx!);
+      // Play this díl now; every other queued díl stays put.
+      const item = takePart(slug, idx!);
       if (item) {
         void playQueuePart(item);
         closeQueuePanel(false);

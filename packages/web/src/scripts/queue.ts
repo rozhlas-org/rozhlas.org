@@ -99,15 +99,15 @@ export function removePart(slug: string, idx: string | number): void {
 }
 
 /**
- * "Play this díl now": remove everything up to and including it (the ones before are
- * skipped), keep the rest queued, and return the clicked díl. undefined if not found.
+ * "Play this díl now": remove ONLY the clicked díl (it becomes now-playing) and keep
+ * every other queued díl in place. Returns the clicked díl, or undefined if missing.
  */
-export function jumpTo(slug: string, idx: string | number): QueueItem | undefined {
+export function takePart(slug: string, idx: string | number): QueueItem | undefined {
   const items = read();
   const k = items.findIndex((i) => i.slug === slug && String(i.idx) === String(idx));
   if (k < 0) return undefined;
-  const item = items[k];
-  write(items.slice(k + 1));
+  const [item] = items.splice(k, 1);
+  write(items);
   return item;
 }
 
