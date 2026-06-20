@@ -61,9 +61,13 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
     schedule: cfg.schedule,
 
     async discover(ctx: ScrapeCtx): Promise<ScrapedShow[]> {
-      const limit = ctx.limit ?? 5000;
-      // Single-programme sources pass shows[]; hub sources enumerate them first.
-      const shows = cfg.shows ?? (cfg.hub ? await enumerateShows(ctx, cfg.hub) : []);
+      const limit = ctx.limit ?? 50_000; // effectively "all" (watchdog/budget still bound a run)
+      // Combine explicitly-listed shows with any hub-enumerated ones (a hub source can
+      // also pin specific umbrella shows the hub crawl doesn't reach), deduped by uuid.
+      const enumerated = cfg.hub ? await enumerateShows(ctx, cfg.hub) : [];
+      const byUuid = new Map<string, ApiShowRef>();
+      for (const s of [...(cfg.shows ?? []), ...enumerated]) byUuid.set(s.uuid, s);
+      const shows = [...byUuid.values()];
       const serials = new Map<string, SerialAcc>();
       const standalone: ScrapedShow[] = [];
       let fetched = 0;
