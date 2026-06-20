@@ -1,4 +1,4 @@
-import { createLogger } from "@rozhlas/core";
+import { config, createLogger } from "@rozhlas/core";
 import { getQueue } from "@rozhlas/jobs";
 import { listScrapers } from "@rozhlas/scrapers";
 import { transcriptionEnabled } from "@rozhlas/media";
@@ -27,11 +27,11 @@ export async function setupSchedules() {
   const pending = await enqueuePendingArtworks();
   if (pending) log.info("artwork backfill queued", { pending });
 
-  // Steady-state: queue transcription for any pinned audio without a transcript.
-  // Only when whisper is configured — otherwise we'd enqueue thousands of no-ops.
-  // (The historical backfill is meant for an off-box GPU/Groq batch, not this box.)
-  if (transcriptionEnabled()) {
+  // Historical backfill: only when explicitly enabled (off by default). New shows
+  // are transcribed from ipfs-verify; draining all ~13k pinned files is a ~year of
+  // CPU grinding, meant for an off-box GPU/Groq batch — not an automatic boot task.
+  if (transcriptionEnabled() && config.TRANSCRIBE_BACKFILL) {
     const txPending = await enqueuePendingTranscripts();
-    if (txPending) log.info("transcription queued", { pending: txPending });
+    if (txPending) log.warn("TRANSCRIBE_BACKFILL on — queued full transcript backfill", { pending: txPending });
   }
 }

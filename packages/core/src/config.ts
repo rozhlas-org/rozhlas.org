@@ -64,6 +64,10 @@ const EnvSchema = z.object({
   // the transcribe stage is disabled (jobs no-op) so the rest of the pipeline runs.
   WHISPER_PYTHON: z.string().optional(),
   WHISPER_MODEL: z.string().default("large-v3"),
+  // Drain ALL pinned audio without a transcript on boot (the historical backfill).
+  // Off by default: on this CPU that's ~year of grinding — meant for a GPU/Groq
+  // batch. Steady-state (new shows) is queued from ipfs-verify regardless.
+  TRANSCRIBE_BACKFILL: z.coerce.boolean().default(false),
   // CPU threads for whisper. Kept below nproc by default so transcription doesn't
   // starve the scraper/worker/IPFS on the shared box.
   WHISPER_THREADS: z.coerce.number().int().positive().default(4),
