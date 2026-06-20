@@ -77,8 +77,17 @@ services:
       # INTERNAL gateway — verify streamability against the local node (no proxy needed).
       IPFS_GATEWAY_URL: http://ipfs:8080
       DATABASE_PATH: /data/rozhlas.db
+      # Transcription (faster-whisper). Steady-state only: new shows are
+      # transcribed as they arrive; the ~13k backlog stays parked unless
+      # TRANSCRIBE_BACKFILL=true (that's the off-box GPU/Groq job).
+      WHISPER_PYTHON: /opt/whisper-venv/bin/python
+      WHISPER_MODEL: large-v3
+      WHISPER_THREADS: "4"
+      # large-v3 (~3GB) caches here on first use — a bind on the big /home volume.
+      HF_HOME: /models
     volumes:
       - ./data:/data
+      - /home/whisper-models:/models
     depends_on:
       redis:
         condition: service_healthy
