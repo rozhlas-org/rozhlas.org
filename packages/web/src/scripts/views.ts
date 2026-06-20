@@ -412,6 +412,35 @@ export async function showView(slug: string): Promise<ViewResult> {
           ${people}
           ${audioBlock}
         </div>
-      </article>`,
+      </article>
+      <section class="similar" id="similar-mount" data-slug="${attr(show.slug)}" hidden>
+        <h2 class="similar__title">Podobné pořady</h2>
+        <div class="show-grid" id="similar-grid"></div>
+      </section>`,
   };
+}
+
+/**
+ * Lazily fill the "Podobné pořady" rail below a show detail. Called after the
+ * router paints; fetches the cached /similar endpoint and reveals the section
+ * only if it returns something. Purely additive — any failure leaves the detail
+ * untouched. Guards against the user navigating away mid-fetch.
+ */
+export async function loadSimilar(): Promise<void> {
+  const mount = document.getElementById("similar-mount");
+  const slug = mount?.dataset.slug;
+  if (!mount || !slug) return;
+  let items: ShowListItem[] = [];
+  try {
+    items = await api.similar(slug);
+  } catch {
+    return; // additive — never break the detail view
+  }
+  // Bail if the view changed under us (different show, or navigated away).
+  const live = document.getElementById("similar-mount");
+  if (!live || live.dataset.slug !== slug || !items.length) return;
+  const grid = live.querySelector<HTMLElement>("#similar-grid");
+  if (!grid) return;
+  grid.innerHTML = items.map(showCard).join("");
+  live.hidden = false;
 }
