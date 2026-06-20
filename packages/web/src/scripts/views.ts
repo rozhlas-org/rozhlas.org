@@ -17,19 +17,53 @@ function queueAddBtn(
   slug: string,
   title: string,
   showName: string | null,
-  opts: { label?: string; cls?: string } = {},
+  opts: { label?: string; cls?: string; title?: string } = {},
 ): string {
+  const t = opts.title ?? "Přidat do fronty";
   return `<button class="queue-add${opts.cls ? ` ${opts.cls}` : ""}" type="button"
     data-slug="${attr(slug)}" data-title="${attr(title)}" data-showname="${attr(showName ?? "")}"
-    aria-label="Přidat do fronty" title="Přidat do fronty">${opts.label ?? "＋"}</button>`;
+    aria-label="${attr(t)}" title="${attr(t)}">${opts.label ?? "＋"}</button>`;
+}
+
+/** cs-CZ plural of "díl" (part): 1 díl · 2–4 díly · 0/5+ dílů. */
+function dilWord(n: number): string {
+  if (n === 1) return "díl";
+  if (n >= 2 && n <= 4) return "díly";
+  return "dílů";
+}
+
+/**
+ * Queue-add button text + tooltip for a show with `n` streamable parts. Adding a
+ * show queues all its parts (the player auto-advances through them), so multi-part
+ * shows advertise the count. `compact` = the card pill ("Vše do fronty (N)");
+ * otherwise the longer detail label ("Přidat do fronty (N dílů)"). The
+ * parenthesized count sidesteps Czech case agreement (no "všech N dílů").
+ */
+function queueAddLabel(n: number, opts: { compact?: boolean } = {}): { label: string; title: string } {
+  if (n > 1) {
+    const title = `Přidat do fronty (${n} ${dilWord(n)})`;
+    return { label: opts.compact ? `＋ Vše do fronty (${n})` : `＋ ${title}`, title };
+  }
+  return { label: opts.compact ? "＋" : "＋ Přidat do fronty", title: "Přidat do fronty" };
 }
 
 function showCard(s: ShowListItem): string {
   const art = s.artworkUrl
     ? `<img src="${attr(s.artworkUrl)}" alt="" loading="lazy" />`
     : `<div class="show-card__art--placeholder" aria-hidden="true"></div>`;
-  const badge = s.streamable ? `<span class="show-card__badge">▶</span>` : "";
-  const add = s.streamable ? queueAddBtn(s.slug, s.title, s.showName, { cls: "show-card__add" }) : "";
+  // Multi-part shows keep audio on their parts, so show-level `streamable` is
+  // false for them — count streamable parts to decide playability + the label.
+  const n = (s.streamablePartCount ?? 0) || (s.streamable ? 1 : 0);
+  const playable = n > 0;
+  const badge = playable ? `<span class="show-card__badge">▶</span>` : "";
+  const lbl = queueAddLabel(n, { compact: true });
+  const add = playable
+    ? queueAddBtn(s.slug, s.title, s.showName, {
+        cls: `show-card__add${n > 1 ? " show-card__add--multi" : ""}`,
+        label: lbl.label,
+        title: lbl.title,
+      })
+    : "";
   const programme = s.showName
     ? `<a class="show-card__programme" href="/programme/${encodeURIComponent(s.showName)}">${esc(s.showName)}</a>`
     : "";
@@ -403,11 +437,19 @@ export async function showView(slug: string): Promise<ViewResult> {
           <h1>${esc(show.title)}</h1>
           <p class="show-detail__meta">${meta}</p>
           ${statsLine(show.plays, show.displays)}
-          ${
-            show.parts.some((p) => p.audio?.streamable) || show.audio.some((a) => a.streamable)
-              ? queueAddBtn(show.slug, show.title, show.showName, { label: "＋ Přidat do fronty", cls: "queue-add--detail" })
-              : ""
-          }
+          ${(() => {
+            // Count streamable parts client-side from the loaded detail (no API
+            // dependency). Adding the show queues ALL parts — the label says so.
+            const nParts = show.parts.filter((p) => p.audio?.streamable).length;
+            const n = nParts || (show.audio.some((a) => a.streamable) ? 1 : 0);
+            if (n === 0) return "";
+            const lbl = queueAddLabel(n);
+            return queueAddBtn(show.slug, show.title, show.showName, {
+              label: lbl.label,
+              title: lbl.title,
+              cls: "queue-add--detail",
+            });
+          })()}
           ${desc}
           ${people}
           ${audioBlock}

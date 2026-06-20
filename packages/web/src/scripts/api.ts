@@ -14,6 +14,8 @@ export interface ShowListItem {
   durationSec: number | null;
   artworkUrl: string | null;
   streamable: boolean;
+  /** Count of parts (díly) with streamable audio; 0 for single-audio shows. */
+  streamablePartCount: number;
   streamUrl: string | null;
   plays: number;
   displays: number;
