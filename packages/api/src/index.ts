@@ -59,6 +59,11 @@ app.use("/admin", adminAuth);
 app.use("/admin/*", adminAuth);
 app.route("/", adminAuthRoutes);
 app.route("/admin", adminDashboard);
+// Bull Board's SPA lives at the trailing-slash base (it emits <base href="/admin/jobs/">),
+// but the Hono mount below only answers the no-slash path — so reloading or bookmarking
+// the canonical /admin/jobs/ URL 404s. Redirect the trailing slash to the no-slash path
+// the mount serves. (Registered before the mount so it matches first.)
+app.get(`${config.BULL_BOARD_PATH}/`, (c) => c.redirect(config.BULL_BOARD_PATH));
 mountBullBoard(app, config.BULL_BOARD_PATH, serveStatic);
 
 log.info("api listening", { port: config.API_PORT, board: config.BULL_BOARD_PATH });
