@@ -38,7 +38,12 @@ async function discover(job: Job<JobData["discover"]>) {
     let enqueued = 0;
     let mirrored = 0;
     for (const [i, s] of scraped.entries()) {
-      if (i % 10 === 0) await job.updateProgress({ stage: "save", saved: i, total: scraped.length });
+      if (i % 25 === 0) {
+        await job.updateProgress({ stage: "save", saved: i, total: scraped.length });
+        // Yield so the worker's lock-renewal timer can fire — a tight loop of
+        // thousands of synchronous SQLite upserts would otherwise stall the job.
+        await new Promise<void>((r) => setImmediate(r));
+      }
       const { showId, mirrored: isMirror } = await repo.upsertShow(sourceKey, s);
       if (isMirror) {
         // Already owned by another source (station mirror) — skip its audio.
