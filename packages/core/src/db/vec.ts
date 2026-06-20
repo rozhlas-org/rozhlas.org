@@ -27,6 +27,22 @@ export function upsertEmbedding(showId: number, embedding: Float32Array): void {
   ins.run(showId, embedding);
 }
 
+/**
+ * Read one show's stored embedding back as a Float32Array suitable for knnShows.
+ * sqlite-vec hands the column back as a raw float32 blob — reconstruct over the
+ * exact byte range (honour byteOffset; bun may return a view into a pooled
+ * buffer) and derive the length from byteLength so a dims change fails loud.
+ */
+export function getEmbedding(showId: number): Float32Array | null {
+  if (!vecEnabled) return null;
+  const row = sqlite.prepare("SELECT embedding FROM vec_shows WHERE rowid = ?").get(showId) as
+    | { embedding: Uint8Array }
+    | undefined;
+  if (!row?.embedding || row.embedding.byteLength % 4 !== 0) return null;
+  const buf = row.embedding;
+  return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+}
+
 export interface KnnHit {
   showId: number;
   distance: number;

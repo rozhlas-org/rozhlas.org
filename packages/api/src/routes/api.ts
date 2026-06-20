@@ -6,6 +6,8 @@ import {
   listSources,
   incrementPlays,
   incrementDisplays,
+  showIdBySlug,
+  similarShows,
   type SortKey,
 } from "../queries.ts";
 import { omnisearch } from "../omnisearch.ts";
@@ -51,6 +53,15 @@ apiRoutes.get("/shows/:slug", async (c) => {
   const show = await getShowBySlug(c.req.param("slug"));
   if (!show) return c.json({ error: "not found" }, 404);
   return c.json(show);
+});
+
+// "Podobné pořady" — nearest shows by stored embedding (local KNN, no API call).
+// Stable results → cache. Lazy below-fold fetch from the detail page.
+apiRoutes.get("/shows/:slug/similar", async (c) => {
+  const id = await showIdBySlug(c.req.param("slug"));
+  const items = id ? await similarShows(id) : [];
+  c.header("Cache-Control", "public, max-age=3600");
+  return c.json(items);
 });
 
 // Stat beacons (fire-and-forget from the frontend). 204, no body.
