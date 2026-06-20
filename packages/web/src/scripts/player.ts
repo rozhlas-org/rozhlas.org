@@ -15,7 +15,6 @@ import {
   enqueuePart,
   enqueueParts,
   getQueue,
-  move,
   onQueueChange,
   queuedPartCount,
   removePart,
@@ -180,14 +179,19 @@ export async function playFromSlug(slug: string, idx: string | number): Promise<
  * Load a Fronta entry: fetch the show ONCE and play only its queued díly, in order
  * (gapless within the show). Returns false if nothing playable remains.
  */
-async function playQueueEntry(item: QueueItem): Promise<boolean> {
+async function playQueueEntry(item: QueueItem, startIdx?: string | number): Promise<boolean> {
   const show = await api.show(item.slug).catch(() => null);
   if (!show) return false;
   const wanted = new Set(item.parts.map((p) => String(p.idx)));
   const parts = buildParts(show).filter((t) => wanted.has(String(t.idx)));
   if (!parts.length) return false;
   if (q && q.slug !== item.slug) pushBack(); // queue-advance: remember the show we leave
-  q = { slug: item.slug, showTitle: show.title, programme: show.showName, parts, index: 0 };
+  let index = 0;
+  if (startIdx != null) {
+    const i = parts.findIndex((t) => String(t.idx) === String(startIdx));
+    if (i > 0) index = i; // play from the clicked díl onward through the entry's díly
+  }
+  q = { slug: item.slug, showTitle: show.title, programme: show.showName, parts, index };
   load(true);
   showBar();
   return true;
@@ -354,48 +358,26 @@ function bumpBadge(): void {
   queueBadge.classList.add("player-bar__badge--bump");
 }
 
-/** cs-CZ plural of "díl": 1 díl · 2–4 díly · 0/5+ dílů. */
-function dilWord(n: number): string {
-  if (n === 1) return "díl";
-  if (n >= 2 && n <= 4) return "díly";
-  return "dílů";
-}
-
-/** A queued show block: heading + its díl rows (collapsed when there are many). */
-function renderQueueGroup(it: QueueItem, i: number, total: number): string {
-  const single = it.parts.length === 1 && String(it.parts[0]!.idx) === "single";
-  const sub = single ? it.showName : `${it.parts.length} ${dilWord(it.parts.length)}`;
-  const head =
-    `<div class="qrow__head">` +
-    `<button class="qrow__play" type="button" title="Přehrát"><span class="qrow__title">${esc(it.showTitle)}</span>` +
+/**
+ * One queued díl as a flat row (no show grouping): díl number pinned left, show
+ * title + díl label, play + remove. Multi-part "add all" therefore lists each díl
+ * as its own regular row.
+ */
+function renderQueueRow(it: QueueItem, p: QueuePart): string {
+  const single = String(p.idx) === "single";
+  const idx = single ? "" : `<span class="qrow__idx">${esc(String(p.idx))}.</span>`;
+  const sub = single ? it.showName : p.title;
+  return (
+    `<li class="qrow" data-slug="${attr(it.slug)}" data-idx="${attr(String(p.idx))}">` +
+    idx +
+    `<button class="qrow__play" type="button" title="Přehrát">` +
+    `<span class="qrow__title">${esc(it.showTitle)}</span>` +
     (sub ? `<span class="qrow__sub">${esc(sub)}</span>` : "") +
     `</button>` +
     `<span class="qrow__actions">` +
-    `<button class="qrow__btn" data-act="up" type="button" aria-label="Posunout nahoru"${i === 0 ? " disabled" : ""}>↑</button>` +
-    `<button class="qrow__btn" data-act="down" type="button" aria-label="Posunout dolů"${i === total - 1 ? " disabled" : ""}>↓</button>` +
-    `<button class="qrow__btn qrow__remove" data-act="remove-show" type="button" aria-label="Odebrat pořad z fronty">✕</button>` +
-    `</span></div>`;
-  if (single) return `<li class="qrow" data-slug="${attr(it.slug)}">${head}</li>`;
-
-  const partRows =
-    `<ol class="qrow__parts">` +
-    it.parts
-      .map(
-        (p) =>
-          `<li class="qpart" data-idx="${attr(String(p.idx))}">` +
-          `<span class="qpart__idx">${esc(String(p.idx))}.</span>` +
-          `<span class="qpart__title">${esc(p.title)}</span>` +
-          `<button class="qpart__remove" data-act="remove-part" data-idx="${attr(String(p.idx))}" type="button" aria-label="Odebrat díl z fronty">✕</button>` +
-          `</li>`,
-      )
-      .join("") +
-    `</ol>`;
-  // Collapse long díl lists behind a native <details> to keep the panel scannable.
-  const parts =
-    it.parts.length > 4
-      ? `<details class="qrow__more"><summary>Zobrazit díly (${it.parts.length})</summary>${partRows}</details>`
-      : partRows;
-  return `<li class="qrow" data-slug="${attr(it.slug)}">${head}${parts}</li>`;
+    `<button class="qrow__btn qrow__remove" data-act="remove-part" data-idx="${attr(String(p.idx))}" type="button" aria-label="Odebrat díl z fronty">✕</button>` +
+    `</span></li>`
+  );
 }
 
 function renderQueuePanel(): void {
@@ -407,19 +389,16 @@ function renderQueuePanel(): void {
       (q.parts.length > 1 ? `<span class="qrow__sub">díl ${q.index + 1}/${q.parts.length}</span>` : "") +
       `</div></div>`
     : "";
+  const rows = items.flatMap((it) => it.parts.map((p) => renderQueueRow(it, p))).join("");
   const list = items.length
     ? `<div class="queue__section"><div class="queue__label">Další (${queuedPartCount()})</div>` +
-      `<ol class="queue__list">` +
-      items.map((it, i) => renderQueueGroup(it, i, items.length)).join("") +
-      `</ol></div>`
+      `<ol class="queue__list">${rows}</ol></div>`
     : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte celý pořad nebo jednotlivý díl tlačítkem ＋.</span></p>`;
   const clear = items.length ? `<button class="queue__clear" type="button">Vymazat frontu</button>` : "";
   const close = `<button class="queue__close" type="button" aria-label="Zavřít frontu" title="Zavřít frontu">⌄</button>`;
   queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span><span class="queue__headactions">${clear}${close}</span></div>${nowRow}${list}`;
-  // Marquee any title that overflows its row — show headings and díl rows alike.
-  queuePanel
-    .querySelectorAll<HTMLElement>(".qrow__title, .qpart__title")
-    .forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
+  // Marquee any title that overflows its row.
+  queuePanel.querySelectorAll<HTMLElement>(".qrow__title").forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
 }
 
 function openQueuePanel(): void {
@@ -592,19 +571,16 @@ export function initPlayer(): void {
     const row = t.closest<HTMLElement>(".qrow[data-slug]");
     if (!row) return;
     const slug = row.dataset.slug!;
-    const actEl = t.closest<HTMLElement>("[data-act]");
-    const act = actEl?.dataset.act;
-    if (act === "up") move(slug, -1);
-    else if (act === "down") move(slug, 1);
-    else if (act === "remove-show") removeShow(slug);
-    else if (act === "remove-part") removePart(slug, actEl!.dataset.idx!);
+    const idx = row.dataset.idx;
+    const act = t.closest<HTMLElement>("[data-act]")?.dataset.act;
+    if (act === "remove-part") removePart(slug, idx!);
     else if (t.closest(".qrow__play")) {
-      // Play this show's queued díly now, and drop the whole entry from the Fronta
-      // so its part rows don't linger and fight the player.
+      // Play this show's queued díly from the clicked one, and drop the whole entry
+      // from the Fronta so its rows don't linger and fight the player.
       const item = getQueue().find((x) => x.slug === slug);
       if (item) {
         removeShow(slug);
-        void playQueueEntry(item);
+        void playQueueEntry(item, idx ?? undefined);
         closeQueuePanel(false);
       }
     }
