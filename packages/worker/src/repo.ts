@@ -187,6 +187,16 @@ export async function setArtworkCid(id: number, ipfsCid: string, width: number, 
   await db.update(artworks).set({ ipfsCid, width, height }).where(eq(artworks.id, id));
 }
 
+/** Reuse an already-pinned thumbnail when another row shares the same source image. */
+export async function findArtworkCidBySource(sourceUrl: string) {
+  const [row] = await db
+    .select({ ipfsCid: artworks.ipfsCid, width: artworks.width, height: artworks.height })
+    .from(artworks)
+    .where(and(eq(artworks.sourceUrl, sourceUrl), isNotNull(artworks.ipfsCid)))
+    .limit(1);
+  return row;
+}
+
 /** Queue a pin for every cover that has a source but no CID yet (backfill + self-heal). */
 export async function enqueuePendingArtworks(): Promise<number> {
   const rows = await db

@@ -149,6 +149,14 @@ async function acquireArtwork(job: Job<JobData["acquire-artwork"]>) {
   if (!art?.sourceUrl) return { skipped: "no-source" };
   if (art.ipfsCid) return { skipped: "already-pinned" };
 
+  // Many shows share a cover (programme art, default placeholders). If the same
+  // source image is already pinned, reuse its CID — no re-download/resize/pin.
+  const dup = await repo.findArtworkCidBySource(art.sourceUrl);
+  if (dup?.ipfsCid) {
+    await repo.setArtworkCid(artworkId, dup.ipfsCid, dup.width ?? 0, dup.height ?? 0);
+    return { cid: dup.ipfsCid, deduped: true };
+  }
+
   const ac = new AbortController();
   const watchdog = setTimeout(() => ac.abort(), ARTWORK_HARD_MS);
   try {
