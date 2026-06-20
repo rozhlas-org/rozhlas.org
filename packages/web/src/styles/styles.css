@@ -505,6 +505,18 @@ button:active,
   text-overflow: ellipsis;
 }
 .player-bar__title:hover { color: var(--cyan); }
+/* Tiny now-playing cover at the left of the meta row. */
+.player-bar__art {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--paper);
+  background: var(--key);
+  overflow: hidden;
+}
+.player-bar__art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.player-bar__art--empty { display: grid; place-items: center; }
+.player-bar__art--empty::after { content: "♪"; color: var(--cyan); font-size: 18px; line-height: 1; }
 .player-bar__seek { flex: 1; min-width: 80px; height: 6px; cursor: pointer; accent-color: var(--cyan); }
 .player-bar__time { flex: none; font-family: var(--font-mono); font-size: 13px; color: var(--paper); white-space: nowrap; }
 body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
@@ -625,7 +637,21 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
 }
 .qrow__play:hover { transform: none; box-shadow: none; }
 .qrow__play:hover .qrow__title { color: var(--cyan); }
-.qrow--now { gap: 2px; flex-direction: column; align-items: flex-start; }
+/* Cover thumbnail per queued díl (and the Nyní hraje row). */
+.qrow__art {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--paper);
+  background: var(--key);
+  overflow: hidden;
+}
+.qrow__art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.qrow__art--empty { display: grid; place-items: center; }
+.qrow__art--empty::after { content: "♪"; color: var(--muted); font-size: 14px; line-height: 1; }
+/* Now-playing row: thumb left, title+sub stacked beside it. */
+.qrow--now { gap: 8px; align-items: center; }
+.qrow--now .qrow__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .qrow__title {
   font-family: var(--font-display);
   font-weight: 700;

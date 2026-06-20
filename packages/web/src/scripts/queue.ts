@@ -20,10 +20,12 @@ export interface QueueItem {
   partTitle: string;
   showTitle: string;
   showName: string | null;
+  artworkUrl?: string | null; // tiny cover thumbnail; optional (older entries lack it)
 }
 export interface ShowMeta {
   showTitle: string;
   showName: string | null;
+  artworkUrl?: string | null;
 }
 
 type Listener = () => void;
@@ -77,7 +79,14 @@ export function enqueueParts(slug: string, meta: ShowMeta, parts: QueuePart[]): 
   for (const p of parts) {
     const k = keyOf(slug, p.idx);
     if (have.has(k)) continue;
-    items.push({ slug, idx: p.idx, partTitle: p.title, showTitle: meta.showTitle, showName: meta.showName });
+    items.push({
+      slug,
+      idx: p.idx,
+      partTitle: p.title,
+      showTitle: meta.showTitle,
+      showName: meta.showName,
+      artworkUrl: meta.artworkUrl ?? null,
+    });
     have.add(k);
     added++;
   }
