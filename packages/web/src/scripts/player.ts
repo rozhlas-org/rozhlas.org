@@ -119,10 +119,27 @@ function pkey(slug: string, idx: string | number): string {
 }
 
 /** Build a play queue from a show and start at the given díl id. */
-export async function playFromSlug(slug: string, idx: string | number): Promise<boolean> {
-  // Same track already loaded → just toggle.
+// Set by a deep-link (e.g. a transcript hit) so load() seeks once metadata loads.
+let pendingSeek: number | null = null;
+
+export async function playFromSlug(
+  slug: string,
+  idx: string | number,
+  seekSec?: number,
+): Promise<boolean> {
+  const wantSeek = seekSec != null && Number.isFinite(seekSec) ? seekSec : null;
+  // Same track already loaded → seek if asked, else just toggle.
   if (q && q.slug === slug && String(q.parts[q.index]?.idx) === String(idx)) {
-    toggle();
+    if (wantSeek != null) {
+      try {
+        audio.currentTime = wantSeek;
+      } catch {
+        /* not seekable yet */
+      }
+      audio.play().catch(() => {});
+    } else {
+      toggle();
+    }
     return true;
   }
   const show = await api.show(slug).catch(() => null);
@@ -133,6 +150,7 @@ export async function playFromSlug(slug: string, idx: string | number): Promise<
 
   let start = parts.findIndex((p) => String(p.idx) === String(idx));
   if (start < 0) start = 0;
+  pendingSeek = wantSeek;
   q = { slug, showTitle: show.title, programme: show.showName, parts, index: start };
   load(true);
   showBar();
@@ -179,6 +197,23 @@ function load(autoplay: boolean): void {
   audio.dataset.pkey = pkey(q.slug, t.idx); // progress.ts keys off this
   audio.src = t.streamUrl;
   audio.load();
+  // Deep-link seek (transcript hit): jump to the timestamp once metadata loads,
+  // overriding progress.ts's resume seek for this one navigation.
+  if (pendingSeek != null) {
+    const target = pendingSeek;
+    pendingSeek = null;
+    audio.addEventListener(
+      "loadedmetadata",
+      () => {
+        try {
+          audio.currentTime = target;
+        } catch {
+          /* not seekable */
+        }
+      },
+      { once: true },
+    );
+  }
   nowEl.textContent = q.parts.length > 1 ? `Nyní hraje · díl ${q.index + 1}/${q.parts.length}` : "Nyní hraje";
   setScrollingTitle(titleLink, t.title);
   titleLink.href = `/show/${encodeURIComponent(q.slug)}`;
@@ -374,6 +409,17 @@ export function initPlayer(): void {
     const slug = row.dataset.slug;
     const idx = row.dataset.idx;
     if (slug && idx != null) void playFromSlug(slug, idx);
+  });
+
+  // Transcript hit → play the show's díl at the matched timestamp.
+  document.addEventListener("click", (e) => {
+    const hit = (e.target as HTMLElement).closest<HTMLElement>(".tx-hit");
+    if (!hit) return;
+    e.preventDefault();
+    const slug = hit.dataset.slug;
+    const part = hit.dataset.part; // "single" or a díl idx
+    const seek = Number(hit.dataset.seek);
+    if (slug && part != null) void playFromSlug(slug, part, Number.isFinite(seek) ? seek : undefined);
   });
 
   // ---- queue ("Fronta") wiring ----
