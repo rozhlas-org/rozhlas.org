@@ -428,7 +428,10 @@ export async function showView(slug: string): Promise<ViewResult> {
               cls: "queue-add--part",
             })
           : "";
-        return `<li class="${cls}"${data}>${play}${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span>${dur}${resume}${addPart}</li>`;
+        // idx + title share one line; the title clips and marquee-scrolls if long
+        // (player.ts applies the scroll after render). dur/resume sit below.
+        const line = `<span class="part__line">${num}<span class="part__title">${esc(p.title ?? "díl")}</span></span>`;
+        return `<li class="${cls}"${data}>${play}${check}${line}${dur}${resume}${addPart}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
