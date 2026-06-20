@@ -22,13 +22,22 @@ function queueAddBtn(
   slug: string,
   title: string,
   showName: string | null,
-  opts: { label?: string; cls?: string; title?: string; idx?: string | number; partTitle?: string } = {},
+  opts: {
+    label?: string;
+    cls?: string;
+    title?: string;
+    idx?: string | number;
+    partTitle?: string;
+    artworkUrl?: string | null;
+  } = {},
 ): string {
   const t = opts.title ?? "Přidat do fronty";
   const idxAttr = opts.idx != null ? ` data-idx="${attr(String(opts.idx))}"` : "";
   const ptAttr = opts.partTitle != null ? ` data-parttitle="${attr(opts.partTitle)}"` : "";
+  // Carried into the queue entry so the Fronta row can show a cover thumbnail.
+  const artAttr = opts.artworkUrl ? ` data-artwork="${attr(opts.artworkUrl)}"` : "";
   return `<button class="queue-add${opts.cls ? ` ${opts.cls}` : ""}" type="button"
-    data-slug="${attr(slug)}" data-title="${attr(title)}" data-showname="${attr(showName ?? "")}"${idxAttr}${ptAttr}
+    data-slug="${attr(slug)}" data-title="${attr(title)}" data-showname="${attr(showName ?? "")}"${idxAttr}${ptAttr}${artAttr}
     aria-label="${attr(t)}" title="${attr(t)}">${opts.label ?? "＋"}</button>`;
 }
 
@@ -69,6 +78,7 @@ function showCard(s: ShowListItem): string {
         cls: `show-card__add${n > 1 ? " show-card__add--multi" : ""}`,
         label: lbl.label,
         title: lbl.title,
+        artworkUrl: s.artworkUrl,
       })
     : "";
   const programme = s.showName
@@ -426,6 +436,7 @@ export async function showView(slug: string): Promise<ViewResult> {
               partTitle: p.title ?? `${p.idx}. díl`,
               title: "Přidat tento díl do fronty",
               cls: "queue-add--part",
+              artworkUrl: show.artworkUrl,
             })
           : "";
         // idx + title share one line; the title clips and marquee-scrolls if long
@@ -469,6 +480,7 @@ export async function showView(slug: string): Promise<ViewResult> {
               label: lbl.label,
               title: lbl.title,
               cls: "queue-add--detail",
+              artworkUrl: show.artworkUrl,
             });
           })()}
           ${desc}

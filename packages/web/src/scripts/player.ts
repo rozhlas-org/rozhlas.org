@@ -35,6 +35,7 @@ interface Queue {
   slug: string;
   showTitle: string;
   programme: string | null;
+  artwork: string | null; // cover thumbnail shown at the left of the bar
   parts: Track[];
   index: number;
 }
@@ -105,6 +106,7 @@ let toggleBtn: HTMLButtonElement;
 let prevBtn: HTMLButtonElement;
 let nextBtn: HTMLButtonElement;
 let titleLink: HTMLAnchorElement;
+let artEl: HTMLElement;
 let nowEl: HTMLElement;
 let seek: HTMLInputElement;
 let timeEl: HTMLElement;
@@ -149,6 +151,20 @@ function clock(sec: number): string {
   return formatDuration(Math.max(0, Math.floor(sec || 0))) || "0:00";
 }
 
+/** Tiny cover-thumbnail markup; a tinted placeholder box when there's no artwork. */
+function thumbHtml(url: string | null | undefined, cls: string): string {
+  return url
+    ? `<span class="${cls}"><img src="${attr(url)}" alt="" loading="lazy" /></span>`
+    : `<span class="${cls} ${cls}--empty" aria-hidden="true"></span>`;
+}
+
+/** Set the now-playing thumbnail at the left of the bar (placeholder when empty). */
+function setBarArt(url: string | null | undefined): void {
+  if (!artEl) return;
+  artEl.classList.toggle("player-bar__art--empty", !url);
+  artEl.innerHTML = url ? `<img src="${attr(url)}" alt="" />` : "";
+}
+
 function pkey(slug: string, idx: string | number): string {
   return `${slug}#${idx}`;
 }
@@ -169,7 +185,7 @@ export async function playFromSlug(slug: string, idx: string | number): Promise<
   let start = parts.findIndex((p) => String(p.idx) === String(idx));
   if (start < 0) start = 0;
   if (q && q.slug !== slug) pushBack(); // leaving a different show → remember it
-  q = { slug, showTitle: show.title, programme: show.showName, parts, index: start };
+  q = { slug, showTitle: show.title, programme: show.showName, artwork: show.artworkUrl, parts, index: start };
   load(true);
   showBar();
   return true;
@@ -187,7 +203,7 @@ async function playQueuePart(item: QueueItem): Promise<boolean> {
   const track = buildParts(show).find((t) => String(t.idx) === String(item.idx));
   if (!track) return false;
   pushBack(); // remember whatever we were on so ⏮ can return to it
-  q = { slug: item.slug, showTitle: show.title, programme: show.showName, parts: [track], index: 0 };
+  q = { slug: item.slug, showTitle: show.title, programme: show.showName, artwork: show.artworkUrl, parts: [track], index: 0 };
   load(true);
   showBar();
   return true;
@@ -221,7 +237,7 @@ async function restoreNowPlaying(): Promise<void> {
   if (!parts.length) return;
   let start = parts.findIndex((p) => String(p.idx) === String(saved!.idx));
   if (start < 0) start = 0;
-  q = { slug: saved.slug, showTitle: show.title, programme: show.showName, parts, index: start };
+  q = { slug: saved.slug, showTitle: show.title, programme: show.showName, artwork: show.artworkUrl, parts, index: start };
   load(false); // no autoplay — just show where we left off
   bar.hidden = false;
   document.body.classList.add("has-player");
@@ -235,6 +251,7 @@ function load(autoplay: boolean): void {
   audio.src = t.streamUrl;
   audio.load();
   nowEl.textContent = q.parts.length > 1 ? `Nyní hraje · díl ${q.index + 1}/${q.parts.length}` : "Nyní hraje";
+  setBarArt(q.artwork);
   setScrollingTitle(titleLink, t.title);
   titleLink.href = `/show/${encodeURIComponent(q.slug)}`;
   prevBtn.disabled = false; // prev always at least restarts the díl
@@ -365,6 +382,7 @@ function renderQueueRow(it: QueueItem): string {
   const sub = single ? it.showName : it.partTitle;
   return (
     `<li class="qrow" data-slug="${attr(it.slug)}" data-idx="${attr(String(it.idx))}">` +
+    thumbHtml(it.artworkUrl, "qrow__art") +
     idx +
     `<button class="qrow__play" type="button" title="Přehrát">` +
     `<span class="qrow__title">${esc(it.showTitle)}</span>` +
@@ -381,9 +399,11 @@ function renderQueuePanel(): void {
   const items = getQueue();
   const nowRow = q
     ? `<div class="queue__section"><div class="queue__label">Nyní hraje</div>` +
-      `<div class="qrow qrow--now"><span class="qrow__title">${esc(q.showTitle)}</span>` +
+      `<div class="qrow qrow--now">` +
+      thumbHtml(q.artwork, "qrow__art") +
+      `<span class="qrow__text"><span class="qrow__title">${esc(q.showTitle)}</span>` +
       (q.parts.length > 1 ? `<span class="qrow__sub">díl ${q.index + 1}/${q.parts.length}</span>` : "") +
-      `</div></div>`
+      `</span></div></div>`
     : "";
   const rows = items.map(renderQueueRow).join("");
   const list = items.length
@@ -435,6 +455,7 @@ function surfaceBarForQueue(): void {
   if (!q) {
     nowEl.textContent = "Fronta";
     titleLink.textContent = "";
+    setBarArt(null);
   }
 }
 
@@ -458,7 +479,11 @@ async function addAllToQueue(
       flashAdd(btn, "⚠"); // nothing streamable to queue (or fetch failed)
       return;
     }
-    const added = enqueueParts(slug, { showTitle: show!.title, showName: show!.showName }, parts);
+    const added = enqueueParts(
+      slug,
+      { showTitle: show!.title, showName: show!.showName, artworkUrl: show!.artworkUrl },
+      parts,
+    );
     flashAdd(btn, added > 0 ? `✓ (+${added})` : "✓"); // +K newly added; ✓ = already queued
     if (added > 0) bumpBadge();
     surfaceBarForQueue();
@@ -476,6 +501,7 @@ export function initPlayer(): void {
   prevBtn = document.getElementById("player-prev") as HTMLButtonElement;
   nextBtn = document.getElementById("player-next") as HTMLButtonElement;
   titleLink = document.getElementById("player-title") as HTMLAnchorElement;
+  artEl = document.getElementById("player-art")!;
   nowEl = document.getElementById("player-now")!;
   seek = document.getElementById("player-seek") as HTMLInputElement;
   timeEl = document.getElementById("player-time")!;
@@ -529,7 +555,11 @@ export function initPlayer(): void {
     e.preventDefault();
     const slug = btn.dataset.slug;
     if (!slug) return;
-    const meta = { showTitle: btn.dataset.title ?? slug, showName: btn.dataset.showname || null };
+    const meta = {
+      showTitle: btn.dataset.title ?? slug,
+      showName: btn.dataset.showname || null,
+      artworkUrl: btn.dataset.artwork || null,
+    };
     if (btn.dataset.idx != null) {
       // Single díl — all data is on the button, no fetch.
       const added = enqueuePart(slug, meta, {
