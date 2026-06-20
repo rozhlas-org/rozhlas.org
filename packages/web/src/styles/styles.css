@@ -496,6 +496,169 @@ button:active,
 .player-bar__seek { flex: 1; min-width: 80px; height: 6px; cursor: pointer; accent-color: var(--cyan); }
 .player-bar__time { flex: none; font-family: var(--font-mono); font-size: 13px; color: var(--paper); white-space: nowrap; }
 body.has-player { padding-bottom: 92px; }
+
+/* ===== queue ("Fronta") ===== */
+.player-bar__queue { position: relative; font-size: 18px; }
+.player-bar__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: var(--magenta);
+  color: var(--paper);
+  border: 2px solid var(--key);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+.player-bar__badge[hidden] { display: none; }
+@keyframes badge-bump { 0% { transform: scale(1); } 40% { transform: scale(1.6); } 100% { transform: scale(1); } }
+.player-bar__badge--bump { animation: badge-bump 0.3s ease; }
+
+/* panel pops up above the bar */
+.queue-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 1;
+  margin-bottom: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 14px 16px;
+  background: var(--key);
+  color: var(--paper);
+  border: var(--border);
+  box-shadow: 0 -6px 0 var(--cyan);
+}
+.queue-panel[hidden] { display: none; }
+.queue__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.queue__heading {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  text-transform: uppercase;
+  letter-spacing: -0.3px;
+}
+.queue__clear {
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--magenta);
+  border: var(--border-thin);
+  border-color: var(--magenta);
+  box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.queue__clear:hover { transform: none; box-shadow: 2px 2px 0 var(--magenta); }
+.queue__section { margin-top: 12px; }
+.queue__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 6px;
+}
+.queue__list { list-style: none; margin: 0; padding: 0; }
+.qrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #333; }
+.qrow--now { border-top: none; }
+.qrow__play {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+  color: var(--paper);
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  font: inherit;
+}
+.qrow__play:hover { transform: none; box-shadow: none; }
+.qrow__play:hover .qrow__title { color: var(--cyan); }
+.qrow--now { gap: 2px; flex-direction: column; align-items: flex-start; }
+.qrow__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.qrow__sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.qrow__actions { display: flex; gap: 4px; flex: none; }
+.qrow__btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  color: var(--paper);
+  border: var(--border-thin);
+  border-color: var(--paper);
+  box-shadow: none;
+  font-size: 13px;
+  line-height: 1;
+}
+.qrow__btn:hover { transform: none; background: var(--paper); color: var(--key); box-shadow: none; }
+.qrow__btn:disabled { opacity: 0.3; cursor: default; }
+.qrow__btn:disabled:hover { background: transparent; color: var(--paper); }
+.qrow__remove:hover { background: var(--magenta); border-color: var(--magenta); color: var(--paper); }
+.queue__empty { font-family: var(--font-mono); font-size: 13px; color: var(--muted); line-height: 1.7; margin: 12px 0 0; }
+.queue__hint { color: var(--muted); font-size: 12px; }
+
+/* add-to-queue button (on white cards / detail) */
+.show-card { position: relative; }
+.queue-add {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: var(--paper);
+  color: var(--key);
+  border: var(--border-thin);
+  box-shadow: none;
+  font-size: 18px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.queue-add:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--cyan); }
+.queue-add--done { background: var(--cyan); color: var(--key); }
+.show-card__add { position: absolute; top: 8px; right: 8px; z-index: 2; }
+.queue-add--detail {
+  width: auto;
+  height: auto;
+  padding: 9px 16px;
+  margin: 6px 0 4px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 4px 4px 0 var(--cyan);
+}
+.queue-add--detail:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--cyan); }
+
 @media (max-width: 640px) {
   /* Two rows: full-width timeline on top, controls below. Wrapping lets the
      seek bar own a whole line so it's a real touch target, and keeps the

@@ -11,11 +11,24 @@ export interface ViewResult {
   html: string;
 }
 
+/** Add-to-queue button → player.ts enqueues from the data attributes (no fetch). */
+function queueAddBtn(
+  slug: string,
+  title: string,
+  showName: string | null,
+  opts: { label?: string; cls?: string } = {},
+): string {
+  return `<button class="queue-add${opts.cls ? ` ${opts.cls}` : ""}" type="button"
+    data-slug="${attr(slug)}" data-title="${attr(title)}" data-showname="${attr(showName ?? "")}"
+    aria-label="Přidat do fronty" title="Přidat do fronty">${opts.label ?? "＋"}</button>`;
+}
+
 function showCard(s: ShowListItem): string {
   const art = s.artworkUrl
     ? `<img src="${attr(s.artworkUrl)}" alt="" loading="lazy" />`
     : `<div class="show-card__art--placeholder" aria-hidden="true"></div>`;
   const badge = s.streamable ? `<span class="show-card__badge">▶</span>` : "";
+  const add = s.streamable ? queueAddBtn(s.slug, s.title, s.showName, { cls: "show-card__add" }) : "";
   const programme = s.showName
     ? `<a class="show-card__programme" href="/programme/${encodeURIComponent(s.showName)}">${esc(s.showName)}</a>`
     : "";
@@ -24,6 +37,7 @@ function showCard(s: ShowListItem): string {
     : "";
   return `
     <article class="show-card">
+      ${add}
       <a class="show-card__link" href="/show/${encodeURIComponent(s.slug)}">
         <div class="show-card__art">${art}${badge}</div>
         <h3 class="show-card__title">${esc(s.title)}</h3>
@@ -286,6 +300,11 @@ export async function showView(slug: string): Promise<ViewResult> {
           <h1>${esc(show.title)}</h1>
           <p class="show-detail__meta">${meta}</p>
           ${statsLine(show.plays, show.displays)}
+          ${
+            show.parts.some((p) => p.audio?.streamable) || show.audio.some((a) => a.streamable)
+              ? queueAddBtn(show.slug, show.title, show.showName, { label: "＋ Přidat do fronty", cls: "queue-add--detail" })
+              : ""
+          }
           ${desc}
           ${people}
           ${audioBlock}
