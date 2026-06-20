@@ -52,6 +52,38 @@ export function ensureSearchIndex(sqlite: Database): void {
   sqlite.exec("INSERT INTO shows_fts(shows_fts) VALUES('rebuild');");
 }
 
+/**
+ * FTS5 over transcript chunks (text only), external-content on `transcript_chunks`,
+ * kept in sync by triggers. Accent-insensitive like the shows index. A hit's rowid
+ * == transcript_chunks.id, which carries startSec for a timestamped deep-link.
+ */
+const TRANSCRIPT_FTS_SQL = `
+CREATE VIRTUAL TABLE IF NOT EXISTS transcript_fts USING fts5(
+  text,
+  content='transcript_chunks', content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER IF NOT EXISTS transcript_fts_ai AFTER INSERT ON transcript_chunks BEGIN
+  INSERT INTO transcript_fts(rowid, text) VALUES (new.id, new.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS transcript_fts_ad AFTER DELETE ON transcript_chunks BEGIN
+  INSERT INTO transcript_fts(transcript_fts, rowid, text) VALUES ('delete', old.id, old.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS transcript_fts_au AFTER UPDATE ON transcript_chunks BEGIN
+  INSERT INTO transcript_fts(transcript_fts, rowid, text) VALUES ('delete', old.id, old.text);
+  INSERT INTO transcript_fts(rowid, text) VALUES (new.id, new.text);
+END;
+`;
+
+/** (Re)create the transcript FTS table + triggers and rebuild from existing chunks. */
+export function ensureTranscriptIndex(sqlite: Database): void {
+  sqlite.exec(TRANSCRIPT_FTS_SQL);
+  sqlite.exec("INSERT INTO transcript_fts(transcript_fts) VALUES('rebuild');");
+}
+
 /** Escape a user query into a safe FTS5 prefix match (each term ANDed). */
 export function toFtsQuery(input: string): string {
   const terms = input

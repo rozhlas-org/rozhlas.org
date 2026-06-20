@@ -4,6 +4,14 @@ import { join } from "node:path";
 import { createLogger } from "@rozhlas/core";
 
 export { makeThumbnail, type Thumbnail } from "./artwork.ts";
+export {
+  transcribeAudio,
+  transcriptionEnabled,
+  chunkSegments,
+  type Transcription,
+  type TranscriptSegment,
+  type TranscriptChunk,
+} from "./transcribe.ts";
 
 const log = createLogger("media");
 
