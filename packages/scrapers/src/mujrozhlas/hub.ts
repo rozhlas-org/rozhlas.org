@@ -9,7 +9,7 @@ import type { ApiShowRef } from "./index.ts";
 
 const UA = "Mozilla/5.0 (compatible; rozhlas-org-bot/0.1; +https://github.com/rozhlas-org/rozhlas.org)";
 const ACCEPT_JSON = "application/vnd.api+json";
-const PER_FETCH_MS = 25_000;
+const PER_FETCH_MS = 10_000; // fail a hung fetch fast so the crawl keeps moving
 const DEFAULT_MAX_FETCHES = 4000;
 const MAX_HUB_PAGES = 80;
 const DELAY_MS = Number(process.env.SCRAPE_DELAY_MS ?? 150);
