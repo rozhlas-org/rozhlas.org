@@ -104,6 +104,7 @@ export const api = {
   shows: (p: { q?: string; programme?: string; source?: string; sort?: SortKey; page?: number }) =>
     getJSON<ListResult>("/api/shows", p),
   show: (slug: string) => getJSON<ShowDetail>(`/api/shows/${encodeURIComponent(slug)}`),
+  similar: (slug: string) => getJSON<ShowListItem[]>(`/api/shows/${encodeURIComponent(slug)}/similar`),
   search: (q: string, page?: number) =>
     getJSON<{ query: string } & ListResult>("/api/search", { q, page }),
   omnisearch: (q: string) => getJSON<OmniResult>("/api/omnisearch", { q }),

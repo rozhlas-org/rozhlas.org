@@ -918,3 +918,13 @@ body.has-player { padding-bottom: 92px; }
 @media (max-width: 640px) {
   .hist__time { width: 40px; font-size: 12px; }
 }
+
+/* ===== Podobné pořady (similar shows) ===== */
+.similar { margin-top: 48px; }
+.similar[hidden] { display: none; }
+.similar__title {
+  margin: 0 0 18px;
+  padding-bottom: 8px;
+  border-bottom: var(--border);
+  font-size: clamp(24px, 3vw, 34px);
+}
