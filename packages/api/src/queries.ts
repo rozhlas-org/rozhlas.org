@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, inArray, isNull, sql, count } from "drizzle-orm";
-import { config, db, schema, toFtsQuery } from "@rozhlas/core";
+import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, count } from "drizzle-orm";
+import { config, db, schema, toFtsQuery, getEmbedding, knnShows } from "@rozhlas/core";
 
 const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources } =
   schema;
@@ -24,6 +24,8 @@ export interface ShowListItem {
   durationSec: number | null;
   artworkUrl: string | null;
   streamable: boolean;
+  /** Count of parts (díly) with streamable audio. 0 for single-audio shows. */
+  streamablePartCount: number;
   streamUrl: string | null;
   plays: number;
   displays: number;
@@ -92,6 +94,7 @@ export async function listShows(f: ListFilters) {
 
   const ids = rows.map((r) => r.id);
   const audioByShow = await audioForShows(ids);
+  const partsByShow = await streamablePartsForShows(ids);
   const artByShow = await artworkForShows(ids);
 
   const items: ShowListItem[] = rows.map((r) => {
@@ -105,6 +108,7 @@ export async function listShows(f: ListFilters) {
       durationSec: r.durationSec ?? a?.durationSec ?? null,
       artworkUrl: artByShow.get(r.id) ?? null,
       streamable: a?.streamable ?? false,
+      streamablePartCount: partsByShow.get(r.id) ?? 0,
       streamUrl: streamUrl(a?.ipfsCid ?? null),
       plays: r.plays,
       displays: r.displays,
@@ -127,6 +131,30 @@ async function audioForShows(ids: number[]) {
     .from(audioFiles)
     .where(and(inArray(audioFiles.showId, ids), isNull(audioFiles.partId)));
   for (const r of rows) if (!map.has(r.showId)) map.set(r.showId, r);
+  return map;
+}
+
+/**
+ * Per show, how many parts (díly) have streamable audio. Serialized shows keep
+ * their audio on parts (part_id set), so this is what tells a list card "this is
+ * a multi-part, playable show" — show-level `streamable` (part_id IS NULL) is
+ * false for them. One batched grouped count over the page's ids; 0 if no parts.
+ */
+async function streamablePartsForShows(ids: number[]) {
+  const map = new Map<number, number>();
+  if (!ids.length) return map;
+  const rows = await db
+    .select({ showId: audioFiles.showId, c: count() })
+    .from(audioFiles)
+    .where(
+      and(
+        inArray(audioFiles.showId, ids),
+        isNotNull(audioFiles.partId),
+        eq(audioFiles.streamable, true),
+      ),
+    )
+    .groupBy(audioFiles.showId);
+  for (const r of rows) map.set(r.showId, r.c);
   return map;
 }
 
@@ -164,6 +192,7 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
     .from(shows)
     .where(inArray(shows.id, ids));
   const audio = await audioForShows(ids);
+  const partsByShow = await streamablePartsForShows(ids);
   const art = await artworkForShows(ids);
   for (const r of rows) {
     const a = audio.get(r.id);
@@ -176,12 +205,62 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
       durationSec: r.durationSec ?? a?.durationSec ?? null,
       artworkUrl: art.get(r.id) ?? null,
       streamable: a?.streamable ?? false,
+      streamablePartCount: partsByShow.get(r.id) ?? 0,
       streamUrl: a?.ipfsCid ? streamUrl(a.ipfsCid) : null,
       plays: r.plays,
       displays: r.displays,
     });
   }
   return map;
+}
+
+export async function showIdBySlug(slug: string): Promise<number | null> {
+  const [r] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1);
+  return r?.id ?? null;
+}
+
+// Drop neighbours looser than this L2 distance (vec0 default; Voyage vectors are
+// unit-length, so distance ∈ [0,2]). Calibrated on the live corpus: 4th-neighbour
+// distances run p50≈0.70, p90≈0.87, p99≈0.93 — so this is a gentle floor that
+// trims only genuine outliers (their section just shows fewer/no cards) without
+// emptying normal ones.
+const SIMILAR_MAX_DISTANCE = 0.95;
+
+/**
+ * Shows most similar to `showId` by their stored Voyage embedding — a local
+ * sqlite-vec KNN, no embedding API call. Over-fetches, then in JS: excludes the
+ * show itself, non-streamable shows, applies a relevance cutoff, and caps each
+ * programme to 2 so the rail isn't just "more of the same programme". Order
+ * follows KNN distance (re-projected through the hydration Map). [] if the show
+ * has no embedding yet (or sqlite-vec is unavailable).
+ */
+export async function similarShows(showId: number, limit = 4): Promise<ShowListItem[]> {
+  const vec = getEmbedding(showId);
+  if (!vec) return [];
+  const hits = knnShows(vec, Math.max(24, limit * 6)).filter(
+    (h) => h.showId !== showId && h.distance <= SIMILAR_MAX_DISTANCE,
+  );
+  if (!hits.length) return [];
+  const map = await showItemsByIds(hits.map((h) => h.showId));
+  const out: ShowListItem[] = [];
+  const perProgramme = new Map<string, number>();
+  const seenTitles = new Set<string>();
+  for (const h of hits) {
+    const item = map.get(h.showId);
+    // never recommend something unplayable — but multi-part shows are playable
+    // via their parts even though show-level `streamable` is false.
+    if (!item || !(item.streamable || item.streamablePartCount > 0)) continue;
+    const titleKey = item.title.toLowerCase();
+    if (seenTitles.has(titleKey)) continue; // drop re-published near-duplicates
+    const key = item.showName ?? "";
+    const n = perProgramme.get(key) ?? 0;
+    if (key && n >= 2) continue; // cap ≤2 per programme → favour cross-programme discovery
+    perProgramme.set(key, n + 1);
+    seenTitles.add(titleKey);
+    out.push(item);
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 /** Increment the play counter for a show (fire-and-forget beacon target). */

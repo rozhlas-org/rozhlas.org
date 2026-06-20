@@ -7,6 +7,7 @@ export {
   ensureVecTable,
   resetVecTable,
   upsertEmbedding,
+  getEmbedding,
   knnShows,
   type KnnHit,
   ensureChunkVecTable,

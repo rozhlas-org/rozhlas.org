@@ -77,6 +77,10 @@ services:
       # INTERNAL gateway — verify streamability against the local node (no proxy needed).
       IPFS_GATEWAY_URL: http://ipfs:8080
       DATABASE_PATH: /data/rozhlas.db
+      # Stage audio on the persistent ./data mount, NOT the container's ephemeral
+      # /tmp. A worker restart between acquire-audio and ipfs-add must not orphan
+      # the staged file (otherwise ipfs-add fails ENOENT). Cleared after each pin.
+      AUDIO_STAGING_DIR: /data/staging
       # Transcription (faster-whisper). Steady-state only: new shows are
       # transcribed as they arrive; the ~13k backlog stays parked unless
       # TRANSCRIBE_BACKFILL=true (that's the off-box GPU/Groq job).

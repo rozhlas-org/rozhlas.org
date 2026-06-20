@@ -19,13 +19,13 @@ import "../styles/styles.css";
       rel="stylesheet"
     />
   </head>
-  <body>
+  <body class="has-player">
     <header class="site-header">
       <a class="site-header__brand" href="/">rozhlas<span class="accent">.org</span></a>
       <nav class="site-nav">
         <a href="/">Pořady</a>
         <a href="/programmes">Kategorie</a>
-        <a href="/omnisearch">Podle nálady</a>
+        <a href="/historie">Historie</a>
         <a href="/transcripts">V přepisech</a>
       </nav>
     </header>
@@ -39,25 +39,33 @@ import "../styles/styles.css";
 
     <!-- Persistent player: lives in the shell (outside #app) so SPA navigation
          never stops playback. Filled/controlled by scripts/player.ts. -->
-    <div id="player" class="player-bar" hidden aria-label="Přehrávač">
-      <button id="player-toggle" class="player-bar__btn player-bar__toggle" type="button" aria-label="Přehrát">▶</button>
-      <button id="player-prev" class="player-bar__btn player-bar__nav" type="button" aria-label="Předchozí díl">⏮</button>
-      <button id="player-next" class="player-bar__btn player-bar__nav" type="button" aria-label="Další díl">⏭</button>
-      <div class="player-bar__meta">
-        <div id="player-now" class="player-bar__now">Nyní hraje</div>
-        <a id="player-title" class="player-bar__title" href="#"></a>
+    <div id="player" class="player-bar" aria-label="Přehrávač">
+      <!-- Row 1: cover + now-playing label + title, full width. Always on screen;
+           player.ts shows a placeholder + dimmed transport when nothing's loaded. -->
+      <div class="player-bar__row player-bar__row--meta">
+        <div id="player-art" class="player-bar__art player-bar__art--empty" aria-hidden="true"></div>
+        <div class="player-bar__meta">
+          <div id="player-now" class="player-bar__now">Přehrávač</div>
+          <a id="player-title" class="player-bar__title player-bar__title--idle">Nic nehraje</a>
+        </div>
       </div>
-      <input id="player-seek" class="player-bar__seek" type="range" min="0" max="1000" value="0" aria-label="Pozice ve stopě" />
-      <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
-      <button
-        id="player-queue-toggle"
-        class="player-bar__btn player-bar__queue"
-        type="button"
-        aria-label="Fronta"
-        aria-expanded="false"
-        aria-controls="player-queue"
-      >☰<span id="player-queue-badge" class="player-bar__badge" hidden>0</span></button>
-      <button id="player-close" class="player-bar__btn player-bar__close" type="button" aria-label="Zavřít přehrávač">✕</button>
+      <!-- Row 2: transport (prev/play/next) + seek + time + queue. Disabled in the
+           static markup; player.ts enables them once a track (or queue) is ready. -->
+      <div class="player-bar__row player-bar__row--controls">
+        <button id="player-prev" class="player-bar__btn player-bar__nav" type="button" aria-label="Předchozí" disabled>⏮</button>
+        <button id="player-toggle" class="player-bar__btn player-bar__toggle" type="button" aria-label="Přehrát" disabled>▶</button>
+        <button id="player-next" class="player-bar__btn player-bar__nav" type="button" aria-label="Další" disabled>⏭</button>
+        <input id="player-seek" class="player-bar__seek" type="range" min="0" max="1000" value="0" aria-label="Pozice ve stopě" disabled />
+        <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
+        <button
+          id="player-queue-toggle"
+          class="player-bar__btn player-bar__queue"
+          type="button"
+          aria-label="Fronta"
+          aria-expanded="false"
+          aria-controls="player-queue"
+        >☰<span id="player-queue-badge" class="player-bar__badge" hidden>0</span></button>
+      </div>
       <audio id="player-audio" preload="none"></audio>
       <!-- Queue panel ("Fronta"), rendered by scripts/player.ts; lives in the shell so navigation can't destroy it. -->
       <div id="player-queue" class="queue-panel" hidden role="region" aria-label="Fronta"></div>

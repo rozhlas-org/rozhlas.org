@@ -10,7 +10,20 @@
 import { api } from "./api.ts";
 import { attr, esc, formatDuration } from "./format.ts";
 import { getProgress } from "./progress.ts";
-import { clearQueue, enqueue, getQueue, move, onQueueChange, removeSlug, shiftNext } from "./queue.ts";
+import {
+  clearQueue,
+  enqueuePart,
+  enqueueParts,
+  getQueue,
+  onQueueChange,
+  queuedPartCount,
+  removePart,
+  shiftNext,
+  takePart,
+  type QueueItem,
+  type QueuePart,
+} from "./queue.ts";
+import { logListen } from "./history.ts";
 
 interface Track {
   idx: string | number;
@@ -22,11 +35,22 @@ interface Queue {
   slug: string;
   showTitle: string;
   programme: string | null;
+  artwork: string | null; // cover thumbnail shown at the left of the bar
   parts: Track[];
   index: number;
 }
 
 let q: Queue | null = null;
+// Session back-stack of previously-played shows (in-memory; cleared on reload).
+// "Previous" at the first díl pops this — the queue is consumed as it advances,
+// so it can't provide the show we came from.
+const back: Queue[] = [];
+function pushBack(): void {
+  if (q) {
+    back.push(q);
+    if (back.length > 50) back.shift();
+  }
+}
 
 // Remember what's playing so a reload can re-open the bar at the same track.
 const NOW_NS = "rozhlas:nowplaying:v1";
@@ -64,6 +88,17 @@ function buildParts(show: Awaited<ReturnType<typeof api.show>>): Track[] {
   return a ? [{ idx: "single", title: show.title, streamUrl: a.streamUrl!, durationSec: a.durationSec ?? null }] : [];
 }
 
+/** The show's streamable díly as queue parts (idx + label) — what "add all" enqueues. */
+function buildQueueParts(show: Awaited<ReturnType<typeof api.show>>): QueuePart[] {
+  if (show.parts.length) {
+    return show.parts
+      .filter((p) => p.audio?.streamable && p.audio.streamUrl)
+      .map((p) => ({ idx: p.idx, title: p.title ?? `${p.idx}. díl` }));
+  }
+  const a = show.audio.find((x) => x.streamable && x.streamUrl);
+  return a ? [{ idx: "single", title: show.title }] : [];
+}
+
 // Shell elements (resolved in initPlayer).
 let bar: HTMLElement;
 let audio: HTMLAudioElement;
@@ -71,6 +106,7 @@ let toggleBtn: HTMLButtonElement;
 let prevBtn: HTMLButtonElement;
 let nextBtn: HTMLButtonElement;
 let titleLink: HTMLAnchorElement;
+let artEl: HTMLElement;
 let nowEl: HTMLElement;
 let seek: HTMLInputElement;
 let timeEl: HTMLElement;
@@ -78,6 +114,7 @@ let queueToggle: HTMLButtonElement;
 let queueBadge: HTMLElement;
 let queuePanel: HTMLElement;
 let seeking = false;
+let listenLogged = false; // Historie: whether the current track's listen is recorded
 
 function showBar(): void {
   bar.hidden = false;
@@ -112,6 +149,43 @@ function setScrollingTitle(el: HTMLElement, text: string): void {
 
 function clock(sec: number): string {
   return formatDuration(Math.max(0, Math.floor(sec || 0))) || "0:00";
+}
+
+/** Tiny cover-thumbnail markup; a tinted placeholder box when there's no artwork. */
+function thumbHtml(url: string | null | undefined, cls: string): string {
+  return url
+    ? `<span class="${cls}"><img src="${attr(url)}" alt="" loading="lazy" /></span>`
+    : `<span class="${cls} ${cls}--empty" aria-hidden="true"></span>`;
+}
+
+/** Set the now-playing thumbnail at the left of the bar (placeholder when empty). */
+function setBarArt(url: string | null | undefined): void {
+  if (!artEl) return;
+  artEl.classList.toggle("player-bar__art--empty", !url);
+  artEl.innerHTML = url ? `<img src="${attr(url)}" alt="" />` : "";
+}
+
+/** Enable transport for the current state: play/next live only if a queue waits. */
+function idleControls(): void {
+  const hasQueue = getQueue().length > 0;
+  toggleBtn.disabled = !hasQueue; // play can still start a waiting queue
+  nextBtn.disabled = !hasQueue;
+  prevBtn.disabled = true;
+  seek.disabled = true;
+}
+
+/** Nothing loaded: neutral placeholder in the always-visible bar, transport dimmed. */
+function setIdle(): void {
+  nowEl.textContent = "Přehrávač";
+  setScrollingTitle(titleLink, "Nic nehraje");
+  titleLink.classList.add("player-bar__title--idle");
+  titleLink.removeAttribute("href");
+  setBarArt(null);
+  toggleBtn.textContent = "▶";
+  toggleBtn.setAttribute("aria-label", "Přehrát");
+  seek.value = "0";
+  timeEl.textContent = "0:00 / 0:00";
+  idleControls();
 }
 
 function pkey(slug: string, idx: string | number): string {
@@ -151,18 +225,37 @@ export async function playFromSlug(
   let start = parts.findIndex((p) => String(p.idx) === String(idx));
   if (start < 0) start = 0;
   pendingSeek = wantSeek;
-  q = { slug, showTitle: show.title, programme: show.showName, parts, index: start };
+  if (q && q.slug !== slug) pushBack(); // leaving a different show → remember it
+  q = { slug, showTitle: show.title, programme: show.showName, artwork: show.artworkUrl, parts, index: start };
   load(true);
   showBar();
   return true;
 }
 
-/** Play the next queued show, skipping any that can't be played. */
+/**
+ * Play a single queued díl: fetch its show, load just that díl as the now-playing
+ * track. The rest of the Fronta stays queued and is pulled one díl at a time as this
+ * one ends. Returns false if the díl isn't playable. Pushes the outgoing track onto
+ * the back-stack so ⏮ can step back through played díly.
+ */
+async function playQueuePart(item: QueueItem): Promise<boolean> {
+  const show = await api.show(item.slug).catch(() => null);
+  if (!show) return false;
+  const track = buildParts(show).find((t) => String(t.idx) === String(item.idx));
+  if (!track) return false;
+  pushBack(); // remember whatever we were on so ⏮ can return to it
+  q = { slug: item.slug, showTitle: show.title, programme: show.showName, artwork: show.artworkUrl, parts: [track], index: 0 };
+  load(true);
+  showBar();
+  return true;
+}
+
+/** Play the next queued díl, skipping any that can't be played. */
 async function advanceQueue(): Promise<void> {
   let item = shiftNext();
   while (item) {
-    if (await playFromSlug(item.slug, "")) return;
-    item = shiftNext(); // dead/unstreamable show — skip to the next
+    if (await playQueuePart(item)) return;
+    item = shiftNext(); // dead/unstreamable díl — skip to the next
   }
   forgetNow(); // queue exhausted — nothing left to restore
 }
@@ -185,15 +278,14 @@ async function restoreNowPlaying(): Promise<void> {
   if (!parts.length) return;
   let start = parts.findIndex((p) => String(p.idx) === String(saved!.idx));
   if (start < 0) start = 0;
-  q = { slug: saved.slug, showTitle: show.title, programme: show.showName, parts, index: start };
-  load(false); // no autoplay — just show where we left off
-  bar.hidden = false;
-  document.body.classList.add("has-player");
+  q = { slug: saved.slug, showTitle: show.title, programme: show.showName, artwork: show.artworkUrl, parts, index: start };
+  load(false); // no autoplay — just show where we left off (bar is always visible)
 }
 
 function load(autoplay: boolean): void {
   if (!q) return;
   const t = q.parts[q.index]!;
+  listenLogged = false; // Historie: log this díl only after it actually plays ~6s
   audio.dataset.pkey = pkey(q.slug, t.idx); // progress.ts keys off this
   audio.src = t.streamUrl;
   audio.load();
@@ -215,10 +307,14 @@ function load(autoplay: boolean): void {
     );
   }
   nowEl.textContent = q.parts.length > 1 ? `Nyní hraje · díl ${q.index + 1}/${q.parts.length}` : "Nyní hraje";
+  setBarArt(q.artwork);
   setScrollingTitle(titleLink, t.title);
+  titleLink.classList.remove("player-bar__title--idle");
   titleLink.href = `/show/${encodeURIComponent(q.slug)}`;
-  prevBtn.disabled = q.index === 0 && audio.currentTime < 3;
-  nextBtn.disabled = q.index >= q.parts.length - 1;
+  toggleBtn.disabled = false;
+  seek.disabled = false;
+  prevBtn.disabled = false; // prev always at least restarts the díl
+  nextBtn.disabled = q.index >= q.parts.length - 1 && getQueue().length === 0; // true dead-end only
   rememberNow(); // survive a reload
   const dur = t.durationSec ?? 0;
   if (autoplay) {
@@ -248,18 +344,32 @@ function toggle(): void {
 
 function prev(): void {
   if (!q) return;
-  if (audio.currentTime > 3 || q.index === 0) {
-    audio.currentTime = 0;
-  } else {
-    q.index--;
+  if (audio.currentTime > 3) {
+    audio.currentTime = 0; // restart the current díl (standard 3s rule)
+    return;
+  }
+  if (q.index > 0) {
+    q.index--; // previous díl within this show
     load(true);
+    return;
+  }
+  const prevShow = back.pop(); // first díl → the previously-played show
+  if (prevShow) {
+    q = prevShow;
+    load(true);
+  } else {
+    audio.currentTime = 0; // nothing behind → just restart
   }
 }
 
 function next(): void {
-  if (!q || q.index >= q.parts.length - 1) return;
-  q.index++;
-  load(true);
+  if (!q) return;
+  if (q.index < q.parts.length - 1) {
+    q.index++; // next díl within this show
+    load(true);
+    return;
+  }
+  if (getQueue().length) void advanceQueue(); // last díl → next queued show
 }
 
 /**
@@ -288,6 +398,18 @@ export function syncNowPlaying(): void {
   }
 }
 
+/**
+ * Apply the right-to-left marquee to every díl title in the freshly rendered view
+ * (detail part list) — same effect as the player bar / Fronta titles. Long titles
+ * scroll; short ones stay static. Call once per render (app.ts), on fresh DOM, so
+ * the text isn't already wrapped in marquee segments.
+ */
+export function applyPartMarquees(): void {
+  document
+    .querySelectorAll<HTMLElement>(".part__title")
+    .forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
+}
+
 // ---- queue panel ("Fronta") ----
 
 function queuePanelOpen(): boolean {
@@ -296,7 +418,7 @@ function queuePanelOpen(): boolean {
 
 function renderQueueBadge(): void {
   if (!queueBadge) return;
-  const n = getQueue().length;
+  const n = queuedPartCount();
   queueBadge.textContent = String(n);
   queueBadge.hidden = n === 0;
 }
@@ -308,36 +430,48 @@ function bumpBadge(): void {
   queueBadge.classList.add("player-bar__badge--bump");
 }
 
+/**
+ * One queued díl as a flat row (no show grouping): díl number pinned left, show
+ * title + díl label, play + remove. Multi-part "add all" therefore lists each díl
+ * as its own regular row.
+ */
+function renderQueueRow(it: QueueItem): string {
+  const single = String(it.idx) === "single";
+  const idx = single ? "" : `<span class="qrow__idx">${esc(String(it.idx))}.</span>`;
+  const sub = single ? it.showName : it.partTitle;
+  return (
+    `<li class="qrow" data-slug="${attr(it.slug)}" data-idx="${attr(String(it.idx))}">` +
+    thumbHtml(it.artworkUrl, "qrow__art") +
+    idx +
+    `<button class="qrow__play" type="button" title="Přehrát">` +
+    `<span class="qrow__title">${esc(it.showTitle)}</span>` +
+    (sub ? `<span class="qrow__sub">${esc(sub)}</span>` : "") +
+    `</button>` +
+    `<span class="qrow__actions">` +
+    `<button class="qrow__btn qrow__remove" data-act="remove-part" data-idx="${attr(String(it.idx))}" type="button" aria-label="Odebrat díl z fronty">✕</button>` +
+    `</span></li>`
+  );
+}
+
 function renderQueuePanel(): void {
   if (!queuePanel) return;
   const items = getQueue();
   const nowRow = q
     ? `<div class="queue__section"><div class="queue__label">Nyní hraje</div>` +
-      `<div class="qrow qrow--now"><span class="qrow__title">${esc(q.showTitle)}</span>` +
+      `<div class="qrow qrow--now">` +
+      thumbHtml(q.artwork, "qrow__art") +
+      `<span class="qrow__text"><span class="qrow__title">${esc(q.showTitle)}</span>` +
       (q.parts.length > 1 ? `<span class="qrow__sub">díl ${q.index + 1}/${q.parts.length}</span>` : "") +
-      `</div></div>`
+      `</span></div></div>`
     : "";
+  const rows = items.map(renderQueueRow).join("");
   const list = items.length
-    ? `<div class="queue__section"><div class="queue__label">Další (${items.length})</div>` +
-      `<ol class="queue__list">` +
-      items
-        .map(
-          (it, i) =>
-            `<li class="qrow" data-slug="${attr(it.slug)}">` +
-            `<button class="qrow__play" type="button" title="Přehrát"><span class="qrow__title">${esc(it.title)}</span>` +
-            (it.showName ? `<span class="qrow__sub">${esc(it.showName)}</span>` : "") +
-            `</button>` +
-            `<span class="qrow__actions">` +
-            `<button class="qrow__btn" data-act="up" type="button" aria-label="Posunout nahoru"${i === 0 ? " disabled" : ""}>↑</button>` +
-            `<button class="qrow__btn" data-act="down" type="button" aria-label="Posunout dolů"${i === items.length - 1 ? " disabled" : ""}>↓</button>` +
-            `<button class="qrow__btn qrow__remove" data-act="remove" type="button" aria-label="Odebrat z fronty">✕</button>` +
-            `</span></li>`,
-        )
-        .join("") +
-      `</ol></div>`
-    : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte pořady tlačítkem ＋ na kartě.</span></p>`;
+    ? `<div class="queue__section"><div class="queue__label">Další (${queuedPartCount()})</div>` +
+      `<ol class="queue__list">${rows}</ol></div>`
+    : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte celý pořad nebo jednotlivý díl tlačítkem ＋.</span></p>`;
   const clear = items.length ? `<button class="queue__clear" type="button">Vymazat frontu</button>` : "";
-  queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span>${clear}</div>${nowRow}${list}`;
+  const close = `<button class="queue__close" type="button" aria-label="Zavřít frontu" title="Zavřít frontu">✕</button>`;
+  queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span><span class="queue__headactions">${clear}${close}</span></div>${nowRow}${list}`;
   // Marquee any title that overflows its row.
   queuePanel.querySelectorAll<HTMLElement>(".qrow__title").forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
 }
@@ -359,6 +493,9 @@ function closeQueuePanel(returnFocus = true): void {
 function onQueueChanged(): void {
   renderQueueBadge();
   if (queuePanelOpen()) renderQueuePanel();
+  // The queue draining/filling can flip the "next" dead-end state.
+  if (q) nextBtn.disabled = q.index >= q.parts.length - 1 && getQueue().length === 0;
+  else idleControls(); // no track: play/next live only while a queue is waiting
 }
 
 /** Transient feedback on an add-to-queue button (cards re-render, so it self-resets). */
@@ -372,6 +509,45 @@ function flashAdd(btn: HTMLButtonElement, mark: string): void {
   }, 1300);
 }
 
+/** The bar is always visible; just make sure play can start a freshly-added queue. */
+function surfaceBarForQueue(): void {
+  if (!q) idleControls();
+}
+
+/**
+ * "Add all díly" — the card only knows the count, so fetch the show once, queue all
+ * its streamable díly, and report how many were *newly* added. Keeps the button's
+ * label during the fetch (disabled+dimmed), then flashes the result; resets on error.
+ */
+async function addAllToQueue(
+  btn: HTMLButtonElement,
+  slug: string,
+  meta: { showTitle: string; showName: string | null },
+): Promise<void> {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
+  try {
+    const show = await api.show(slug).catch(() => null);
+    const parts = show ? buildQueueParts(show) : [];
+    if (!parts.length) {
+      flashAdd(btn, "⚠"); // nothing streamable to queue (or fetch failed)
+      return;
+    }
+    const added = enqueueParts(
+      slug,
+      { showTitle: show!.title, showName: show!.showName, artworkUrl: show!.artworkUrl },
+      parts,
+    );
+    flashAdd(btn, added > 0 ? `✓ (+${added})` : "✓"); // +K newly added; ✓ = already queued
+    if (added > 0) bumpBadge();
+    surfaceBarForQueue();
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+  }
+}
+
 /** Wire the shell player once at startup. */
 export function initPlayer(): void {
   bar = document.getElementById("player")!;
@@ -380,6 +556,7 @@ export function initPlayer(): void {
   prevBtn = document.getElementById("player-prev") as HTMLButtonElement;
   nextBtn = document.getElementById("player-next") as HTMLButtonElement;
   titleLink = document.getElementById("player-title") as HTMLAnchorElement;
+  artEl = document.getElementById("player-art")!;
   nowEl = document.getElementById("player-now")!;
   seek = document.getElementById("player-seek") as HTMLInputElement;
   timeEl = document.getElementById("player-time")!;
@@ -391,19 +568,40 @@ export function initPlayer(): void {
   toggleBtn.addEventListener("click", toggle);
   prevBtn.addEventListener("click", prev);
   nextBtn.addEventListener("click", next);
-  document.getElementById("player-close")?.addEventListener("click", () => {
-    audio.pause();
-    bar.hidden = true;
-    document.body.classList.remove("has-player");
-    q = null;
-    forgetNow();
-    syncNowPlaying();
+
+  // Blue ▶ badge on a card thumbnail → play the show now instead of opening its
+  // detail. Capture phase so we preventDefault BEFORE the SPA router's bubble-phase
+  // link handler runs (it bails on e.defaultPrevented), so the card <a> never
+  // navigates. Enter/Space on the focused badge does the same.
+  const playBadge = (badge: HTMLElement) => {
+    const slug = badge.dataset.slug;
+    if (slug) void playFromSlug(slug, ""); // no idx match → starts at the first streamable díl
+  };
+  document.addEventListener(
+    "click",
+    (e) => {
+      const badge = (e.target as HTMLElement).closest<HTMLElement>(".show-card__badge");
+      if (!badge) return;
+      e.preventDefault();
+      e.stopPropagation();
+      playBadge(badge);
+    },
+    true,
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const badge = (e.target as HTMLElement).closest<HTMLElement>(".show-card__badge");
+    if (!badge) return;
+    e.preventDefault();
+    playBadge(badge);
   });
 
   // Delegated: a click anywhere on a playable row (button, title, duration…)
   // plays that díl. Covers re-rendered rows since it's bound to document.
   document.addEventListener("click", (e) => {
-    const row = (e.target as HTMLElement).closest<HTMLElement>(".part--playable");
+    const target = e.target as HTMLElement;
+    if (target.closest(".queue-add")) return; // the per-díl ＋ enqueues, doesn't play
+    const row = target.closest<HTMLElement>(".part--playable");
     if (!row) return;
     e.preventDefault();
     const slug = row.dataset.slug;
@@ -423,17 +621,9 @@ export function initPlayer(): void {
   });
 
   // ---- queue ("Fronta") wiring ----
+  // Once open, the panel stays open until the ✕ (or the ☰ toggle) — no auto-close
+  // on outside clicks or Escape, so interacting elsewhere can't collapse it.
   queueToggle.addEventListener("click", () => (queuePanelOpen() ? closeQueuePanel() : openQueuePanel()));
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && queuePanelOpen()) closeQueuePanel();
-  });
-  // Close the panel on an outside click (but not on the toggle or inside it).
-  document.addEventListener("click", (e) => {
-    if (!queuePanelOpen()) return;
-    const t = e.target as Node;
-    if (queuePanel.contains(t) || queueToggle.contains(t)) return;
-    closeQueuePanel(false);
-  });
 
   // "Add to queue" buttons on cards / detail (inside #app — delegated on document).
   document.addEventListener("click", (e) => {
@@ -442,26 +632,33 @@ export function initPlayer(): void {
     e.preventDefault();
     const slug = btn.dataset.slug;
     if (!slug) return;
-    if (q && q.slug === slug) {
-      flashAdd(btn, "♪"); // it's already the show that's playing
-      return;
-    }
-    const added = enqueue({ slug, title: btn.dataset.title ?? slug, showName: btn.dataset.showname || null });
-    flashAdd(btn, "✓");
-    if (added) bumpBadge();
-    showBar(); // surface the bar so the queue is reachable even with nothing playing
-    if (!q) {
-      nowEl.textContent = "Fronta";
-      titleLink.textContent = "";
+    const meta = {
+      showTitle: btn.dataset.title ?? slug,
+      showName: btn.dataset.showname || null,
+      artworkUrl: btn.dataset.artwork || null,
+    };
+    if (btn.dataset.idx != null) {
+      // Single díl — all data is on the button, no fetch.
+      const added = enqueuePart(slug, meta, {
+        idx: btn.dataset.idx,
+        title: btn.dataset.parttitle ?? `${btn.dataset.idx}. díl`,
+      });
+      flashAdd(btn, added ? "✓" : "•"); // ✓ only when newly added; • = already queued
+      if (added) bumpBadge();
+      surfaceBarForQueue();
+    } else {
+      // "Add all" — fetch the show and queue every streamable díl.
+      void addAllToQueue(btn, slug, meta);
     }
   });
 
   // Panel actions (play-now / reorder / remove / clear) — delegated on the panel.
   queuePanel.addEventListener("click", (e) => {
-    // Keep the click off the document outside-close handler — a re-render here
-    // detaches the target, which would otherwise read as an "outside" click.
-    e.stopPropagation();
     const t = e.target as HTMLElement;
+    if (t.closest(".queue__close")) {
+      closeQueuePanel();
+      return;
+    }
     const clearBtn = t.closest<HTMLButtonElement>(".queue__clear");
     if (clearBtn) {
       if (clearBtn.dataset.confirm === "1") clearQueue();
@@ -474,14 +671,16 @@ export function initPlayer(): void {
     const row = t.closest<HTMLElement>(".qrow[data-slug]");
     if (!row) return;
     const slug = row.dataset.slug!;
+    const idx = row.dataset.idx;
     const act = t.closest<HTMLElement>("[data-act]")?.dataset.act;
-    if (act === "up") move(slug, -1);
-    else if (act === "down") move(slug, 1);
-    else if (act === "remove") removeSlug(slug);
+    if (act === "remove-part") removePart(slug, idx!);
     else if (t.closest(".qrow__play")) {
-      removeSlug(slug); // remove first (sync), it becomes the current show
-      void playFromSlug(slug, "");
-      closeQueuePanel(false);
+      // Play this díl now; every other queued díl stays put.
+      const item = takePart(slug, idx!);
+      if (item) {
+        void playQueuePart(item);
+        closeQueuePanel(false);
+      }
     }
   });
 
@@ -556,7 +755,13 @@ export function initPlayer(): void {
     clearStall(); // real progress → not stuck
     if (!seeking && audio.duration) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
     timeEl.textContent = `${clock(audio.currentTime)} / ${clock(audio.duration)}`;
-    if (q) prevBtn.disabled = q.index === 0 && audio.currentTime < 3;
+    // Historie: count a listen once the track has actually played ~6s (skips
+    // scrubs/skips; restored-but-not-played tracks never reach this).
+    if (q && !listenLogged && audio.currentTime > 6) {
+      listenLogged = true;
+      const t = q.parts[q.index]!;
+      logListen({ slug: q.slug, title: q.showTitle, showName: q.programme, idx: t.idx, partTitle: t.title });
+    }
   });
   audio.addEventListener("play", () => {
     toggleBtn.textContent = "❚❚";
@@ -584,5 +789,10 @@ export function initPlayer(): void {
     }
   });
 
+  // The bar is part of the shell and always on screen. Start in the idle state,
+  // then restore the last track (if any) over it.
+  bar.hidden = false;
+  document.body.classList.add("has-player");
+  setIdle();
   void restoreNowPlaying(); // reopen the bar where we left off before a reload
 }

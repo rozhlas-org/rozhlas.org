@@ -29,12 +29,16 @@ export interface JobData {
   };
   // Reserved for detail-page sources (mujRozhlas, Phase 3).
   "fetch-metadata": { sourceKey: string; sourceId: string; url?: string };
-  "acquire-audio": { audioFileId: number };
+  // `fromReacquire` marks a re-download triggered by ipfs-add finding its staged
+  // file gone — used to break a potential acquire↔ipfs-add loop (see processors).
+  "acquire-audio": { audioFileId: number; fromReacquire?: boolean };
   // Fetch a show's cover, resize to a small WebP, pin to IPFS, store the CID.
   "acquire-artwork": { artworkId: number };
   // Reserved: embed tags/artwork before ipfs-add (Phase 2+).
   "extract-tags": { audioFileId: number; tempPath: string };
-  "ipfs-add": { audioFileId: number; tempPath: string };
+  // `retryMissing` = this add already came from a re-acquire; if the file is STILL
+  // missing, hard-fail instead of re-acquiring again (loop guard).
+  "ipfs-add": { audioFileId: number; tempPath: string; retryMissing?: boolean };
   "ipfs-verify": { audioFileId: number };
   index: { showId: number };
   // Transcribe a pinned audio file (faster-whisper) → store transcript + chunks.
