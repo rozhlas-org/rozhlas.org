@@ -6,6 +6,7 @@
 import {
   browseView,
   historyView,
+  loadSimilar,
   omnisearchView,
   programmeView,
   programmesView,
@@ -63,6 +64,7 @@ async function render() {
     app.innerHTML = view.html;
     syncNowPlaying(); // re-mark the now-playing díl in the freshly rendered view
     window.scrollTo(0, 0);
+    void loadSimilar(); // lazily fill "Podobné pořady" if this view has the mount
   } catch (err) {
     if (mine !== token) return;
     app.innerHTML = `<section><h1>Chyba</h1><p class="notice">Nepodařilo se načíst data. Zkuste to prosím znovu.</p></section>`;
