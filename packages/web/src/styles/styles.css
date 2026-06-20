@@ -567,8 +567,49 @@ body.has-player { padding-bottom: 92px; }
   margin-bottom: 6px;
 }
 .queue__list { list-style: none; margin: 0; padding: 0; }
-.qrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #333; }
-.qrow--now { border-top: none; }
+.qrow { display: block; padding: 8px 0; border-top: 1px solid #333; }
+.qrow__head { display: flex; align-items: center; gap: 8px; }
+.qrow--now { display: flex; border-top: none; }
+/* queued show → its díl rows, indented under the show head */
+.qrow__parts { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; border-left: 2px solid #333; }
+.qpart { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.qpart__title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qpart__remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid #333;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.qpart__remove:hover { background: var(--magenta); border-color: var(--magenta); color: var(--paper); }
+.qrow__more { margin-top: 6px; }
+.qrow__more > summary {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--cyan);
+  padding: 2px 0;
+}
+.qrow__more > summary::-webkit-details-marker { display: none; }
+.qrow__more[open] > summary { color: var(--muted); }
 .qrow__play {
   display: flex;
   flex-direction: column;
@@ -672,6 +713,25 @@ body.has-player { padding-bottom: 92px; }
   box-shadow: 4px 4px 0 var(--cyan);
 }
 .queue-add--detail:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--cyan); }
+/* pending state for "add all" (fetching the show) — dimmed, label kept, no jitter */
+.queue-add:disabled,
+.queue-add[aria-busy="true"] { opacity: 0.5; cursor: default; }
+.queue-add:disabled:hover { transform: none; box-shadow: none; }
+/* per-díl ＋ on a detail part row: trailing, outline (so it never reads as ▶) */
+.queue-add--part {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  z-index: 2;
+}
+.queue-add--part:hover { transform: translateY(-50%); box-shadow: 2px 2px 0 var(--cyan); }
+.part:has(.queue-add--part) { padding-right: 52px; } /* keep title/length clear of the ＋ */
+.part--played .queue-add--part { right: 48px; } /* sit left of the ✓ on listened rows */
+.part--played:has(.queue-add--part) { padding-right: 86px; }
 
 /* marquee: long titles scroll right-to-left in a seamless loop (player.ts measures
    overflow and adds .marquee--on with a width-proportional --marquee-dur) */

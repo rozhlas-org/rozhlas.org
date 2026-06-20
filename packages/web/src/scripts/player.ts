@@ -10,7 +10,20 @@
 import { api } from "./api.ts";
 import { attr, esc, formatDuration } from "./format.ts";
 import { getProgress } from "./progress.ts";
-import { clearQueue, enqueue, getQueue, move, onQueueChange, removeSlug, shiftNext } from "./queue.ts";
+import {
+  clearQueue,
+  enqueuePart,
+  enqueueParts,
+  getQueue,
+  move,
+  onQueueChange,
+  queuedPartCount,
+  removePart,
+  removeShow,
+  shiftNext,
+  type QueueItem,
+  type QueuePart,
+} from "./queue.ts";
 import { logListen } from "./history.ts";
 
 interface Track {
@@ -63,6 +76,17 @@ function buildParts(show: Awaited<ReturnType<typeof api.show>>): Track[] {
   }
   const a = show.audio.find((x) => x.streamable && x.streamUrl);
   return a ? [{ idx: "single", title: show.title, streamUrl: a.streamUrl!, durationSec: a.durationSec ?? null }] : [];
+}
+
+/** The show's streamable díly as queue parts (idx + label) — what "add all" enqueues. */
+function buildQueueParts(show: Awaited<ReturnType<typeof api.show>>): QueuePart[] {
+  if (show.parts.length) {
+    return show.parts
+      .filter((p) => p.audio?.streamable && p.audio.streamUrl)
+      .map((p) => ({ idx: p.idx, title: p.title ?? `${p.idx}. díl` }));
+  }
+  const a = show.audio.find((x) => x.streamable && x.streamUrl);
+  return a ? [{ idx: "single", title: show.title }] : [];
 }
 
 // Shell elements (resolved in initPlayer).
@@ -141,11 +165,27 @@ export async function playFromSlug(slug: string, idx: string | number): Promise<
   return true;
 }
 
+/**
+ * Load a Fronta entry: fetch the show ONCE and play only its queued díly, in order
+ * (gapless within the show). Returns false if nothing playable remains.
+ */
+async function playQueueEntry(item: QueueItem): Promise<boolean> {
+  const show = await api.show(item.slug).catch(() => null);
+  if (!show) return false;
+  const wanted = new Set(item.parts.map((p) => String(p.idx)));
+  const parts = buildParts(show).filter((t) => wanted.has(String(t.idx)));
+  if (!parts.length) return false;
+  q = { slug: item.slug, showTitle: show.title, programme: show.showName, parts, index: 0 };
+  load(true);
+  showBar();
+  return true;
+}
+
 /** Play the next queued show, skipping any that can't be played. */
 async function advanceQueue(): Promise<void> {
   let item = shiftNext();
   while (item) {
-    if (await playFromSlug(item.slug, "")) return;
+    if (await playQueueEntry(item)) return;
     item = shiftNext(); // dead/unstreamable show — skip to the next
   }
   forgetNow(); // queue exhausted — nothing left to restore
@@ -264,7 +304,7 @@ function queuePanelOpen(): boolean {
 
 function renderQueueBadge(): void {
   if (!queueBadge) return;
-  const n = getQueue().length;
+  const n = queuedPartCount();
   queueBadge.textContent = String(n);
   queueBadge.hidden = n === 0;
 }
@@ -274,6 +314,49 @@ function bumpBadge(): void {
   queueBadge.classList.remove("player-bar__badge--bump");
   void queueBadge.offsetWidth; // reflow so the animation restarts
   queueBadge.classList.add("player-bar__badge--bump");
+}
+
+/** cs-CZ plural of "díl": 1 díl · 2–4 díly · 0/5+ dílů. */
+function dilWord(n: number): string {
+  if (n === 1) return "díl";
+  if (n >= 2 && n <= 4) return "díly";
+  return "dílů";
+}
+
+/** A queued show block: heading + its díl rows (collapsed when there are many). */
+function renderQueueGroup(it: QueueItem, i: number, total: number): string {
+  const single = it.parts.length === 1 && String(it.parts[0]!.idx) === "single";
+  const sub = single ? it.showName : `${it.parts.length} ${dilWord(it.parts.length)}`;
+  const head =
+    `<div class="qrow__head">` +
+    `<button class="qrow__play" type="button" title="Přehrát"><span class="qrow__title">${esc(it.showTitle)}</span>` +
+    (sub ? `<span class="qrow__sub">${esc(sub)}</span>` : "") +
+    `</button>` +
+    `<span class="qrow__actions">` +
+    `<button class="qrow__btn" data-act="up" type="button" aria-label="Posunout nahoru"${i === 0 ? " disabled" : ""}>↑</button>` +
+    `<button class="qrow__btn" data-act="down" type="button" aria-label="Posunout dolů"${i === total - 1 ? " disabled" : ""}>↓</button>` +
+    `<button class="qrow__btn qrow__remove" data-act="remove-show" type="button" aria-label="Odebrat pořad z fronty">✕</button>` +
+    `</span></div>`;
+  if (single) return `<li class="qrow" data-slug="${attr(it.slug)}">${head}</li>`;
+
+  const partRows =
+    `<ol class="qrow__parts">` +
+    it.parts
+      .map(
+        (p) =>
+          `<li class="qpart" data-idx="${attr(String(p.idx))}">` +
+          `<span class="qpart__title">${esc(p.title)}</span>` +
+          `<button class="qpart__remove" data-act="remove-part" data-idx="${attr(String(p.idx))}" type="button" aria-label="Odebrat díl z fronty">✕</button>` +
+          `</li>`,
+      )
+      .join("") +
+    `</ol>`;
+  // Collapse long díl lists behind a native <details> to keep the panel scannable.
+  const parts =
+    it.parts.length > 4
+      ? `<details class="qrow__more"><summary>Zobrazit díly (${it.parts.length})</summary>${partRows}</details>`
+      : partRows;
+  return `<li class="qrow" data-slug="${attr(it.slug)}">${head}${parts}</li>`;
 }
 
 function renderQueuePanel(): void {
@@ -286,24 +369,11 @@ function renderQueuePanel(): void {
       `</div></div>`
     : "";
   const list = items.length
-    ? `<div class="queue__section"><div class="queue__label">Další (${items.length})</div>` +
+    ? `<div class="queue__section"><div class="queue__label">Další (${queuedPartCount()})</div>` +
       `<ol class="queue__list">` +
-      items
-        .map(
-          (it, i) =>
-            `<li class="qrow" data-slug="${attr(it.slug)}">` +
-            `<button class="qrow__play" type="button" title="Přehrát"><span class="qrow__title">${esc(it.title)}</span>` +
-            (it.showName ? `<span class="qrow__sub">${esc(it.showName)}</span>` : "") +
-            `</button>` +
-            `<span class="qrow__actions">` +
-            `<button class="qrow__btn" data-act="up" type="button" aria-label="Posunout nahoru"${i === 0 ? " disabled" : ""}>↑</button>` +
-            `<button class="qrow__btn" data-act="down" type="button" aria-label="Posunout dolů"${i === items.length - 1 ? " disabled" : ""}>↓</button>` +
-            `<button class="qrow__btn qrow__remove" data-act="remove" type="button" aria-label="Odebrat z fronty">✕</button>` +
-            `</span></li>`,
-        )
-        .join("") +
+      items.map((it, i) => renderQueueGroup(it, i, items.length)).join("") +
       `</ol></div>`
-    : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte pořady tlačítkem ＋ na kartě.</span></p>`;
+    : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte celý pořad nebo jednotlivý díl tlačítkem ＋.</span></p>`;
   const clear = items.length ? `<button class="queue__clear" type="button">Vymazat frontu</button>` : "";
   queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span>${clear}</div>${nowRow}${list}`;
   // Marquee any title that overflows its row.
@@ -340,6 +410,45 @@ function flashAdd(btn: HTMLButtonElement, mark: string): void {
   }, 1300);
 }
 
+/** Surface the bar so the queue is reachable even with nothing playing. */
+function surfaceBarForQueue(): void {
+  showBar();
+  if (!q) {
+    nowEl.textContent = "Fronta";
+    titleLink.textContent = "";
+  }
+}
+
+/**
+ * "Add all díly" — the card only knows the count, so fetch the show once, queue all
+ * its streamable díly, and report how many were *newly* added. Keeps the button's
+ * label during the fetch (disabled+dimmed), then flashes the result; resets on error.
+ */
+async function addAllToQueue(
+  btn: HTMLButtonElement,
+  slug: string,
+  meta: { showTitle: string; showName: string | null },
+): Promise<void> {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
+  try {
+    const show = await api.show(slug).catch(() => null);
+    const parts = show ? buildQueueParts(show) : [];
+    if (!parts.length) {
+      flashAdd(btn, "⚠"); // nothing streamable to queue (or fetch failed)
+      return;
+    }
+    const added = enqueueParts(slug, { showTitle: show!.title, showName: show!.showName }, parts);
+    flashAdd(btn, added > 0 ? `✓ (+${added})` : "✓"); // +K newly added; ✓ = already queued
+    if (added > 0) bumpBadge();
+    surfaceBarForQueue();
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+  }
+}
+
 /** Wire the shell player once at startup. */
 export function initPlayer(): void {
   bar = document.getElementById("player")!;
@@ -371,7 +480,9 @@ export function initPlayer(): void {
   // Delegated: a click anywhere on a playable row (button, title, duration…)
   // plays that díl. Covers re-rendered rows since it's bound to document.
   document.addEventListener("click", (e) => {
-    const row = (e.target as HTMLElement).closest<HTMLElement>(".part--playable");
+    const target = e.target as HTMLElement;
+    if (target.closest(".queue-add")) return; // the per-díl ＋ enqueues, doesn't play
+    const row = target.closest<HTMLElement>(".part--playable");
     if (!row) return;
     e.preventDefault();
     const slug = row.dataset.slug;
@@ -399,17 +510,19 @@ export function initPlayer(): void {
     e.preventDefault();
     const slug = btn.dataset.slug;
     if (!slug) return;
-    if (q && q.slug === slug) {
-      flashAdd(btn, "♪"); // it's already the show that's playing
-      return;
-    }
-    const added = enqueue({ slug, title: btn.dataset.title ?? slug, showName: btn.dataset.showname || null });
-    flashAdd(btn, "✓");
-    if (added) bumpBadge();
-    showBar(); // surface the bar so the queue is reachable even with nothing playing
-    if (!q) {
-      nowEl.textContent = "Fronta";
-      titleLink.textContent = "";
+    const meta = { showTitle: btn.dataset.title ?? slug, showName: btn.dataset.showname || null };
+    if (btn.dataset.idx != null) {
+      // Single díl — all data is on the button, no fetch.
+      const added = enqueuePart(slug, meta, {
+        idx: btn.dataset.idx,
+        title: btn.dataset.parttitle ?? `${btn.dataset.idx}. díl`,
+      });
+      flashAdd(btn, added ? "✓" : "•"); // ✓ only when newly added; • = already queued
+      if (added) bumpBadge();
+      surfaceBarForQueue();
+    } else {
+      // "Add all" — fetch the show and queue every streamable díl.
+      void addAllToQueue(btn, slug, meta);
     }
   });
 
@@ -431,14 +544,21 @@ export function initPlayer(): void {
     const row = t.closest<HTMLElement>(".qrow[data-slug]");
     if (!row) return;
     const slug = row.dataset.slug!;
-    const act = t.closest<HTMLElement>("[data-act]")?.dataset.act;
+    const actEl = t.closest<HTMLElement>("[data-act]");
+    const act = actEl?.dataset.act;
     if (act === "up") move(slug, -1);
     else if (act === "down") move(slug, 1);
-    else if (act === "remove") removeSlug(slug);
+    else if (act === "remove-show") removeShow(slug);
+    else if (act === "remove-part") removePart(slug, actEl!.dataset.idx!);
     else if (t.closest(".qrow__play")) {
-      removeSlug(slug); // remove first (sync), it becomes the current show
-      void playFromSlug(slug, "");
-      closeQueuePanel(false);
+      // Play this show's queued díly now, and drop the whole entry from the Fronta
+      // so its part rows don't linger and fight the player.
+      const item = getQueue().find((x) => x.slug === slug);
+      if (item) {
+        removeShow(slug);
+        void playQueueEntry(item);
+        closeQueuePanel(false);
+      }
     }
   });
 
