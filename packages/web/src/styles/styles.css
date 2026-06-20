@@ -287,6 +287,11 @@ button:active,
 
 /* ===== show detail ===== */
 .show-detail { display: grid; grid-template-columns: 320px 1fr; gap: 2rem; align-items: start; }
+/* Grid items default to min-width:auto, so a nowrap title (incl. the single-part
+   row + its marquee) would force this column to the title's full width and spill
+   the page sideways on mobile. min-width:0 lets it shrink so overflow:hidden /
+   the marquee can clip and scroll the title instead. */
+.show-detail__body { min-width: 0; }
 .show-detail__art { border: var(--border); box-shadow: 7px 7px 0 var(--cyan); width: 100%; }
 .show-detail__programme {
   display: inline-block;
