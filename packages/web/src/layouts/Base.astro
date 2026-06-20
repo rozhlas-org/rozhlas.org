@@ -48,8 +48,18 @@ import "../styles/styles.css";
       </div>
       <input id="player-seek" class="player-bar__seek" type="range" min="0" max="1000" value="0" aria-label="Pozice ve stopě" />
       <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
+      <button
+        id="player-queue-toggle"
+        class="player-bar__btn player-bar__queue"
+        type="button"
+        aria-label="Fronta"
+        aria-expanded="false"
+        aria-controls="player-queue"
+      >☰<span id="player-queue-badge" class="player-bar__badge" hidden>0</span></button>
       <button id="player-close" class="player-bar__btn player-bar__close" type="button" aria-label="Zavřít přehrávač">✕</button>
       <audio id="player-audio" preload="none"></audio>
+      <!-- Queue panel ("Fronta"), rendered by scripts/player.ts; lives in the shell so navigation can't destroy it. -->
+      <div id="player-queue" class="queue-panel" hidden role="region" aria-label="Fronta"></div>
     </div>
 
     <script>
