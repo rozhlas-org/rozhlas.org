@@ -445,15 +445,23 @@ button:active,
   bottom: 0;
   z-index: 50;
   display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 20px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 20px;
   background: var(--key);
   color: var(--paper);
   border-top: var(--border);
   box-shadow: 0 -6px 0 var(--cyan);
 }
 .player-bar[hidden] { display: none; }
+.player-bar__row { display: flex; align-items: center; gap: 12px; }
+/* Row 1: now-playing block grows full-width; close pinned right. */
+.player-bar__row--meta { gap: 12px; }
+.player-bar__row--meta .player-bar__meta { flex: 1; min-width: 0; max-width: none; }
+.player-bar__row--meta .player-bar__close { margin-left: auto; }
+/* Row 2: keep prev/play/next as a tight transport group. */
+.player-bar__row--controls .player-bar__nav,
+.player-bar__row--controls .player-bar__toggle { flex: none; }
 .player-bar__btn {
   flex: none;
   width: 44px;
@@ -499,7 +507,7 @@ button:active,
 .player-bar__title:hover { color: var(--cyan); }
 .player-bar__seek { flex: 1; min-width: 80px; height: 6px; cursor: pointer; accent-color: var(--cyan); }
 .player-bar__time { flex: none; font-family: var(--font-mono); font-size: 13px; color: var(--paper); white-space: nowrap; }
-body.has-player { padding-bottom: 92px; }
+body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
 
 /* ===== queue ("Fronta") ===== */
 .player-bar__queue { position: relative; font-size: 18px; }
@@ -789,23 +797,20 @@ body.has-player { padding-bottom: 92px; }
 }
 
 @media (max-width: 640px) {
-  /* Two rows: full-width timeline on top, controls below. Wrapping lets the
-     seek bar own a whole line so it's a real touch target, and keeps the
-     fixed-width play button + the duration from fighting the title for space. */
-  .player-bar { flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px; }
-  .player-bar__nav { display: none; } /* drop prev/next on small screens */
+  .player-bar { padding: 10px 14px; }
+  /* The controls row wraps so the seek bar can own a full-width line above the
+     transport buttons — a real touch target — with prev/play/next/time/queue
+     below it. prev/next stay visible (they're the only manual cross-show move). */
+  .player-bar__row--controls { flex-wrap: wrap; gap: 8px 10px; }
   .player-bar__seek {
-    order: -1; /* render above the control row */
+    order: -1; /* render above the button row */
     flex: 1 0 100%;
     width: 100%;
     min-width: 0;
     height: 22px; /* taller = easier to drag with a thumb */
   }
-  /* flex-basis 0 so the nowrap title doesn't inflate this box and shove the
-     time onto its own line — it grows to fill the row and ellipsizes instead. */
-  .player-bar__meta { flex: 1 1 0; min-width: 0; max-width: none; }
-  .player-bar__time { display: block; flex: none; font-size: 12px; } /* keep the length on screen */
-  body.has-player { padding-bottom: 104px; } /* bar is two rows tall now */
+  .player-bar__time { flex: 1; font-size: 12px; } /* fill the gap between transport and queue */
+  body.has-player { padding-bottom: 150px; } /* two rows + wrapped seek line */
 }
 
 /* ===== omnisearch ===== */
