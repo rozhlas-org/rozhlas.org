@@ -71,7 +71,13 @@ function showCard(s: ShowListItem): string {
   // false for them — count streamable parts to decide playability + the label.
   const n = (s.streamablePartCount ?? 0) || (s.streamable ? 1 : 0);
   const playable = n > 0;
-  const badge = playable ? `<span class="show-card__badge">▶</span>` : "";
+  // The blue ▶ badge plays the show immediately (player.ts intercepts the click
+  // before the card link navigates). role/tabindex make it keyboard-operable; it
+  // stays a <span> because it lives inside the card's <a> (a <button> there is
+  // invalid HTML and gets reparented by the browser).
+  const badge = playable
+    ? `<span class="show-card__badge" role="button" tabindex="0" data-slug="${attr(s.slug)}" aria-label="Přehrát pořad">▶</span>`
+    : "";
   const lbl = queueAddLabel(n, { compact: true });
   const add = playable
     ? queueAddBtn(s.slug, s.title, s.showName, {

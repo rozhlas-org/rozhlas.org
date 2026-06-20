@@ -216,7 +216,12 @@ button:active,
   place-items: center;
   font-size: 1rem;
   line-height: 1;
+  cursor: pointer;
+  z-index: 2; /* above the card link so the badge takes the click */
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
+.show-card__badge:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--key); }
+.show-card__badge:focus-visible { outline: 3px solid var(--key); outline-offset: 2px; }
 .show-card__title {
   font-size: 22px;
   line-height: 1;

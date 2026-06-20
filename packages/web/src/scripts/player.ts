@@ -534,6 +534,33 @@ export function initPlayer(): void {
   prevBtn.addEventListener("click", prev);
   nextBtn.addEventListener("click", next);
 
+  // Blue ▶ badge on a card thumbnail → play the show now instead of opening its
+  // detail. Capture phase so we preventDefault BEFORE the SPA router's bubble-phase
+  // link handler runs (it bails on e.defaultPrevented), so the card <a> never
+  // navigates. Enter/Space on the focused badge does the same.
+  const playBadge = (badge: HTMLElement) => {
+    const slug = badge.dataset.slug;
+    if (slug) void playFromSlug(slug, ""); // no idx match → starts at the first streamable díl
+  };
+  document.addEventListener(
+    "click",
+    (e) => {
+      const badge = (e.target as HTMLElement).closest<HTMLElement>(".show-card__badge");
+      if (!badge) return;
+      e.preventDefault();
+      e.stopPropagation();
+      playBadge(badge);
+    },
+    true,
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const badge = (e.target as HTMLElement).closest<HTMLElement>(".show-card__badge");
+    if (!badge) return;
+    e.preventDefault();
+    playBadge(badge);
+  });
+
   // Delegated: a click anywhere on a playable row (button, title, duration…)
   // plays that díl. Covers re-rendered rows since it's bound to document.
   document.addEventListener("click", (e) => {
