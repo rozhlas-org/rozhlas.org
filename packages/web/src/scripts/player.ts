@@ -357,6 +357,7 @@ function renderQueueGroup(it: QueueItem, i: number, total: number): string {
       .map(
         (p) =>
           `<li class="qpart" data-idx="${attr(String(p.idx))}">` +
+          `<span class="qpart__idx">${esc(String(p.idx))}.</span>` +
           `<span class="qpart__title">${esc(p.title)}</span>` +
           `<button class="qpart__remove" data-act="remove-part" data-idx="${attr(String(p.idx))}" type="button" aria-label="Odebrat díl z fronty">✕</button>` +
           `</li>`,
@@ -387,7 +388,8 @@ function renderQueuePanel(): void {
       `</ol></div>`
     : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte celý pořad nebo jednotlivý díl tlačítkem ＋.</span></p>`;
   const clear = items.length ? `<button class="queue__clear" type="button">Vymazat frontu</button>` : "";
-  queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span>${clear}</div>${nowRow}${list}`;
+  const close = `<button class="queue__close" type="button" aria-label="Zavřít frontu" title="Zavřít frontu">⌄</button>`;
+  queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span><span class="queue__headactions">${clear}${close}</span></div>${nowRow}${list}`;
   // Marquee any title that overflows its row — show headings and díl rows alike.
   queuePanel
     .querySelectorAll<HTMLElement>(".qrow__title, .qpart__title")
@@ -546,6 +548,10 @@ export function initPlayer(): void {
     // detaches the target, which would otherwise read as an "outside" click.
     e.stopPropagation();
     const t = e.target as HTMLElement;
+    if (t.closest(".queue__close")) {
+      closeQueuePanel();
+      return;
+    }
     const clearBtn = t.closest<HTMLButtonElement>(".queue__clear");
     if (clearBtn) {
       if (clearBtn.dataset.confirm === "1") clearQueue();
