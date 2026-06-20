@@ -64,10 +64,6 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
       const limit = ctx.limit ?? 50_000; // effectively "all" (watchdog/budget still bound a run)
       // Combine explicitly-listed shows with any hub-enumerated ones (a hub source can
       // also pin specific umbrella shows the hub crawl doesn't reach), deduped by uuid.
-      const enumerated = cfg.hub ? await enumerateShows(ctx, cfg.hub) : [];
-      const byUuid = new Map<string, ApiShowRef>();
-      for (const s of [...(cfg.shows ?? []), ...enumerated]) byUuid.set(s.uuid, s);
-      const shows = [...byUuid.values()];
       const serials = new Map<string, SerialAcc>();
       const standalone: ScrapedShow[] = [];
       let fetched = 0;
@@ -75,8 +71,7 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
       const beat = () =>
         ctx.onProgress?.({ found: serials.size + standalone.length, fetched });
 
-      for (const show of shows) {
-        if (ctx.signal?.aborted) break;
+      const processShow = async (show: ApiShowRef): Promise<void> => {
         try {
           for await (const ep of iterateEpisodes(ctx, show.uuid, () => {
             fetched++;
@@ -128,10 +123,27 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
             }
           }
         } catch (err) {
-          if (ctx.signal?.aborted) break;
+          if (ctx.signal?.aborted) return;
           ctx.log.warn("episodes fetch failed", { show: show.uuid, err: String(err) });
         }
         ctx.log.info("show done", { show: show.name, serials: serials.size, episodes });
+      };
+
+      const seen = new Set<string>();
+      // Explicit shows first — the user's named programmes must land regardless of the
+      // slow, best-effort hub crawl that follows (which the watchdog may truncate).
+      for (const show of cfg.shows ?? []) {
+        if (ctx.signal?.aborted) break;
+        seen.add(show.uuid);
+        await processShow(show);
+      }
+      if (cfg.hub && !ctx.signal?.aborted) {
+        for (const show of await enumerateShows(ctx, cfg.hub)) {
+          if (ctx.signal?.aborted) break;
+          if (seen.has(show.uuid)) continue;
+          seen.add(show.uuid);
+          await processShow(show);
+        }
       }
 
       const out: ScrapedShow[] = [

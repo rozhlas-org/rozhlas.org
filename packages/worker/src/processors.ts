@@ -11,7 +11,7 @@ const log = createLogger("worker:pipeline");
 
 // Hard ceiling for a discover crawl; on timeout the crawler returns its partial
 // results so the job always completes (no more wedged, never-ending runs).
-const DISCOVER_HARD_MS = 10 * 60_000;
+const DISCOVER_HARD_MS = 20 * 60_000; // explicit shows land first; give the hub crawl more time
 
 /** discover → upsert shows + audio rows, enqueue acquire for anything not yet pinned. */
 async function discover(job: Job<JobData["discover"]>) {
