@@ -659,6 +659,32 @@ body.has-player { padding-bottom: 92px; }
 }
 .queue-add--detail:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--cyan); }
 
+/* marquee: long titles scroll right-to-left in a seamless loop (player.ts measures
+   overflow and adds .marquee--on with a width-proportional --marquee-dur) */
+.marquee { overflow: hidden; white-space: nowrap; }
+.marquee__inner {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.marquee--on .marquee__inner {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  animation: marquee var(--marquee-dur, 12s) linear infinite;
+}
+.marquee__seg { display: inline-block; padding-right: 2.5rem; }
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee--on .marquee__inner { animation: none; }
+}
+
 @media (max-width: 640px) {
   /* Two rows: full-width timeline on top, controls below. Wrapping lets the
      seek bar own a whole line so it's a real touch target, and keeps the
