@@ -645,6 +645,20 @@ body.has-player { padding-bottom: 92px; }
 .queue-add:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--cyan); }
 .queue-add--done { background: var(--cyan); color: var(--key); }
 .show-card__add { position: absolute; top: 8px; right: 8px; z-index: 2; }
+/* Multi-part shows show a text pill ("Vše do fronty (N)") instead of the icon. */
+.show-card__add--multi {
+  width: auto;
+  height: auto;
+  padding: 5px 9px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  max-width: calc(100% - 16px);
+  white-space: nowrap;
+}
 .queue-add--detail {
   width: auto;
   height: auto;
