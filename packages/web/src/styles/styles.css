@@ -455,10 +455,9 @@ button:active,
 }
 .player-bar[hidden] { display: none; }
 .player-bar__row { display: flex; align-items: center; gap: 12px; }
-/* Row 1: now-playing block grows full-width; close pinned right. */
+/* Row 1: now-playing block grows full-width. */
 .player-bar__row--meta { gap: 12px; }
 .player-bar__row--meta .player-bar__meta { flex: 1; min-width: 0; max-width: none; }
-.player-bar__row--meta .player-bar__close { margin-left: auto; }
 /* Row 2: keep prev/play/next as a tight transport group. */
 .player-bar__row--controls .player-bar__nav,
 .player-bar__row--controls .player-bar__toggle { flex: none; }
@@ -481,8 +480,10 @@ button:active,
 }
 .player-bar__btn:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--cyan); }
 .player-bar__nav { background: transparent; color: var(--paper); }
-.player-bar__nav:disabled { opacity: 0.35; cursor: default; transform: none; box-shadow: none; }
-.player-bar__close { width: 34px; background: transparent; color: var(--muted); border-color: transparent; }
+/* Disabled transport (no track / no queue): dim and inert, no hover lift. */
+.player-bar__btn:disabled { opacity: 0.35; cursor: default; }
+.player-bar__btn:disabled:hover { transform: none; box-shadow: none; }
+.player-bar__seek:disabled { opacity: 0.4; cursor: default; }
 .player-bar__meta { flex: none; min-width: 150px; max-width: 30vw; overflow: hidden; }
 .player-bar__now {
   font-family: var(--font-mono);
@@ -505,6 +506,7 @@ button:active,
   text-overflow: ellipsis;
 }
 .player-bar__title:hover { color: var(--cyan); }
+.player-bar__title--idle { color: var(--muted); pointer-events: none; }
 /* Tiny now-playing cover at the left of the meta row. */
 .player-bar__art {
   flex: none;
