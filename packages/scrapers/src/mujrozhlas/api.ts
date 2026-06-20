@@ -6,7 +6,7 @@ import type { ScrapeCtx } from "../types.ts";
 const API = "https://api.mujrozhlas.cz";
 const PAGE = 30;
 const ACCEPT = "application/vnd.api+json";
-const PER_FETCH_MS = 25_000;
+const PER_FETCH_MS = 10_000; // fail a hung fetch fast so the crawl keeps moving
 
 export interface ApiAudioLink {
   url?: string;
