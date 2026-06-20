@@ -14,6 +14,8 @@ export const QUEUE_NAMES = [
   "ipfs-add",
   "ipfs-verify",
   "index",
+  "transcribe",
+  "embed-transcript",
 ] as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[number];
@@ -35,6 +37,10 @@ export interface JobData {
   "ipfs-add": { audioFileId: number; tempPath: string };
   "ipfs-verify": { audioFileId: number };
   index: { showId: number };
+  // Transcribe a pinned audio file (faster-whisper) → store transcript + chunks.
+  transcribe: { audioFileId: number };
+  // Embed a transcript's chunks (Voyage) into the chunk vector store.
+  "embed-transcript": { transcriptId: number };
 }
 
 /** Sensible defaults: retry with backoff, keep history bounded for the dashboard. */

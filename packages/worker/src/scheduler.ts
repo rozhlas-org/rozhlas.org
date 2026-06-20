@@ -1,7 +1,8 @@
 import { createLogger } from "@rozhlas/core";
 import { getQueue } from "@rozhlas/jobs";
 import { listScrapers } from "@rozhlas/scrapers";
-import { enqueuePendingArtworks, upsertSource } from "./repo.ts";
+import { transcriptionEnabled } from "@rozhlas/media";
+import { enqueuePendingArtworks, enqueuePendingTranscripts, upsertSource } from "./repo.ts";
 
 const log = createLogger("worker:scheduler");
 
@@ -25,4 +26,12 @@ export async function setupSchedules() {
   // Backfill: queue a thumbnail pin for every cover not yet on IPFS.
   const pending = await enqueuePendingArtworks();
   if (pending) log.info("artwork backfill queued", { pending });
+
+  // Steady-state: queue transcription for any pinned audio without a transcript.
+  // Only when whisper is configured — otherwise we'd enqueue thousands of no-ops.
+  // (The historical backfill is meant for an off-box GPU/Groq batch, not this box.)
+  if (transcriptionEnabled()) {
+    const txPending = await enqueuePendingTranscripts();
+    if (txPending) log.info("transcription queued", { pending: txPending });
+  }
 }

@@ -14,6 +14,10 @@ const concurrency: Partial<Record<QueueName, number>> = {
   "acquire-audio": 6,
   "acquire-artwork": 4,
   "ipfs-add": 4,
+  // whisper already uses WHISPER_THREADS cores per job — run ONE at a time so
+  // transcription doesn't oversubscribe the CPU and starve the other services.
+  transcribe: 1,
+  "embed-transcript": 2,
 };
 
 // Long-running jobs need a longer lock than BullMQ's 30s default, or a busy event
