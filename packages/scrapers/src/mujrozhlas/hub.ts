@@ -33,10 +33,23 @@ function combinedSignal(ctx: ScrapeCtx): AbortSignal {
   return ctx.signal ? AbortSignal.any([ctx.signal, t]) : t;
 }
 
+/**
+ * Race a promise against a hard deadline. The AbortSignal on fetch() does NOT
+ * reliably abort a hung *body read* (res.text()/res.json()) in Bun, which can wedge
+ * the whole crawl — so we time the body read out explicitly.
+ */
+function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => rej(new Error("body read timeout")), ms);
+  });
+  return Promise.race([p.finally(() => clearTimeout(timer)), deadline]);
+}
+
 async function getText(ctx: ScrapeCtx, url: string): Promise<string> {
   const res = await ctx.fetch(url, { headers: { "user-agent": UA }, signal: combinedSignal(ctx) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.text();
+  return withDeadline(res.text(), PER_FETCH_MS);
 }
 
 /** Return the show title if `uuid` is a mujRozhlas show, else null. */
@@ -47,7 +60,7 @@ async function showTitle(ctx: ScrapeCtx, uuid: string): Promise<string | null> {
       signal: combinedSignal(ctx),
     });
     if (!res.ok) return null;
-    const j: any = await res.json();
+    const j: any = await withDeadline(res.json(), PER_FETCH_MS);
     return j?.data?.type === "show" ? (j.data.attributes?.title ?? uuid) : null;
   } catch {
     return null;
