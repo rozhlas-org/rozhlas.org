@@ -8,8 +8,9 @@
 // pick up — no extra wiring needed here.
 
 import { api } from "./api.ts";
-import { formatDuration } from "./format.ts";
+import { attr, esc, formatDuration } from "./format.ts";
 import { getProgress } from "./progress.ts";
+import { clearQueue, enqueue, getQueue, move, onQueueChange, removeSlug, shiftNext } from "./queue.ts";
 
 interface Track {
   idx: string | number;
@@ -73,7 +74,15 @@ let titleLink: HTMLAnchorElement;
 let nowEl: HTMLElement;
 let seek: HTMLInputElement;
 let timeEl: HTMLElement;
+let queueToggle: HTMLButtonElement;
+let queueBadge: HTMLElement;
+let queuePanel: HTMLElement;
 let seeking = false;
+
+function showBar(): void {
+  bar.hidden = false;
+  document.body.classList.add("has-player");
+}
 
 function clock(sec: number): string {
   return formatDuration(Math.max(0, Math.floor(sec || 0))) || "0:00";
@@ -84,24 +93,34 @@ function pkey(slug: string, idx: string | number): string {
 }
 
 /** Build a play queue from a show and start at the given díl id. */
-export async function playFromSlug(slug: string, idx: string | number): Promise<void> {
+export async function playFromSlug(slug: string, idx: string | number): Promise<boolean> {
   // Same track already loaded → just toggle.
   if (q && q.slug === slug && String(q.parts[q.index]?.idx) === String(idx)) {
     toggle();
-    return;
+    return true;
   }
   const show = await api.show(slug).catch(() => null);
-  if (!show) return;
+  if (!show) return false;
 
   const parts = buildParts(show);
-  if (!parts.length) return;
+  if (!parts.length) return false;
 
   let start = parts.findIndex((p) => String(p.idx) === String(idx));
   if (start < 0) start = 0;
   q = { slug, showTitle: show.title, programme: show.showName, parts, index: start };
   load(true);
-  bar.hidden = false;
-  document.body.classList.add("has-player");
+  showBar();
+  return true;
+}
+
+/** Play the next queued show, skipping any that can't be played. */
+async function advanceQueue(): Promise<void> {
+  let item = shiftNext();
+  while (item) {
+    if (await playFromSlug(item.slug, "")) return;
+    item = shiftNext(); // dead/unstreamable show — skip to the next
+  }
+  forgetNow(); // queue exhausted — nothing left to restore
 }
 
 /**
@@ -154,9 +173,14 @@ function load(autoplay: boolean): void {
     timeEl.textContent = `${clock(pos)} / ${clock(dur)}`;
   }
   syncNowPlaying();
+  if (queuePanelOpen()) renderQueuePanel(); // refresh the "Nyní hraje" row
 }
 
 function toggle(): void {
+  if (!q) {
+    void advanceQueue(); // nothing loaded but a queue exists → start it
+    return;
+  }
   if (audio.paused) audio.play().catch(() => {});
   else audio.pause();
 }
@@ -203,6 +227,88 @@ export function syncNowPlaying(): void {
   }
 }
 
+// ---- queue panel ("Fronta") ----
+
+function queuePanelOpen(): boolean {
+  return !!queuePanel && !queuePanel.hidden;
+}
+
+function renderQueueBadge(): void {
+  if (!queueBadge) return;
+  const n = getQueue().length;
+  queueBadge.textContent = String(n);
+  queueBadge.hidden = n === 0;
+}
+
+function bumpBadge(): void {
+  if (!queueBadge) return;
+  queueBadge.classList.remove("player-bar__badge--bump");
+  void queueBadge.offsetWidth; // reflow so the animation restarts
+  queueBadge.classList.add("player-bar__badge--bump");
+}
+
+function renderQueuePanel(): void {
+  if (!queuePanel) return;
+  const items = getQueue();
+  const nowRow = q
+    ? `<div class="queue__section"><div class="queue__label">Nyní hraje</div>` +
+      `<div class="qrow qrow--now"><span class="qrow__title">${esc(q.showTitle)}</span>` +
+      (q.parts.length > 1 ? `<span class="qrow__sub">díl ${q.index + 1}/${q.parts.length}</span>` : "") +
+      `</div></div>`
+    : "";
+  const list = items.length
+    ? `<div class="queue__section"><div class="queue__label">Další (${items.length})</div>` +
+      `<ol class="queue__list">` +
+      items
+        .map(
+          (it, i) =>
+            `<li class="qrow" data-slug="${attr(it.slug)}">` +
+            `<button class="qrow__play" type="button" title="Přehrát"><span class="qrow__title">${esc(it.title)}</span>` +
+            (it.showName ? `<span class="qrow__sub">${esc(it.showName)}</span>` : "") +
+            `</button>` +
+            `<span class="qrow__actions">` +
+            `<button class="qrow__btn" data-act="up" type="button" aria-label="Posunout nahoru"${i === 0 ? " disabled" : ""}>↑</button>` +
+            `<button class="qrow__btn" data-act="down" type="button" aria-label="Posunout dolů"${i === items.length - 1 ? " disabled" : ""}>↓</button>` +
+            `<button class="qrow__btn qrow__remove" data-act="remove" type="button" aria-label="Odebrat z fronty">✕</button>` +
+            `</span></li>`,
+        )
+        .join("") +
+      `</ol></div>`
+    : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte pořady tlačítkem ＋ na kartě.</span></p>`;
+  const clear = items.length ? `<button class="queue__clear" type="button">Vymazat frontu</button>` : "";
+  queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span>${clear}</div>${nowRow}${list}`;
+}
+
+function openQueuePanel(): void {
+  queuePanel.hidden = false;
+  queueToggle.setAttribute("aria-expanded", "true");
+  renderQueuePanel();
+  queuePanel.querySelector<HTMLElement>("button")?.focus();
+}
+
+function closeQueuePanel(returnFocus = true): void {
+  queuePanel.hidden = true;
+  queueToggle.setAttribute("aria-expanded", "false");
+  if (returnFocus) queueToggle.focus();
+}
+
+/** Re-render badge (always) + panel (if open) whenever the queue changes. */
+function onQueueChanged(): void {
+  renderQueueBadge();
+  if (queuePanelOpen()) renderQueuePanel();
+}
+
+/** Transient feedback on an add-to-queue button (cards re-render, so it self-resets). */
+function flashAdd(btn: HTMLButtonElement, mark: string): void {
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent ?? "";
+  btn.classList.add("queue-add--done");
+  btn.textContent = mark;
+  setTimeout(() => {
+    btn.classList.remove("queue-add--done");
+    btn.textContent = btn.dataset.label ?? "＋";
+  }, 1300);
+}
+
 /** Wire the shell player once at startup. */
 export function initPlayer(): void {
   bar = document.getElementById("player")!;
@@ -214,6 +320,9 @@ export function initPlayer(): void {
   nowEl = document.getElementById("player-now")!;
   seek = document.getElementById("player-seek") as HTMLInputElement;
   timeEl = document.getElementById("player-time")!;
+  queueToggle = document.getElementById("player-queue-toggle") as HTMLButtonElement;
+  queueBadge = document.getElementById("player-queue-badge")!;
+  queuePanel = document.getElementById("player-queue")!;
   if (!bar || !audio) return;
 
   toggleBtn.addEventListener("click", toggle);
@@ -238,6 +347,72 @@ export function initPlayer(): void {
     const idx = row.dataset.idx;
     if (slug && idx != null) void playFromSlug(slug, idx);
   });
+
+  // ---- queue ("Fronta") wiring ----
+  queueToggle.addEventListener("click", () => (queuePanelOpen() ? closeQueuePanel() : openQueuePanel()));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && queuePanelOpen()) closeQueuePanel();
+  });
+  // Close the panel on an outside click (but not on the toggle or inside it).
+  document.addEventListener("click", (e) => {
+    if (!queuePanelOpen()) return;
+    const t = e.target as Node;
+    if (queuePanel.contains(t) || queueToggle.contains(t)) return;
+    closeQueuePanel(false);
+  });
+
+  // "Add to queue" buttons on cards / detail (inside #app — delegated on document).
+  document.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".queue-add");
+    if (!btn) return;
+    e.preventDefault();
+    const slug = btn.dataset.slug;
+    if (!slug) return;
+    if (q && q.slug === slug) {
+      flashAdd(btn, "♪"); // it's already the show that's playing
+      return;
+    }
+    const added = enqueue({ slug, title: btn.dataset.title ?? slug, showName: btn.dataset.showname || null });
+    flashAdd(btn, "✓");
+    if (added) bumpBadge();
+    showBar(); // surface the bar so the queue is reachable even with nothing playing
+    if (!q) {
+      nowEl.textContent = "Fronta";
+      titleLink.textContent = "";
+    }
+  });
+
+  // Panel actions (play-now / reorder / remove / clear) — delegated on the panel.
+  queuePanel.addEventListener("click", (e) => {
+    // Keep the click off the document outside-close handler — a re-render here
+    // detaches the target, which would otherwise read as an "outside" click.
+    e.stopPropagation();
+    const t = e.target as HTMLElement;
+    const clearBtn = t.closest<HTMLButtonElement>(".queue__clear");
+    if (clearBtn) {
+      if (clearBtn.dataset.confirm === "1") clearQueue();
+      else {
+        clearBtn.dataset.confirm = "1"; // two-step confirm
+        clearBtn.textContent = "Opravdu vymazat?";
+      }
+      return;
+    }
+    const row = t.closest<HTMLElement>(".qrow[data-slug]");
+    if (!row) return;
+    const slug = row.dataset.slug!;
+    const act = t.closest<HTMLElement>("[data-act]")?.dataset.act;
+    if (act === "up") move(slug, -1);
+    else if (act === "down") move(slug, 1);
+    else if (act === "remove") removeSlug(slug);
+    else if (t.closest(".qrow__play")) {
+      removeSlug(slug); // remove first (sync), it becomes the current show
+      void playFromSlug(slug, "");
+      closeQueuePanel(false);
+    }
+  });
+
+  onQueueChange(onQueueChanged);
+  onQueueChanged(); // initial badge from any persisted queue
 
   // Seek bar (0..1000 fraction of duration). Commit the seek ONCE, on release.
   // A type=range fires `input` continuously while dragging; writing currentTime on
@@ -320,7 +495,7 @@ export function initPlayer(): void {
         q.index++;
         load(true);
       } else {
-        forgetNow(); // finished the last díl — nothing to restore
+        void advanceQueue(); // last díl done → play the next queued show (or stop)
       }
     }
   });
