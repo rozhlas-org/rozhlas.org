@@ -1,5 +1,6 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import { db, schema, showSlug, slugify } from "@rozhlas/core";
+import { enqueue } from "@rozhlas/jobs";
 import type { ScrapedShow, ScrapedPart } from "@rozhlas/scrapers";
 
 const { shows, showParts, audioFiles, people, showPeople, categories, showCategories, artworks, sources, scrapeRuns } =
@@ -140,17 +141,62 @@ async function attachCategories(showId: number, list: string[]) {
   }
 }
 
+// Dedup an artwork pin while it's pending/active; remove on completion so a
+// later source change can re-pin (otherwise the completed job would block it).
+const artworkJobOpts = (id: number) => ({ jobId: `art-${id}`, removeOnComplete: true });
+
 async function upsertArtwork(showId: number, sourceUrl: string) {
   const existing = await db
-    .select({ id: artworks.id })
+    .select({ id: artworks.id, sourceUrl: artworks.sourceUrl, ipfsCid: artworks.ipfsCid })
     .from(artworks)
     .where(and(eq(artworks.showId, showId), eq(artworks.role, "cover")))
     .limit(1);
+
+  let artworkId: number;
+  let needsPin: boolean;
   if (existing.length) {
-    await db.update(artworks).set({ sourceUrl }).where(eq(artworks.id, existing[0]!.id));
+    const prev = existing[0]!;
+    artworkId = prev.id;
+    if (prev.sourceUrl !== sourceUrl) {
+      // Source image changed → the pinned thumbnail is stale; reset and re-pin.
+      await db
+        .update(artworks)
+        .set({ sourceUrl, ipfsCid: null, width: null, height: null })
+        .where(eq(artworks.id, artworkId));
+      needsPin = true;
+    } else {
+      needsPin = !prev.ipfsCid;
+    }
   } else {
-    await db.insert(artworks).values({ showId, sourceUrl, role: "cover" });
+    const [row] = await db
+      .insert(artworks)
+      .values({ showId, sourceUrl, role: "cover" })
+      .returning({ id: artworks.id });
+    artworkId = row!.id;
+    needsPin = true;
   }
+  if (needsPin) await enqueue("acquire-artwork", { artworkId }, artworkJobOpts(artworkId));
+}
+
+export async function getArtwork(id: number) {
+  const [row] = await db.select().from(artworks).where(eq(artworks.id, id)).limit(1);
+  return row;
+}
+
+export async function setArtworkCid(id: number, ipfsCid: string, width: number, height: number) {
+  await db.update(artworks).set({ ipfsCid, width, height }).where(eq(artworks.id, id));
+}
+
+/** Queue a pin for every cover that has a source but no CID yet (backfill + self-heal). */
+export async function enqueuePendingArtworks(): Promise<number> {
+  const rows = await db
+    .select({ id: artworks.id })
+    .from(artworks)
+    .where(and(isNull(artworks.ipfsCid), isNotNull(artworks.sourceUrl)));
+  for (const r of rows) {
+    await enqueue("acquire-artwork", { artworkId: r.id }, artworkJobOpts(r.id));
+  }
+  return rows.length;
 }
 
 export interface AudioUpsertResult {

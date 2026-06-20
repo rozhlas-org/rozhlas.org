@@ -2,7 +2,7 @@ import type { Job } from "bullmq";
 import { createLogger } from "@rozhlas/core";
 import { enqueue, type JobData, type QueueName } from "@rozhlas/jobs";
 import { getScraper, createScrapeCtx } from "@rozhlas/scrapers";
-import { acquireAudio, discardTemp } from "@rozhlas/media";
+import { acquireAudio, discardTemp, makeThumbnail } from "@rozhlas/media";
 import { ipfs } from "@rozhlas/ipfs";
 import { getProvider, embedShows } from "@rozhlas/embeddings";
 import * as repo from "./repo.ts";
@@ -137,6 +137,35 @@ async function ipfsAdd(job: Job<JobData["ipfs-add"]>) {
   return { cid };
 }
 
+// Cover images are full-resolution originals (often 1–5 MB) but only ever shown
+// as thumbnails. Fetch, resize to a small WebP, pin, and store the CID so the
+// site serves a ~30 KB file from our gateway instead of a multi-MB original.
+const ARTWORK_HARD_MS = 60_000;
+
+/** acquire-artwork → resize a show's cover to a small WebP, pin to IPFS, store CID. */
+async function acquireArtwork(job: Job<JobData["acquire-artwork"]>) {
+  const { artworkId } = job.data;
+  const art = await repo.getArtwork(artworkId);
+  if (!art?.sourceUrl) return { skipped: "no-source" };
+  if (art.ipfsCid) return { skipped: "already-pinned" };
+
+  const ac = new AbortController();
+  const watchdog = setTimeout(() => ac.abort(), ARTWORK_HARD_MS);
+  try {
+    const thumb = await makeThumbnail(art.sourceUrl, `art${artworkId}`, { signal: ac.signal });
+    try {
+      const { cid } = await ipfs.addFile(thumb.path);
+      await repo.setArtworkCid(artworkId, cid, thumb.width, thumb.height);
+      log.info("artwork pinned", { artworkId, cid, bytes: thumb.sizeBytes });
+      return { cid, bytes: thumb.sizeBytes };
+    } finally {
+      await discardTemp(thumb.path); // never keep image files on disk (same rule as audio)
+    }
+  } finally {
+    clearTimeout(watchdog);
+  }
+}
+
 /** ipfs-verify → confirm the CID streams through the gateway (range request). */
 async function ipfsVerify(job: Job<JobData["ipfs-verify"]>) {
   const { audioFileId } = job.data;
@@ -173,6 +202,7 @@ export async function buildProcessors(): Promise<
   return {
     discover,
     "acquire-audio": acquire,
+    "acquire-artwork": acquireArtwork,
     "ipfs-add": ipfsAdd,
     "ipfs-verify": ipfsVerify,
     index,

@@ -1,7 +1,7 @@
 import { createLogger } from "@rozhlas/core";
 import { getQueue } from "@rozhlas/jobs";
 import { listScrapers } from "@rozhlas/scrapers";
-import { upsertSource } from "./repo.ts";
+import { enqueuePendingArtworks, upsertSource } from "./repo.ts";
 
 const log = createLogger("worker:scheduler");
 
@@ -22,4 +22,7 @@ export async function setupSchedules() {
       log.info("scheduled discover", { sourceKey: s.key, cron: s.schedule });
     }
   }
+  // Backfill: queue a thumbnail pin for every cover not yet on IPFS.
+  const pending = await enqueuePendingArtworks();
+  if (pending) log.info("artwork backfill queued", { pending });
 }
