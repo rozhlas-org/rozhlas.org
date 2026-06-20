@@ -58,3 +58,40 @@ export function knnShows(query: Float32Array, k: number): KnnHit[] {
     .all(query, k) as { showId: number; distance: number }[];
   return rows.map((r) => ({ showId: r.showId, distance: r.distance }));
 }
+
+/* ===== transcript chunk vectors (vec_chunks, rowid == transcript_chunks.id) ===== */
+
+export function ensureChunkVecTable(dims: number): void {
+  if (!vecEnabled) throw new Error("sqlite-vec extension not loaded");
+  sqlite.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(embedding float[${dims}]);`,
+  );
+}
+
+export function resetChunkVecTable(dims: number): void {
+  if (!vecEnabled) throw new Error("sqlite-vec extension not loaded");
+  sqlite.exec("DROP TABLE IF EXISTS vec_chunks;");
+  ensureChunkVecTable(dims);
+}
+
+/** Insert/replace one chunk's embedding (delete-then-insert; vec0 has no upsert). */
+export function upsertChunkEmbedding(chunkId: number, embedding: Float32Array): void {
+  sqlite.prepare("DELETE FROM vec_chunks WHERE rowid = ?").run(chunkId);
+  sqlite.prepare("INSERT INTO vec_chunks(rowid, embedding) VALUES (?, ?)").run(chunkId, embedding);
+}
+
+export interface ChunkKnnHit {
+  chunkId: number;
+  distance: number;
+}
+
+/** k-nearest transcript chunks to a query vector. */
+export function knnChunks(query: Float32Array, k: number): ChunkKnnHit[] {
+  if (!vecEnabled) return [];
+  const rows = sqlite
+    .prepare(
+      "SELECT rowid AS chunkId, distance FROM vec_chunks WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
+    )
+    .all(query, k) as { chunkId: number; distance: number }[];
+  return rows.map((r) => ({ chunkId: r.chunkId, distance: r.distance }));
+}

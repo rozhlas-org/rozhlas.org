@@ -12,6 +12,7 @@ import {
   programmesView,
   searchView,
   showView,
+  transcriptSearchView,
   type ViewResult,
 } from "./views.ts";
 import { wireAudioProgress } from "./progress.ts";
@@ -35,6 +36,7 @@ async function resolve(): Promise<ViewResult> {
   if (path === "/") return browseView(params);
   if (path === "/search") return searchView(params);
   if (path === "/omnisearch") return omnisearchView(params);
+  if (path === "/transcripts") return transcriptSearchView(params);
   if (path === "/programmes") return programmesView();
   if (path === "/historie") return historyView(params);
 

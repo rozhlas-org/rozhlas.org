@@ -3,8 +3,20 @@ import { db, schema, showSlug, slugify } from "@rozhlas/core";
 import { enqueue } from "@rozhlas/jobs";
 import type { ScrapedShow, ScrapedPart } from "@rozhlas/scrapers";
 
-const { shows, showParts, audioFiles, people, showPeople, categories, showCategories, artworks, sources, scrapeRuns } =
-  schema;
+const {
+  shows,
+  showParts,
+  audioFiles,
+  people,
+  showPeople,
+  categories,
+  showCategories,
+  artworks,
+  sources,
+  scrapeRuns,
+  transcripts,
+  transcriptChunks,
+} = schema;
 
 export async function upsertSource(key: string, title: string, schedule?: string) {
   await db
@@ -296,4 +308,65 @@ export async function setAudioCid(audioFileId: number, ipfsCid: string, sizeByte
 
 export async function setAudioStreamable(audioFileId: number, streamable: boolean) {
   await db.update(audioFiles).set({ streamable }).where(eq(audioFiles.id, audioFileId));
+}
+
+/* ===== transcripts ===== */
+
+export async function transcriptExists(audioFileId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ id: transcripts.id })
+    .from(transcripts)
+    .where(eq(transcripts.audioFileId, audioFileId))
+    .limit(1);
+  return !!row;
+}
+
+/** Insert a transcript and its chunks atomically; returns the new transcript id. */
+export function saveTranscript(
+  audioFileId: number,
+  showId: number,
+  data: {
+    lang: string | null;
+    model: string;
+    text: string;
+    segmentsJson: string;
+    durationSec: number;
+    chunks: { idx: number; startSec: number; endSec: number; text: string }[];
+  },
+): number {
+  return db.transaction((tx) => {
+    const [row] = tx
+      .insert(transcripts)
+      .values({
+        audioFileId,
+        showId,
+        lang: data.lang,
+        model: data.model,
+        text: data.text,
+        segmentsJson: data.segmentsJson,
+        durationSec: data.durationSec,
+      })
+      .returning({ id: transcripts.id })
+      .all();
+    const transcriptId = row!.id;
+    for (const c of data.chunks) {
+      tx.insert(transcriptChunks)
+        .values({ transcriptId, showId, idx: c.idx, startSec: c.startSec, endSec: c.endSec, text: c.text })
+        .run();
+    }
+    return transcriptId;
+  });
+}
+
+/** Queue transcription for every pinned, streamable audio that has no transcript yet. */
+export async function enqueuePendingTranscripts(): Promise<number> {
+  const rows = await db
+    .select({ id: audioFiles.id })
+    .from(audioFiles)
+    .leftJoin(transcripts, eq(transcripts.audioFileId, audioFiles.id))
+    .where(and(isNotNull(audioFiles.ipfsCid), eq(audioFiles.streamable, true), isNull(transcripts.id)));
+  for (const r of rows) {
+    await enqueue("transcribe", { audioFileId: r.id }, { jobId: `tx-${r.id}`, removeOnComplete: true });
+  }
+  return rows.length;
 }

@@ -81,6 +81,18 @@ export interface OmniResult {
   ftsHits: number;
 }
 
+export interface TranscriptHit {
+  startSec: number;
+  endSec: number;
+  snippet: string;
+  partIdx: number | null; // which díl (null = single-audio show)
+}
+export interface TranscriptSearchResult {
+  items: { show: ShowListItem; hits: TranscriptHit[] }[];
+  vectorHits: number;
+  ftsHits: number;
+}
+
 async function getJSON<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
   const url = new URL(API_BASE + path);
   if (params) {
@@ -110,6 +122,8 @@ export const api = {
   search: (q: string, page?: number) =>
     getJSON<{ query: string } & ListResult>("/api/search", { q, page }),
   omnisearch: (q: string) => getJSON<OmniResult>("/api/omnisearch", { q }),
+  transcriptSearch: (q: string, programme?: string) =>
+    getJSON<TranscriptSearchResult>("/api/transcript-search", { q, programme }),
   programmes: () => getJSON<Programme[]>("/api/programmes"),
   recordPlay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/play`),
   recordDisplay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/display`),
