@@ -14,6 +14,8 @@ export interface ShowListItem {
   durationSec: number | null;
   artworkUrl: string | null;
   streamable: boolean;
+  /** Count of parts (díly) with streamable audio; 0 for single-audio shows. */
+  streamablePartCount: number;
   streamUrl: string | null;
   plays: number;
   displays: number;
@@ -116,6 +118,7 @@ export const api = {
   shows: (p: { q?: string; programme?: string; source?: string; sort?: SortKey; page?: number }) =>
     getJSON<ListResult>("/api/shows", p),
   show: (slug: string) => getJSON<ShowDetail>(`/api/shows/${encodeURIComponent(slug)}`),
+  similar: (slug: string) => getJSON<ShowListItem[]>(`/api/shows/${encodeURIComponent(slug)}/similar`),
   search: (q: string, page?: number) =>
     getJSON<{ query: string } & ListResult>("/api/search", { q, page }),
   omnisearch: (q: string) => getJSON<OmniResult>("/api/omnisearch", { q }),

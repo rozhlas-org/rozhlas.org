@@ -5,30 +5,88 @@
 import { api, type ListResult, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
+import { getHistory, logView, type HistoryEntry } from "./history.ts";
 
 export interface ViewResult {
   title: string;
   html: string;
 }
 
-/** Add-to-queue button → player.ts enqueues from the data attributes (no fetch). */
+/**
+ * Add-to-queue button. player.ts reads the data attributes:
+ *   - no `data-idx`  → "add all": fetch the show and queue every streamable díl.
+ *   - with `data-idx`→ add just that one díl (`data-parttitle` is its row label).
+ * `data-title`/`data-showname` carry the show meta for the queue entry.
+ */
 function queueAddBtn(
   slug: string,
   title: string,
   showName: string | null,
-  opts: { label?: string; cls?: string } = {},
+  opts: {
+    label?: string;
+    cls?: string;
+    title?: string;
+    idx?: string | number;
+    partTitle?: string;
+    artworkUrl?: string | null;
+  } = {},
 ): string {
+  const t = opts.title ?? "Přidat do fronty";
+  const idxAttr = opts.idx != null ? ` data-idx="${attr(String(opts.idx))}"` : "";
+  const ptAttr = opts.partTitle != null ? ` data-parttitle="${attr(opts.partTitle)}"` : "";
+  // Carried into the queue entry so the Fronta row can show a cover thumbnail.
+  const artAttr = opts.artworkUrl ? ` data-artwork="${attr(opts.artworkUrl)}"` : "";
   return `<button class="queue-add${opts.cls ? ` ${opts.cls}` : ""}" type="button"
-    data-slug="${attr(slug)}" data-title="${attr(title)}" data-showname="${attr(showName ?? "")}"
-    aria-label="Přidat do fronty" title="Přidat do fronty">${opts.label ?? "＋"}</button>`;
+    data-slug="${attr(slug)}" data-title="${attr(title)}" data-showname="${attr(showName ?? "")}"${idxAttr}${ptAttr}${artAttr}
+    aria-label="${attr(t)}" title="${attr(t)}">${opts.label ?? "＋"}</button>`;
+}
+
+/** cs-CZ plural of "díl" (part): 1 díl · 2–4 díly · 0/5+ dílů. */
+function dilWord(n: number): string {
+  if (n === 1) return "díl";
+  if (n >= 2 && n <= 4) return "díly";
+  return "dílů";
+}
+
+/**
+ * Queue-add button text + tooltip for a show with `n` streamable parts. Adding a
+ * show queues all its parts (the player auto-advances through them), so multi-part
+ * shows advertise the count. `compact` = the card pill ("Vše do fronty (N)");
+ * otherwise the longer detail label ("Přidat do fronty (N dílů)"). The
+ * parenthesized count sidesteps Czech case agreement (no "všech N dílů").
+ */
+function queueAddLabel(n: number, opts: { compact?: boolean } = {}): { label: string; title: string } {
+  if (n > 1) {
+    const title = `Přidat do fronty (${n} ${dilWord(n)})`;
+    return { label: opts.compact ? `＋ Vše do fronty (${n})` : `＋ ${title}`, title };
+  }
+  return { label: opts.compact ? "＋" : "＋ Přidat do fronty", title: "Přidat do fronty" };
 }
 
 function showCard(s: ShowListItem): string {
   const art = s.artworkUrl
     ? `<img src="${attr(s.artworkUrl)}" alt="" loading="lazy" />`
     : `<div class="show-card__art--placeholder" aria-hidden="true"></div>`;
-  const badge = s.streamable ? `<span class="show-card__badge">▶</span>` : "";
-  const add = s.streamable ? queueAddBtn(s.slug, s.title, s.showName, { cls: "show-card__add" }) : "";
+  // Multi-part shows keep audio on their parts, so show-level `streamable` is
+  // false for them — count streamable parts to decide playability + the label.
+  const n = (s.streamablePartCount ?? 0) || (s.streamable ? 1 : 0);
+  const playable = n > 0;
+  // The blue ▶ badge plays the show immediately (player.ts intercepts the click
+  // before the card link navigates). role/tabindex make it keyboard-operable; it
+  // stays a <span> because it lives inside the card's <a> (a <button> there is
+  // invalid HTML and gets reparented by the browser).
+  const badge = playable
+    ? `<span class="show-card__badge" role="button" tabindex="0" data-slug="${attr(s.slug)}" aria-label="Přehrát pořad">▶</span>`
+    : "";
+  const lbl = queueAddLabel(n, { compact: true });
+  const add = playable
+    ? queueAddBtn(s.slug, s.title, s.showName, {
+        cls: `show-card__add${n > 1 ? " show-card__add--multi" : ""}`,
+        label: lbl.label,
+        title: lbl.title,
+        artworkUrl: s.artworkUrl,
+      })
+    : "";
   const programme = s.showName
     ? `<a class="show-card__programme" href="/programme/${encodeURIComponent(s.showName)}">${esc(s.showName)}</a>`
     : "";
@@ -212,6 +270,107 @@ export async function programmesView(): Promise<ViewResult> {
   };
 }
 
+// ---- Historie (local view/listen log) ----
+
+const DAY = 86_400_000;
+
+function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function dayKey(at: number): string {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dayHeading(at: number): string {
+  const k = dayKey(at);
+  if (k === dayKey(Date.now())) return "Dnes";
+  if (k === dayKey(Date.now() - DAY)) return "Včera";
+  return new Date(at).toLocaleDateString("cs-CZ", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function clockTime(at: number): string {
+  return new Date(at).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Filter chip as an <a> that sets one param and preserves the others. */
+function histChip(label: string, key: string, val: string | null, current: string | null, params: URLSearchParams): string {
+  const p = new URLSearchParams(params);
+  if (val === null) p.delete(key);
+  else p.set(key, val);
+  const qs = p.toString();
+  const active = (current ?? null) === val ? " is-active" : "";
+  return `<a class="hist-chip${active}" href="/historie${qs ? `?${qs}` : ""}">${esc(label)}</a>`;
+}
+
+function historyRow(e: HistoryEntry): string {
+  const badge =
+    e.type === "listen"
+      ? `<span class="hist__type hist__type--listen" title="Poslechnuto" aria-label="Poslechnuto">▶</span>`
+      : `<span class="hist__type hist__type--view" title="Zobrazeno" aria-label="Zobrazeno">👁</span>`;
+  const subParts = [e.showName, e.type === "listen" ? e.partTitle : null].filter(Boolean) as string[];
+  const sub = subParts.length ? `<span class="hist__sub">${esc(subParts.join(" · "))}</span>` : "";
+  return (
+    `<li class="hist${e.type === "listen" ? " hist--listen" : ""}">` +
+    `<span class="hist__time">${esc(clockTime(e.at))}</span>${badge}` +
+    `<a class="hist__link" href="/show/${encodeURIComponent(e.slug)}">` +
+    `<span class="hist__title">${esc(e.title)}</span>${sub}</a></li>`
+  );
+}
+
+export async function historyView(params: URLSearchParams): Promise<ViewResult> {
+  const all = getHistory();
+  const type = params.get("type"); // "view" | "listen" | null(=vše)
+  const range = params.get("range"); // "today" | "7d" | null(=vše)
+  const since = range === "today" ? startOfToday() : range === "7d" ? Date.now() - 7 * DAY : 0;
+  const items = all.filter((e) => e.at >= since && (type === "view" || type === "listen" ? e.type === type : true));
+
+  const typeChips =
+    histChip("Vše", "type", null, type, params) +
+    histChip("Zobrazeno", "type", "view", type, params) +
+    histChip("Poslechnuto", "type", "listen", type, params);
+  const rangeChips =
+    histChip("Vše", "range", null, range, params) +
+    histChip("Dnes", "range", "today", range, params) +
+    histChip("7 dní", "range", "7d", range, params);
+
+  let list: string;
+  if (!all.length) {
+    list = `<p class="empty">Zatím žádná historie. Až si něco zobrazíte nebo pustíte, objeví se to tady. <a href="/">Procházet pořady →</a></p>`;
+  } else if (!items.length) {
+    list = `<p class="empty">Pro tento filtr nic není.</p>`;
+  } else {
+    let out = "";
+    let lastDay = "";
+    for (const e of items) {
+      const k = dayKey(e.at);
+      if (k !== lastDay) {
+        if (lastDay) out += `</ol>`;
+        out += `<h2 class="hist__day">${esc(dayHeading(e.at))}</h2><ol class="hist-list">`;
+        lastDay = k;
+      }
+      out += historyRow(e);
+    }
+    out += `</ol>`;
+    list = out;
+  }
+
+  const clear = all.length ? `<button class="history-clear" type="button">Vymazat historii</button>` : "";
+  return {
+    title: "Historie",
+    html:
+      `<section class="history">` +
+      `<div class="history__head"><h1>Historie</h1>${clear}</div>` +
+      `<div class="hist-filters"><span class="hist-filters__group">${typeChips}</span><span class="hist-filters__group">${rangeChips}</span></div>` +
+      list +
+      `<p class="history__privacy">Historie se ukládá jen ve vašem prohlížeči.</p>` +
+      `</section>`,
+  };
+}
+
 export async function omnisearchView(params: URLSearchParams): Promise<ViewResult> {
   const q = (params.get("q") ?? "").trim();
   const result = q ? await api.omnisearch(q) : null;
@@ -236,6 +395,7 @@ export async function showView(slug: string): Promise<ViewResult> {
     return { title: "Nenalezeno", html: `<section><h1>Pořad nenalezen</h1></section>` };
   }
   api.recordDisplay(slug); // count this detail view (fire-and-forget)
+  logView({ slug, title: show.title, showName: show.showName }); // local Historie (coalesced)
   const hasParts = show.parts.length > 0;
   const art = show.artworkUrl ? `<img class="show-detail__art" src="${attr(show.artworkUrl)}" alt="" />` : "";
   const programme = show.showName
@@ -275,7 +435,22 @@ export async function showView(slug: string): Promise<ViewResult> {
           : "";
         const cls = `part${played ? " part--played" : ""}${canPlay ? " part--playable" : ""}`;
         const data = canPlay ? ` data-slug="${attr(show.slug)}" data-idx="${attr(String(p.idx))}"` : "";
-        return `<li class="${cls}"${data}>${play}${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span>${dur}${resume}</li>`;
+        // Per-díl "add to queue" (trailing) — distinct from the row's ▶ play.
+        const addPart = canPlay
+          ? queueAddBtn(show.slug, show.title, show.showName, {
+              idx: p.idx,
+              partTitle: p.title ?? `${p.idx}. díl`,
+              title: "Přidat tento díl do fronty",
+              cls: "queue-add--part",
+              artworkUrl: show.artworkUrl,
+            })
+          : "";
+        // idx + title share one line; the title clips and marquee-scrolls if long
+        // (player.ts applies the scroll after render). dur/resume sit below. The
+        // played ✓ sits inline at the line start (not a corner box) so it never
+        // shifts the trailing ＋ — the row's cyan tint is the main "done" signal.
+        const line = `<span class="part__line">${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span></span>`;
+        return `<li class="${cls}"${data}>${play}${line}${dur}${resume}${addPart}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
@@ -300,16 +475,29 @@ export async function showView(slug: string): Promise<ViewResult> {
           <h1>${esc(show.title)}</h1>
           <p class="show-detail__meta">${meta}</p>
           ${statsLine(show.plays, show.displays)}
-          ${
-            show.parts.some((p) => p.audio?.streamable) || show.audio.some((a) => a.streamable)
-              ? queueAddBtn(show.slug, show.title, show.showName, { label: "＋ Přidat do fronty", cls: "queue-add--detail" })
-              : ""
-          }
+          ${(() => {
+            // Count streamable parts client-side from the loaded detail (no API
+            // dependency). Adding the show queues ALL parts — the label says so.
+            const nParts = show.parts.filter((p) => p.audio?.streamable).length;
+            const n = nParts || (show.audio.some((a) => a.streamable) ? 1 : 0);
+            if (n === 0) return "";
+            const lbl = queueAddLabel(n);
+            return queueAddBtn(show.slug, show.title, show.showName, {
+              label: lbl.label,
+              title: lbl.title,
+              cls: "queue-add--detail",
+              artworkUrl: show.artworkUrl,
+            });
+          })()}
           ${desc}
           ${people}
           ${audioBlock}
         </div>
-      </article>`,
+      </article>
+      <section class="similar" id="similar-mount" data-slug="${attr(show.slug)}" hidden>
+        <h2 class="similar__title">Podobné pořady</h2>
+        <div class="show-grid" id="similar-grid"></div>
+      </section>`,
   };
 }
 
@@ -360,4 +548,29 @@ export async function transcriptSearchView(params: URLSearchParams): Promise<Vie
         ${body}
       </section>`,
   };
+}
+
+/**
+ * Lazily fill the "Podobné pořady" rail below a show detail. Called after the
+ * router paints; fetches the cached /similar endpoint and reveals the section
+ * only if it returns something. Purely additive — any failure leaves the detail
+ * untouched. Guards against the user navigating away mid-fetch.
+ */
+export async function loadSimilar(): Promise<void> {
+  const mount = document.getElementById("similar-mount");
+  const slug = mount?.dataset.slug;
+  if (!mount || !slug) return;
+  let items: ShowListItem[] = [];
+  try {
+    items = await api.similar(slug);
+  } catch {
+    return; // additive — never break the detail view
+  }
+  // Bail if the view changed under us (different show, or navigated away).
+  const live = document.getElementById("similar-mount");
+  if (!live || live.dataset.slug !== slug || !items.length) return;
+  const grid = live.querySelector<HTMLElement>("#similar-grid");
+  if (!grid) return;
+  grid.innerHTML = items.map(showCard).join("");
+  live.hidden = false;
 }
