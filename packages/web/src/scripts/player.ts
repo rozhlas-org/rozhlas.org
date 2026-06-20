@@ -11,6 +11,7 @@ import { api } from "./api.ts";
 import { attr, esc, formatDuration } from "./format.ts";
 import { getProgress } from "./progress.ts";
 import { clearQueue, enqueue, getQueue, move, onQueueChange, removeSlug, shiftNext } from "./queue.ts";
+import { logListen } from "./history.ts";
 
 interface Track {
   idx: string | number;
@@ -78,6 +79,7 @@ let queueToggle: HTMLButtonElement;
 let queueBadge: HTMLElement;
 let queuePanel: HTMLElement;
 let seeking = false;
+let listenLogged = false; // Historie: whether the current track's listen is recorded
 
 function showBar(): void {
   bar.hidden = false;
@@ -176,6 +178,7 @@ async function restoreNowPlaying(): Promise<void> {
 function load(autoplay: boolean): void {
   if (!q) return;
   const t = q.parts[q.index]!;
+  listenLogged = false; // Historie: log this díl only after it actually plays ~6s
   audio.dataset.pkey = pkey(q.slug, t.idx); // progress.ts keys off this
   audio.src = t.streamUrl;
   audio.load();
@@ -511,6 +514,13 @@ export function initPlayer(): void {
     if (!seeking && audio.duration) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
     timeEl.textContent = `${clock(audio.currentTime)} / ${clock(audio.duration)}`;
     if (q) prevBtn.disabled = q.index === 0 && audio.currentTime < 3;
+    // Historie: count a listen once the track has actually played ~6s (skips
+    // scrubs/skips; restored-but-not-played tracks never reach this).
+    if (q && !listenLogged && audio.currentTime > 6) {
+      listenLogged = true;
+      const t = q.parts[q.index]!;
+      logListen({ slug: q.slug, title: q.showTitle, showName: q.programme, idx: t.idx, partTitle: t.title });
+    }
   });
   audio.addEventListener("play", () => {
     toggleBtn.textContent = "❚❚";

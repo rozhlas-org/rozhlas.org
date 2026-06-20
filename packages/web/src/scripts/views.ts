@@ -5,6 +5,7 @@
 import { api, type ListResult, type ShowListItem, type SortKey } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
+import { getHistory, logView, type HistoryEntry } from "./history.ts";
 
 export interface ViewResult {
   title: string;
@@ -212,6 +213,107 @@ export async function programmesView(): Promise<ViewResult> {
   };
 }
 
+// ---- Historie (local view/listen log) ----
+
+const DAY = 86_400_000;
+
+function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function dayKey(at: number): string {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dayHeading(at: number): string {
+  const k = dayKey(at);
+  if (k === dayKey(Date.now())) return "Dnes";
+  if (k === dayKey(Date.now() - DAY)) return "Včera";
+  return new Date(at).toLocaleDateString("cs-CZ", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function clockTime(at: number): string {
+  return new Date(at).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Filter chip as an <a> that sets one param and preserves the others. */
+function histChip(label: string, key: string, val: string | null, current: string | null, params: URLSearchParams): string {
+  const p = new URLSearchParams(params);
+  if (val === null) p.delete(key);
+  else p.set(key, val);
+  const qs = p.toString();
+  const active = (current ?? null) === val ? " is-active" : "";
+  return `<a class="hist-chip${active}" href="/historie${qs ? `?${qs}` : ""}">${esc(label)}</a>`;
+}
+
+function historyRow(e: HistoryEntry): string {
+  const badge =
+    e.type === "listen"
+      ? `<span class="hist__type hist__type--listen" title="Poslechnuto" aria-label="Poslechnuto">▶</span>`
+      : `<span class="hist__type hist__type--view" title="Zobrazeno" aria-label="Zobrazeno">👁</span>`;
+  const subParts = [e.showName, e.type === "listen" ? e.partTitle : null].filter(Boolean) as string[];
+  const sub = subParts.length ? `<span class="hist__sub">${esc(subParts.join(" · "))}</span>` : "";
+  return (
+    `<li class="hist${e.type === "listen" ? " hist--listen" : ""}">` +
+    `<span class="hist__time">${esc(clockTime(e.at))}</span>${badge}` +
+    `<a class="hist__link" href="/show/${encodeURIComponent(e.slug)}">` +
+    `<span class="hist__title">${esc(e.title)}</span>${sub}</a></li>`
+  );
+}
+
+export async function historyView(params: URLSearchParams): Promise<ViewResult> {
+  const all = getHistory();
+  const type = params.get("type"); // "view" | "listen" | null(=vše)
+  const range = params.get("range"); // "today" | "7d" | null(=vše)
+  const since = range === "today" ? startOfToday() : range === "7d" ? Date.now() - 7 * DAY : 0;
+  const items = all.filter((e) => e.at >= since && (type === "view" || type === "listen" ? e.type === type : true));
+
+  const typeChips =
+    histChip("Vše", "type", null, type, params) +
+    histChip("Zobrazeno", "type", "view", type, params) +
+    histChip("Poslechnuto", "type", "listen", type, params);
+  const rangeChips =
+    histChip("Vše", "range", null, range, params) +
+    histChip("Dnes", "range", "today", range, params) +
+    histChip("7 dní", "range", "7d", range, params);
+
+  let list: string;
+  if (!all.length) {
+    list = `<p class="empty">Zatím žádná historie. Až si něco zobrazíte nebo pustíte, objeví se to tady. <a href="/">Procházet pořady →</a></p>`;
+  } else if (!items.length) {
+    list = `<p class="empty">Pro tento filtr nic není.</p>`;
+  } else {
+    let out = "";
+    let lastDay = "";
+    for (const e of items) {
+      const k = dayKey(e.at);
+      if (k !== lastDay) {
+        if (lastDay) out += `</ol>`;
+        out += `<h2 class="hist__day">${esc(dayHeading(e.at))}</h2><ol class="hist-list">`;
+        lastDay = k;
+      }
+      out += historyRow(e);
+    }
+    out += `</ol>`;
+    list = out;
+  }
+
+  const clear = all.length ? `<button class="history-clear" type="button">Vymazat historii</button>` : "";
+  return {
+    title: "Historie",
+    html:
+      `<section class="history">` +
+      `<div class="history__head"><h1>Historie</h1>${clear}</div>` +
+      `<div class="hist-filters"><span class="hist-filters__group">${typeChips}</span><span class="hist-filters__group">${rangeChips}</span></div>` +
+      list +
+      `<p class="history__privacy">Historie se ukládá jen ve vašem prohlížeči.</p>` +
+      `</section>`,
+  };
+}
+
 export async function omnisearchView(params: URLSearchParams): Promise<ViewResult> {
   const q = (params.get("q") ?? "").trim();
   const result = q ? await api.omnisearch(q) : null;
@@ -236,6 +338,7 @@ export async function showView(slug: string): Promise<ViewResult> {
     return { title: "Nenalezeno", html: `<section><h1>Pořad nenalezen</h1></section>` };
   }
   api.recordDisplay(slug); // count this detail view (fire-and-forget)
+  logView({ slug, title: show.title, showName: show.showName }); // local Historie (coalesced)
   const hasParts = show.parts.length > 0;
   const art = show.artworkUrl ? `<img class="show-detail__art" src="${attr(show.artworkUrl)}" alt="" />` : "";
   const programme = show.showName
