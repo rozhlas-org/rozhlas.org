@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import {
   listShows,
   getShowBySlug,
+  getShowTranscripts,
   listProgrammes,
   listSources,
   incrementPlays,
@@ -62,6 +63,13 @@ apiRoutes.get("/shows/:slug", async (c) => {
   const show = await getShowBySlug(c.req.param("slug"));
   if (!show) return c.json({ error: "not found" }, 404);
   return c.json(show);
+});
+
+// Transcript(s) for a show, grouped by part — lazy-loaded by the "Přepis" toggle.
+apiRoutes.get("/shows/:slug/transcript", async (c) => {
+  const parts = await getShowTranscripts(c.req.param("slug"));
+  c.header("Cache-Control", "public, max-age=3600");
+  return c.json({ parts });
 });
 
 // "Podobné pořady" — nearest shows by stored embedding (local KNN, no API call).

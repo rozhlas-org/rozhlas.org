@@ -1086,3 +1086,41 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   border-bottom: var(--border);
   font-size: clamp(24px, 3vw, 34px);
 }
+
+/* ===== transcript on show detail ("Přepis") ===== */
+.transcript { margin-top: 1.5rem; }
+.transcript-toggle {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 14px;
+  padding: 9px 16px;
+  background: var(--paper);
+  color: var(--key);
+  border: var(--border-thin);
+  box-shadow: 3px 3px 0 var(--magenta);
+}
+.transcript-toggle:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--magenta); }
+.transcript-toggle:disabled { opacity: 0.6; cursor: default; }
+.transcript-body {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: var(--border-thin);
+  background: var(--paper);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.transcript-body[hidden] { display: none; }
+.transcript-part + .transcript-part { margin-top: 1.25rem; padding-top: 1rem; border-top: var(--border-thin); }
+.transcript-part__dil {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--magenta);
+  margin: 0 0 8px;
+}
+.transcript-text { margin: 0; line-height: 1.7; }
+/* each whisper segment — click/Enter seeks the player to that second */
+.tx-seg { cursor: pointer; border-radius: 2px; transition: background 0.08s ease; }
+.tx-seg:hover, .tx-seg:focus-visible { background: var(--yellow); outline: none; }
