@@ -5,6 +5,7 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
-    "@rozhlas/core": "workspace:*"
+    "@rozhlas/core": "workspace:*",
+    "sharp": "^0.33.5"
   }
 }

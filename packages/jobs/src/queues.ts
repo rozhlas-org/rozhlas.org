@@ -9,6 +9,7 @@ export const QUEUE_NAMES = [
   "discover",
   "fetch-metadata",
   "acquire-audio",
+  "acquire-artwork",
   "extract-tags",
   "ipfs-add",
   "ipfs-verify",
@@ -27,6 +28,8 @@ export interface JobData {
   // Reserved for detail-page sources (mujRozhlas, Phase 3).
   "fetch-metadata": { sourceKey: string; sourceId: string; url?: string };
   "acquire-audio": { audioFileId: number };
+  // Fetch a show's cover, resize to a small WebP, pin to IPFS, store the CID.
+  "acquire-artwork": { artworkId: number };
   // Reserved: embed tags/artwork before ipfs-add (Phase 2+).
   "extract-tags": { audioFileId: number; tempPath: string };
   "ipfs-add": { audioFileId: number; tempPath: string };

@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "@rozhlas/core";
 
+export { makeThumbnail, type Thumbnail } from "./artwork.ts";
+
 const log = createLogger("media");
 
 const USER_AGENT = "rozhlas-org-bot/0.1 (+https://github.com/rozhlas-org/rozhlas.org)";
