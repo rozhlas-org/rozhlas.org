@@ -12,6 +12,7 @@ const concurrency: Partial<Record<QueueName, number>> = {
   // ffmpeg stream-copy is light CPU + I/O-bound; the box has 8 cores, so run more
   // in parallel to drain the acquire backlog (a hung job self-heals via the watchdog).
   "acquire-audio": 6,
+  "acquire-artwork": 4,
   "ipfs-add": 4,
 };
 
