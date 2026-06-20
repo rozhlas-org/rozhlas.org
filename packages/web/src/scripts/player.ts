@@ -41,6 +41,16 @@ interface Queue {
 }
 
 let q: Queue | null = null;
+// Session back-stack of previously-played shows (in-memory; cleared on reload).
+// "Previous" at the first díl pops this — the queue is consumed as it advances,
+// so it can't provide the show we came from.
+const back: Queue[] = [];
+function pushBack(): void {
+  if (q) {
+    back.push(q);
+    if (back.length > 50) back.shift();
+  }
+}
 
 // Remember what's playing so a reload can re-open the bar at the same track.
 const NOW_NS = "rozhlas:nowplaying:v1";
@@ -159,6 +169,7 @@ export async function playFromSlug(slug: string, idx: string | number): Promise<
 
   let start = parts.findIndex((p) => String(p.idx) === String(idx));
   if (start < 0) start = 0;
+  if (q && q.slug !== slug) pushBack(); // leaving a different show → remember it
   q = { slug, showTitle: show.title, programme: show.showName, parts, index: start };
   load(true);
   showBar();
@@ -175,6 +186,7 @@ async function playQueueEntry(item: QueueItem): Promise<boolean> {
   const wanted = new Set(item.parts.map((p) => String(p.idx)));
   const parts = buildParts(show).filter((t) => wanted.has(String(t.idx)));
   if (!parts.length) return false;
+  if (q && q.slug !== item.slug) pushBack(); // queue-advance: remember the show we leave
   q = { slug: item.slug, showTitle: show.title, programme: show.showName, parts, index: 0 };
   load(true);
   showBar();
@@ -225,8 +237,8 @@ function load(autoplay: boolean): void {
   nowEl.textContent = q.parts.length > 1 ? `Nyní hraje · díl ${q.index + 1}/${q.parts.length}` : "Nyní hraje";
   setScrollingTitle(titleLink, t.title);
   titleLink.href = `/show/${encodeURIComponent(q.slug)}`;
-  prevBtn.disabled = q.index === 0 && audio.currentTime < 3;
-  nextBtn.disabled = q.index >= q.parts.length - 1;
+  prevBtn.disabled = false; // prev always at least restarts the díl
+  nextBtn.disabled = q.index >= q.parts.length - 1 && getQueue().length === 0; // true dead-end only
   rememberNow(); // survive a reload
   const dur = t.durationSec ?? 0;
   if (autoplay) {
@@ -256,18 +268,32 @@ function toggle(): void {
 
 function prev(): void {
   if (!q) return;
-  if (audio.currentTime > 3 || q.index === 0) {
-    audio.currentTime = 0;
-  } else {
-    q.index--;
+  if (audio.currentTime > 3) {
+    audio.currentTime = 0; // restart the current díl (standard 3s rule)
+    return;
+  }
+  if (q.index > 0) {
+    q.index--; // previous díl within this show
     load(true);
+    return;
+  }
+  const prevShow = back.pop(); // first díl → the previously-played show
+  if (prevShow) {
+    q = prevShow;
+    load(true);
+  } else {
+    audio.currentTime = 0; // nothing behind → just restart
   }
 }
 
 function next(): void {
-  if (!q || q.index >= q.parts.length - 1) return;
-  q.index++;
-  load(true);
+  if (!q) return;
+  if (q.index < q.parts.length - 1) {
+    q.index++; // next díl within this show
+    load(true);
+    return;
+  }
+  if (getQueue().length) void advanceQueue(); // last díl → next queued show
 }
 
 /**
@@ -413,6 +439,8 @@ function closeQueuePanel(returnFocus = true): void {
 function onQueueChanged(): void {
   renderQueueBadge();
   if (queuePanelOpen()) renderQueuePanel();
+  // The queue draining/filling can flip the "next" dead-end state.
+  if (q) nextBtn.disabled = q.index >= q.parts.length - 1 && getQueue().length === 0;
 }
 
 /** Transient feedback on an add-to-queue button (cards re-render, so it self-resets). */
@@ -653,7 +681,6 @@ export function initPlayer(): void {
     clearStall(); // real progress → not stuck
     if (!seeking && audio.duration) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
     timeEl.textContent = `${clock(audio.currentTime)} / ${clock(audio.duration)}`;
-    if (q) prevBtn.disabled = q.index === 0 && audio.currentTime < 3;
     // Historie: count a listen once the track has actually played ~6s (skips
     // scrubs/skips; restored-but-not-played tracks never reach this).
     if (q && !listenLogged && audio.currentTime > 6) {
