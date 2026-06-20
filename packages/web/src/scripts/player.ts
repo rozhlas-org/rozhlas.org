@@ -165,6 +165,29 @@ function setBarArt(url: string | null | undefined): void {
   artEl.innerHTML = url ? `<img src="${attr(url)}" alt="" />` : "";
 }
 
+/** Enable transport for the current state: play/next live only if a queue waits. */
+function idleControls(): void {
+  const hasQueue = getQueue().length > 0;
+  toggleBtn.disabled = !hasQueue; // play can still start a waiting queue
+  nextBtn.disabled = !hasQueue;
+  prevBtn.disabled = true;
+  seek.disabled = true;
+}
+
+/** Nothing loaded: neutral placeholder in the always-visible bar, transport dimmed. */
+function setIdle(): void {
+  nowEl.textContent = "Přehrávač";
+  setScrollingTitle(titleLink, "Nic nehraje");
+  titleLink.classList.add("player-bar__title--idle");
+  titleLink.removeAttribute("href");
+  setBarArt(null);
+  toggleBtn.textContent = "▶";
+  toggleBtn.setAttribute("aria-label", "Přehrát");
+  seek.value = "0";
+  timeEl.textContent = "0:00 / 0:00";
+  idleControls();
+}
+
 function pkey(slug: string, idx: string | number): string {
   return `${slug}#${idx}`;
 }
@@ -238,9 +261,7 @@ async function restoreNowPlaying(): Promise<void> {
   let start = parts.findIndex((p) => String(p.idx) === String(saved!.idx));
   if (start < 0) start = 0;
   q = { slug: saved.slug, showTitle: show.title, programme: show.showName, artwork: show.artworkUrl, parts, index: start };
-  load(false); // no autoplay — just show where we left off
-  bar.hidden = false;
-  document.body.classList.add("has-player");
+  load(false); // no autoplay — just show where we left off (bar is always visible)
 }
 
 function load(autoplay: boolean): void {
@@ -253,7 +274,10 @@ function load(autoplay: boolean): void {
   nowEl.textContent = q.parts.length > 1 ? `Nyní hraje · díl ${q.index + 1}/${q.parts.length}` : "Nyní hraje";
   setBarArt(q.artwork);
   setScrollingTitle(titleLink, t.title);
+  titleLink.classList.remove("player-bar__title--idle");
   titleLink.href = `/show/${encodeURIComponent(q.slug)}`;
+  toggleBtn.disabled = false;
+  seek.disabled = false;
   prevBtn.disabled = false; // prev always at least restarts the díl
   nextBtn.disabled = q.index >= q.parts.length - 1 && getQueue().length === 0; // true dead-end only
   rememberNow(); // survive a reload
@@ -411,7 +435,7 @@ function renderQueuePanel(): void {
       `<ol class="queue__list">${rows}</ol></div>`
     : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte celý pořad nebo jednotlivý díl tlačítkem ＋.</span></p>`;
   const clear = items.length ? `<button class="queue__clear" type="button">Vymazat frontu</button>` : "";
-  const close = `<button class="queue__close" type="button" aria-label="Zavřít frontu" title="Zavřít frontu">⌄</button>`;
+  const close = `<button class="queue__close" type="button" aria-label="Zavřít frontu" title="Zavřít frontu">✕</button>`;
   queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span><span class="queue__headactions">${clear}${close}</span></div>${nowRow}${list}`;
   // Marquee any title that overflows its row.
   queuePanel.querySelectorAll<HTMLElement>(".qrow__title").forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
@@ -436,6 +460,7 @@ function onQueueChanged(): void {
   if (queuePanelOpen()) renderQueuePanel();
   // The queue draining/filling can flip the "next" dead-end state.
   if (q) nextBtn.disabled = q.index >= q.parts.length - 1 && getQueue().length === 0;
+  else idleControls(); // no track: play/next live only while a queue is waiting
 }
 
 /** Transient feedback on an add-to-queue button (cards re-render, so it self-resets). */
@@ -449,14 +474,9 @@ function flashAdd(btn: HTMLButtonElement, mark: string): void {
   }, 1300);
 }
 
-/** Surface the bar so the queue is reachable even with nothing playing. */
+/** The bar is always visible; just make sure play can start a freshly-added queue. */
 function surfaceBarForQueue(): void {
-  showBar();
-  if (!q) {
-    nowEl.textContent = "Fronta";
-    titleLink.textContent = "";
-    setBarArt(null);
-  }
+  if (!q) idleControls();
 }
 
 /**
@@ -513,14 +533,6 @@ export function initPlayer(): void {
   toggleBtn.addEventListener("click", toggle);
   prevBtn.addEventListener("click", prev);
   nextBtn.addEventListener("click", next);
-  document.getElementById("player-close")?.addEventListener("click", () => {
-    audio.pause();
-    bar.hidden = true;
-    document.body.classList.remove("has-player");
-    q = null;
-    forgetNow();
-    syncNowPlaying();
-  });
 
   // Delegated: a click anywhere on a playable row (button, title, duration…)
   // plays that díl. Covers re-rendered rows since it's bound to document.
@@ -536,17 +548,9 @@ export function initPlayer(): void {
   });
 
   // ---- queue ("Fronta") wiring ----
+  // Once open, the panel stays open until the ✕ (or the ☰ toggle) — no auto-close
+  // on outside clicks or Escape, so interacting elsewhere can't collapse it.
   queueToggle.addEventListener("click", () => (queuePanelOpen() ? closeQueuePanel() : openQueuePanel()));
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && queuePanelOpen()) closeQueuePanel();
-  });
-  // Close the panel on an outside click (but not on the toggle or inside it).
-  document.addEventListener("click", (e) => {
-    if (!queuePanelOpen()) return;
-    const t = e.target as Node;
-    if (queuePanel.contains(t) || queueToggle.contains(t)) return;
-    closeQueuePanel(false);
-  });
 
   // "Add to queue" buttons on cards / detail (inside #app — delegated on document).
   document.addEventListener("click", (e) => {
@@ -577,9 +581,6 @@ export function initPlayer(): void {
 
   // Panel actions (play-now / reorder / remove / clear) — delegated on the panel.
   queuePanel.addEventListener("click", (e) => {
-    // Keep the click off the document outside-close handler — a re-render here
-    // detaches the target, which would otherwise read as an "outside" click.
-    e.stopPropagation();
     const t = e.target as HTMLElement;
     if (t.closest(".queue__close")) {
       closeQueuePanel();
@@ -715,5 +716,10 @@ export function initPlayer(): void {
     }
   });
 
+  // The bar is part of the shell and always on screen. Start in the idle state,
+  // then restore the last track (if any) over it.
+  bar.hidden = false;
+  document.body.classList.add("has-player");
+  setIdle();
   void restoreNowPlaying(); // reopen the bar where we left off before a reload
 }
