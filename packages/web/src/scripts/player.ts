@@ -15,10 +15,10 @@ import {
   enqueuePart,
   enqueueParts,
   getQueue,
+  jumpTo,
   onQueueChange,
   queuedPartCount,
   removePart,
-  removeShow,
   shiftNext,
   type QueueItem,
   type QueuePart,
@@ -176,33 +176,29 @@ export async function playFromSlug(slug: string, idx: string | number): Promise<
 }
 
 /**
- * Load a Fronta entry: fetch the show ONCE and play only its queued díly, in order
- * (gapless within the show). Returns false if nothing playable remains.
+ * Play a single queued díl: fetch its show, load just that díl as the now-playing
+ * track. The rest of the Fronta stays queued and is pulled one díl at a time as this
+ * one ends. Returns false if the díl isn't playable. Pushes the outgoing track onto
+ * the back-stack so ⏮ can step back through played díly.
  */
-async function playQueueEntry(item: QueueItem, startIdx?: string | number): Promise<boolean> {
+async function playQueuePart(item: QueueItem): Promise<boolean> {
   const show = await api.show(item.slug).catch(() => null);
   if (!show) return false;
-  const wanted = new Set(item.parts.map((p) => String(p.idx)));
-  const parts = buildParts(show).filter((t) => wanted.has(String(t.idx)));
-  if (!parts.length) return false;
-  if (q && q.slug !== item.slug) pushBack(); // queue-advance: remember the show we leave
-  let index = 0;
-  if (startIdx != null) {
-    const i = parts.findIndex((t) => String(t.idx) === String(startIdx));
-    if (i > 0) index = i; // play from the clicked díl onward through the entry's díly
-  }
-  q = { slug: item.slug, showTitle: show.title, programme: show.showName, parts, index };
+  const track = buildParts(show).find((t) => String(t.idx) === String(item.idx));
+  if (!track) return false;
+  pushBack(); // remember whatever we were on so ⏮ can return to it
+  q = { slug: item.slug, showTitle: show.title, programme: show.showName, parts: [track], index: 0 };
   load(true);
   showBar();
   return true;
 }
 
-/** Play the next queued show, skipping any that can't be played. */
+/** Play the next queued díl, skipping any that can't be played. */
 async function advanceQueue(): Promise<void> {
   let item = shiftNext();
   while (item) {
-    if (await playQueueEntry(item)) return;
-    item = shiftNext(); // dead/unstreamable show — skip to the next
+    if (await playQueuePart(item)) return;
+    item = shiftNext(); // dead/unstreamable díl — skip to the next
   }
   forgetNow(); // queue exhausted — nothing left to restore
 }
@@ -363,19 +359,19 @@ function bumpBadge(): void {
  * title + díl label, play + remove. Multi-part "add all" therefore lists each díl
  * as its own regular row.
  */
-function renderQueueRow(it: QueueItem, p: QueuePart): string {
-  const single = String(p.idx) === "single";
-  const idx = single ? "" : `<span class="qrow__idx">${esc(String(p.idx))}.</span>`;
-  const sub = single ? it.showName : p.title;
+function renderQueueRow(it: QueueItem): string {
+  const single = String(it.idx) === "single";
+  const idx = single ? "" : `<span class="qrow__idx">${esc(String(it.idx))}.</span>`;
+  const sub = single ? it.showName : it.partTitle;
   return (
-    `<li class="qrow" data-slug="${attr(it.slug)}" data-idx="${attr(String(p.idx))}">` +
+    `<li class="qrow" data-slug="${attr(it.slug)}" data-idx="${attr(String(it.idx))}">` +
     idx +
     `<button class="qrow__play" type="button" title="Přehrát">` +
     `<span class="qrow__title">${esc(it.showTitle)}</span>` +
     (sub ? `<span class="qrow__sub">${esc(sub)}</span>` : "") +
     `</button>` +
     `<span class="qrow__actions">` +
-    `<button class="qrow__btn qrow__remove" data-act="remove-part" data-idx="${attr(String(p.idx))}" type="button" aria-label="Odebrat díl z fronty">✕</button>` +
+    `<button class="qrow__btn qrow__remove" data-act="remove-part" data-idx="${attr(String(it.idx))}" type="button" aria-label="Odebrat díl z fronty">✕</button>` +
     `</span></li>`
   );
 }
@@ -389,7 +385,7 @@ function renderQueuePanel(): void {
       (q.parts.length > 1 ? `<span class="qrow__sub">díl ${q.index + 1}/${q.parts.length}</span>` : "") +
       `</div></div>`
     : "";
-  const rows = items.flatMap((it) => it.parts.map((p) => renderQueueRow(it, p))).join("");
+  const rows = items.map(renderQueueRow).join("");
   const list = items.length
     ? `<div class="queue__section"><div class="queue__label">Další (${queuedPartCount()})</div>` +
       `<ol class="queue__list">${rows}</ol></div>`
@@ -575,12 +571,10 @@ export function initPlayer(): void {
     const act = t.closest<HTMLElement>("[data-act]")?.dataset.act;
     if (act === "remove-part") removePart(slug, idx!);
     else if (t.closest(".qrow__play")) {
-      // Play this show's queued díly from the clicked one, and drop the whole entry
-      // from the Fronta so its rows don't linger and fight the player.
-      const item = getQueue().find((x) => x.slug === slug);
+      // Play this díl now: skip the ones before it, keep the ones after queued.
+      const item = jumpTo(slug, idx!);
       if (item) {
-        removeShow(slug);
-        void playQueueEntry(item, idx ?? undefined);
+        void playQueuePart(item);
         closeQueuePanel(false);
       }
     }
