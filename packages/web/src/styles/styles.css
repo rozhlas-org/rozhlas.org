@@ -367,21 +367,25 @@ button:active,
   text-transform: uppercase;
   color: var(--magenta);
 }
+/* idx + title on one line; title takes the rest and clips so it can marquee */
+.part__line { display: flex; align-items: baseline; gap: 0.45em; min-width: 0; }
 .part__title {
-  display: inline;
+  display: block;
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-display);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: -0.25px;
   font-size: 18px;
 }
-/* díl number, inline before the title */
+/* díl number, before the title */
 .part__idx {
+  flex: none;
   font-family: var(--font-mono);
   font-weight: 700;
   font-size: 15px;
   color: var(--magenta);
-  margin-right: 0.45em;
 }
 .part__dur {
   display: block;

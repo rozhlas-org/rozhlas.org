@@ -16,7 +16,7 @@ import {
 } from "./views.ts";
 import { wireAudioProgress } from "./progress.ts";
 import { clearHistory } from "./history.ts";
-import { initPlayer, syncNowPlaying } from "./player.ts";
+import { applyPartMarquees, initPlayer, syncNowPlaying } from "./player.ts";
 
 const app = document.getElementById("app")!;
 
@@ -63,6 +63,7 @@ async function render() {
     document.title = `${view.title} — rozhlas.org`;
     app.innerHTML = view.html;
     syncNowPlaying(); // re-mark the now-playing díl in the freshly rendered view
+    applyPartMarquees(); // scroll long díl titles right-to-left (like the player bar)
     window.scrollTo(0, 0);
     void loadSimilar(); // lazily fill "Podobné pořady" if this view has the mount
   } catch (err) {

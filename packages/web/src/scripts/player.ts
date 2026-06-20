@@ -296,6 +296,18 @@ export function syncNowPlaying(): void {
   }
 }
 
+/**
+ * Apply the right-to-left marquee to every díl title in the freshly rendered view
+ * (detail part list) — same effect as the player bar / Fronta titles. Long titles
+ * scroll; short ones stay static. Call once per render (app.ts), on fresh DOM, so
+ * the text isn't already wrapped in marquee segments.
+ */
+export function applyPartMarquees(): void {
+  document
+    .querySelectorAll<HTMLElement>(".part__title")
+    .forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
+}
+
 // ---- queue panel ("Fronta") ----
 
 function queuePanelOpen(): boolean {
@@ -376,8 +388,10 @@ function renderQueuePanel(): void {
     : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte celý pořad nebo jednotlivý díl tlačítkem ＋.</span></p>`;
   const clear = items.length ? `<button class="queue__clear" type="button">Vymazat frontu</button>` : "";
   queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span>${clear}</div>${nowRow}${list}`;
-  // Marquee any title that overflows its row.
-  queuePanel.querySelectorAll<HTMLElement>(".qrow__title").forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
+  // Marquee any title that overflows its row — show headings and díl rows alike.
+  queuePanel
+    .querySelectorAll<HTMLElement>(".qrow__title, .qpart__title")
+    .forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
 }
 
 function openQueuePanel(): void {
