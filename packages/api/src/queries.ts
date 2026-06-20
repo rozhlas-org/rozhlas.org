@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, count } from "drizzle-orm";
 import { config, db, schema, toFtsQuery, getEmbedding, knnShows } from "@rozhlas/core";
 
-const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources } =
+const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts } =
   schema;
 
 export type SortKey = "added" | "plays" | "alpha";
@@ -287,6 +287,12 @@ export async function getShowBySlug(slug: string) {
     .select()
     .from(audioFiles)
     .where(eq(audioFiles.showId, show.id));
+  // Which of this show's audio files have a transcript (drives the "Přepis" UI).
+  const txAudioIds = new Set(
+    (await db.select({ id: transcripts.audioFileId }).from(transcripts).where(eq(transcripts.showId, show.id))).map(
+      (t) => t.id,
+    ),
+  );
   const art = await artworkForShows([show.id]);
   const ppl = await db
     .select({ name: people.name, role: showPeople.role })
@@ -309,6 +315,7 @@ export async function getShowBySlug(slug: string) {
           streamable: a.streamable,
           cid: a.ipfsCid,
           streamUrl: streamUrl(a.ipfsCid),
+          hasTranscript: txAudioIds.has(a.id),
         }
       : null;
 
@@ -343,6 +350,39 @@ export async function getShowBySlug(slug: string) {
     parts,
     audio: audio.map(mapAudio),
   };
+}
+
+export interface ShowTranscriptPart {
+  partIdx: number | null; // null = single-audio show
+  lang: string | null;
+  text: string;
+  segments: { start: number; end: number; text: string }[];
+}
+
+/** All transcripts for a show, grouped by part (ordered) — for the detail "Přepis" UI. */
+export async function getShowTranscripts(slug: string): Promise<ShowTranscriptPart[]> {
+  const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1);
+  if (!show) return [];
+  const rows = await db
+    .select({
+      partIdx: showParts.idx,
+      lang: transcripts.lang,
+      text: transcripts.text,
+      segmentsJson: transcripts.segmentsJson,
+    })
+    .from(transcripts)
+    .leftJoin(audioFiles, eq(audioFiles.id, transcripts.audioFileId))
+    .leftJoin(showParts, eq(showParts.id, audioFiles.partId))
+    .where(eq(transcripts.showId, show.id))
+    .orderBy(asc(showParts.idx));
+  return rows.map((r) => ({
+    partIdx: r.partIdx ?? null,
+    lang: r.lang,
+    text: r.text,
+    segments: r.segmentsJson
+      ? (JSON.parse(r.segmentsJson) as { start: number; end: number; text: string }[])
+      : [],
+  }));
 }
 
 /** Programmes (the effective categories) with show counts — biggest first. */

@@ -609,9 +609,10 @@ export function initPlayer(): void {
     if (slug && idx != null) void playFromSlug(slug, idx);
   });
 
-  // Transcript hit → play the show's díl at the matched timestamp.
+  // Transcript hit (search result) or segment (detail-page přepis) → play the
+  // show's díl at that timestamp.
   document.addEventListener("click", (e) => {
-    const hit = (e.target as HTMLElement).closest<HTMLElement>(".tx-hit");
+    const hit = (e.target as HTMLElement).closest<HTMLElement>(".tx-hit, .tx-seg");
     if (!hit) return;
     e.preventDefault();
     const slug = hit.dataset.slug;

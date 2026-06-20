@@ -36,6 +36,14 @@ export interface AudioFile {
   streamable: boolean;
   cid: string | null;
   streamUrl: string | null;
+  hasTranscript: boolean;
+}
+
+export interface ShowTranscriptPart {
+  partIdx: number | null;
+  lang: string | null;
+  text: string;
+  segments: { start: number; end: number; text: string }[];
 }
 
 export interface ShowPart {
@@ -118,6 +126,8 @@ export const api = {
   shows: (p: { q?: string; programme?: string; source?: string; sort?: SortKey; page?: number }) =>
     getJSON<ListResult>("/api/shows", p),
   show: (slug: string) => getJSON<ShowDetail>(`/api/shows/${encodeURIComponent(slug)}`),
+  showTranscript: (slug: string) =>
+    getJSON<{ parts: ShowTranscriptPart[] }>(`/api/shows/${encodeURIComponent(slug)}/transcript`),
   similar: (slug: string) => getJSON<ShowListItem[]>(`/api/shows/${encodeURIComponent(slug)}/similar`),
   search: (q: string, page?: number) =>
     getJSON<{ query: string } & ListResult>("/api/search", { q, page }),
