@@ -2,7 +2,7 @@
 // Each exported view is async: it fetches from the API and returns an HTML string
 // (plus the document <title>). The router in app.ts swaps the result into #app.
 
-import { api, type ListResult, type ShowListItem, type SortKey } from "./api.ts";
+import { api, type ListResult, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
 
@@ -310,5 +310,54 @@ export async function showView(slug: string): Promise<ViewResult> {
           ${audioBlock}
         </div>
       </article>`,
+  };
+}
+
+/** One transcript-search result: show title + clickable timestamped snippets. */
+function txResultCard(it: { show: ShowListItem; hits: TranscriptHit[] }): string {
+  const s = it.show;
+  const programme = s.showName
+    ? `<a class="show-card__programme" href="/programme/${encodeURIComponent(s.showName)}">${esc(s.showName)}</a>`
+    : "";
+  const hits = it.hits
+    .map((h) => {
+      const part = h.partIdx == null ? "single" : String(h.partIdx);
+      const dil = h.partIdx == null ? "" : `<span class="tx-hit__dil">${h.partIdx}. díl</span>`;
+      return `<button class="tx-hit" type="button" data-slug="${attr(s.slug)}" data-part="${attr(part)}" data-seek="${h.startSec}" aria-label="Přehrát od ${esc(formatDuration(h.startSec))}">
+        <span class="tx-hit__time">▶ ${esc(formatDuration(h.startSec))}</span>
+        ${dil}
+        <span class="tx-hit__snip">${esc(h.snippet)}…</span>
+      </button>`;
+    })
+    .join("");
+  return `<article class="tx-result">
+    <a class="tx-result__title" href="/show/${encodeURIComponent(s.slug)}">${esc(s.title)}</a>
+    ${programme}
+    <div class="tx-hits">${hits}</div>
+  </article>`;
+}
+
+/** "Hledat v přepisech" — full-text + semantic search inside the spoken content. */
+export async function transcriptSearchView(params: URLSearchParams): Promise<ViewResult> {
+  const q = (params.get("q") ?? "").trim();
+  const result = q ? await api.transcriptSearch(q) : null;
+  const body = result
+    ? result.items.length
+      ? `<p class="result-count">${result.items.length} pořadů · ${result.vectorHits} sémantických / ${result.ftsHits} klíčových shod</p>
+         <div class="tx-results">${result.items.map(txResultCard).join("")}</div>`
+      : `<p class="empty">V přepisech nic nenalezeno.</p>`
+    : "";
+  return {
+    title: "Hledat v přepisech",
+    html: `
+      <section class="tx-search">
+        <h1>Hledat v přepisech</h1>
+        <p class="omni__hint">Prohledejte text namluvených pořadů — sémanticky i podle klíčových slov. Kliknutím na výsledek se přehraje přesně v daném místě.</p>
+        <form class="omni__form" action="/transcripts" method="get">
+          <textarea name="q" rows="2" placeholder="Co hledáte v přepisu?">${esc(q)}</textarea>
+          <button type="submit">Hledat</button>
+        </form>
+        ${body}
+      </section>`,
   };
 }

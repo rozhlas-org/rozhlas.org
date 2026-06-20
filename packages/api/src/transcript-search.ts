@@ -1,15 +1,16 @@
 import { createLogger, db, schema, sqlite, toFtsQuery, type ChunkKnnHit } from "@rozhlas/core";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getProvider, chunkVectorSearch } from "@rozhlas/embeddings";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
 
 const log = createLogger("api:transcript-search");
-const { transcriptChunks } = schema;
+const { transcriptChunks, transcripts, audioFiles, showParts } = schema;
 
 export interface TranscriptHit {
   startSec: number; // deep-link target in the player
   endSec: number;
   snippet: string;
+  partIdx: number | null; // which díl (null = single-audio show)
 }
 export interface TranscriptSearchResult {
   items: { show: ShowListItem; hits: TranscriptHit[] }[];
@@ -68,15 +69,20 @@ export async function transcriptSearch(
       startSec: transcriptChunks.startSec,
       endSec: transcriptChunks.endSec,
       text: transcriptChunks.text,
+      partIdx: showParts.idx, // null for single-audio shows
     })
     .from(transcriptChunks)
+    .innerJoin(transcripts, eq(transcripts.id, transcriptChunks.transcriptId))
+    .innerJoin(audioFiles, eq(audioFiles.id, transcripts.audioFileId))
+    .leftJoin(showParts, eq(showParts.id, audioFiles.partId))
     .where(inArray(transcriptChunks.id, chunkIds));
 
   // Group chunk hits per show.
-  const byShow = new Map<number, { startSec: number; endSec: number; text: string; score: number }[]>();
+  type Hit = { startSec: number; endSec: number; text: string; partIdx: number | null; score: number };
+  const byShow = new Map<number, Hit[]>();
   for (const r of rows) {
     const arr = byShow.get(r.showId) ?? [];
-    arr.push({ startSec: r.startSec, endSec: r.endSec, text: r.text, score: scores.get(r.id) ?? 0 });
+    arr.push({ startSec: r.startSec, endSec: r.endSec, text: r.text, partIdx: r.partIdx, score: scores.get(r.id) ?? 0 });
     byShow.set(r.showId, arr);
   }
 
@@ -95,7 +101,7 @@ export async function transcriptSearch(
       .get(id)!
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
-      .map((h) => ({ startSec: h.startSec, endSec: h.endSec, snippet: h.text.slice(0, 220) }));
+      .map((h) => ({ startSec: h.startSec, endSec: h.endSec, snippet: h.text.slice(0, 220), partIdx: h.partIdx }));
     items.push({ show, hits });
     if (items.length >= k) break;
   }
