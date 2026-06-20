@@ -123,7 +123,13 @@ async function acquire(job: Job<JobData["acquire-audio"]>) {
       checksum: acquired.checksum,
     });
     await job.updateProgress({ stage: "done", percent: 100 });
-    await enqueue("ipfs-add", { audioFileId, tempPath: acquired.path });
+    // Propagate the re-acquire marker so a second lost staging file hard-fails
+    // (loop guard) instead of bouncing between acquire and ipfs-add forever.
+    await enqueue("ipfs-add", {
+      audioFileId,
+      tempPath: acquired.path,
+      retryMissing: job.data.fromReacquire,
+    });
     return { path: acquired.path, sizeBytes: acquired.sizeBytes, codec: acquired.codec };
   } finally {
     clearTimeout(watchdog);
@@ -133,8 +139,23 @@ async function acquire(job: Job<JobData["acquire-audio"]>) {
 
 /** ipfs-add → pin to Kubo, record CID, delete the temp file (audio never kept on disk). */
 async function ipfsAdd(job: Job<JobData["ipfs-add"]>) {
-  const { audioFileId, tempPath } = job.data;
-  const { cid, size } = await ipfs.addFile(tempPath);
+  const { audioFileId, tempPath, retryMissing } = job.data;
+  let cid: string;
+  let size: number;
+  try {
+    ({ cid, size } = await ipfs.addFile(tempPath));
+  } catch (err) {
+    // The staged file is gone — typically a worker restart wiped it between
+    // acquire-audio and ipfs-add (now mitigated by the persistent staging dir).
+    // Re-acquire once rather than hard-failing; `retryMissing` guards the loop.
+    const missing = (err as { code?: string })?.code === "ENOENT" || /ENOENT/.test(String(err));
+    if (missing && !retryMissing) {
+      log.warn("ipfs-add: staged file missing, re-acquiring", { audioFileId, tempPath });
+      await enqueue("acquire-audio", { audioFileId, fromReacquire: true });
+      return { requeued: true };
+    }
+    throw err;
+  }
   await repo.setAudioCid(audioFileId, cid, size);
   await discardTemp(tempPath);
   await enqueue("ipfs-verify", { audioFileId });
