@@ -11,6 +11,7 @@ import {
   type SortKey,
 } from "../queries.ts";
 import { omnisearch } from "../omnisearch.ts";
+import { transcriptSearch } from "../transcript-search.ts";
 
 const SORTS = new Set<SortKey>(["added", "plays", "alpha"]);
 
@@ -34,6 +35,14 @@ apiRoutes.get("/omnisearch", async (c) => {
   const q = c.req.query("q") ?? "";
   if (!q.trim()) return c.json({ error: "missing q" }, 400);
   return c.json(await omnisearch(q));
+});
+
+// Search inside transcripts → shows + timestamped snippets (optional ?programme=).
+apiRoutes.get("/transcript-search", async (c) => {
+  const q = c.req.query("q") ?? "";
+  if (!q.trim()) return c.json({ error: "missing q" }, 400);
+  const programme = c.req.query("programme") || undefined;
+  return c.json(await transcriptSearch(q, { programme }));
 });
 
 apiRoutes.get("/shows", async (c) => {

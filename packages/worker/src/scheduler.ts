@@ -1,7 +1,8 @@
-import { createLogger } from "@rozhlas/core";
+import { config, createLogger } from "@rozhlas/core";
 import { getQueue } from "@rozhlas/jobs";
 import { listScrapers } from "@rozhlas/scrapers";
-import { enqueuePendingArtworks, upsertSource } from "./repo.ts";
+import { transcriptionEnabled } from "@rozhlas/media";
+import { enqueuePendingArtworks, enqueuePendingTranscripts, upsertSource } from "./repo.ts";
 
 const log = createLogger("worker:scheduler");
 
@@ -25,4 +26,12 @@ export async function setupSchedules() {
   // Backfill: queue a thumbnail pin for every cover not yet on IPFS.
   const pending = await enqueuePendingArtworks();
   if (pending) log.info("artwork backfill queued", { pending });
+
+  // Historical backfill: only when explicitly enabled (off by default). New shows
+  // are transcribed from ipfs-verify; draining all ~13k pinned files is a ~year of
+  // CPU grinding, meant for an off-box GPU/Groq batch — not an automatic boot task.
+  if (transcriptionEnabled() && config.TRANSCRIBE_BACKFILL) {
+    const txPending = await enqueuePendingTranscripts();
+    if (txPending) log.warn("TRANSCRIBE_BACKFILL on — queued full transcript backfill", { pending: txPending });
+  }
 }

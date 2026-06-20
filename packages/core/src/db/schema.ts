@@ -211,6 +211,57 @@ export const showEmbeddings = sqliteTable("show_embeddings", {
     .notNull(),
 });
 
+/** Whisper transcript of one audio file — full text + segment-level timestamps. */
+export const transcripts = sqliteTable(
+  "transcripts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    audioFileId: integer("audio_file_id")
+      .notNull()
+      .unique()
+      .references(() => audioFiles.id, { onDelete: "cascade" }),
+    showId: integer("show_id")
+      .notNull()
+      .references(() => shows.id, { onDelete: "cascade" }),
+    lang: text("lang"), // detected language, e.g. "cs"
+    model: text("model").notNull(), // e.g. "faster-whisper:large-v3"
+    text: text("text").notNull(), // full transcript
+    segmentsJson: text("segments_json"), // JSON: [{ start, end, text }]
+    durationSec: integer("duration_sec"),
+    ...timestamps,
+  },
+  (t) => ({ showIdx: index("transcripts_show_idx").on(t.showId) }),
+);
+
+/**
+ * A timestamped slice of a transcript — the unit we embed (Voyage) and full-text
+ * index (FTS5). A search hit deep-links to `startSec` in the player. `embedModel`
+ * is null until embedded; non-null = embedded with that model (vectors live in vec_chunks).
+ */
+export const transcriptChunks = sqliteTable(
+  "transcript_chunks",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    transcriptId: integer("transcript_id")
+      .notNull()
+      .references(() => transcripts.id, { onDelete: "cascade" }),
+    showId: integer("show_id")
+      .notNull()
+      .references(() => shows.id, { onDelete: "cascade" }),
+    idx: integer("idx").notNull(), // order within the transcript
+    startSec: integer("start_sec").notNull(),
+    endSec: integer("end_sec").notNull(),
+    text: text("text").notNull(),
+    embedModel: text("embed_model"), // null = not yet embedded
+    ...timestamps,
+  },
+  (t) => ({
+    transcriptIdx: index("transcript_chunks_transcript_idx").on(t.transcriptId),
+    showIdx: index("transcript_chunks_show_idx").on(t.showId),
+    embedIdx: index("transcript_chunks_embed_idx").on(t.embedModel),
+  }),
+);
+
 export type Show = typeof shows.$inferSelect;
 export type NewShow = typeof shows.$inferInsert;
 export type AudioFile = typeof audioFiles.$inferSelect;

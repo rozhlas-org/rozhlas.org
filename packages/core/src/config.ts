@@ -58,6 +58,21 @@ const EnvSchema = z.object({
   // and the cheapest/fastest tier (~$0.0005/query); set ANTHROPIC_API_KEY to use.
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5"),
+
+  // --- Transcription (faster-whisper via a Python subprocess) ---
+  // Path to a Python that has faster-whisper installed (e.g. a venv). If unset,
+  // the transcribe stage is disabled (jobs no-op) so the rest of the pipeline runs.
+  WHISPER_PYTHON: z.string().optional(),
+  WHISPER_MODEL: z.string().default("large-v3"),
+  // Drain ALL pinned audio without a transcript on boot (the historical backfill).
+  // Off by default: on this CPU that's ~year of grinding — meant for a GPU/Groq
+  // batch. Steady-state (new shows) is queued from ipfs-verify regardless.
+  TRANSCRIBE_BACKFILL: z.coerce.boolean().default(false),
+  // CPU threads for whisper. Kept below nproc by default so transcription doesn't
+  // starve the scraper/worker/IPFS on the shared box.
+  WHISPER_THREADS: z.coerce.number().int().positive().default(4),
+  // Target characters per embedded/indexed transcript chunk (~350-400 tokens).
+  TRANSCRIPT_CHUNK_CHARS: z.coerce.number().int().positive().default(1500),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

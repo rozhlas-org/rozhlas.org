@@ -2,9 +2,14 @@
 # Debian base (not alpine) so the sqlite-vec glibc prebuilt loads for embeddings.
 FROM oven/bun:1
 
-# ffmpeg: assembles DASH/HLS .m4s segments in the acquire-audio stage (PLAN §7)
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# ffmpeg: assembles DASH/HLS .m4s segments in the acquire-audio stage (PLAN §7).
+# python3 + faster-whisper (CTranslate2, CPU — no torch/CUDA) for the transcribe
+# stage. The large-v3 model is NOT baked in; it downloads on first use into
+# HF_HOME (a mounted volume), so the image stays lean and the model persists.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/whisper-venv \
+    && /opt/whisper-venv/bin/pip install --no-cache-dir faster-whisper
 
 WORKDIR /app
 

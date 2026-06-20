@@ -932,6 +932,64 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   .search input { min-width: 0; flex: 1; }
 }
 
+/* ===== transcript search ===== */
+.tx-search { max-width: 820px; }
+.tx-results { display: flex; flex-direction: column; gap: var(--gap); margin-top: 24px; }
+.tx-result {
+  border: var(--border-thin);
+  background: var(--paper);
+  padding: 16px 18px;
+}
+.tx-result__title {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1.05;
+  text-transform: uppercase;
+  letter-spacing: -0.3px;
+}
+.tx-result__title:hover { color: var(--cyan); }
+.tx-result .show-card__programme { margin: 8px 0 0; }
+.tx-hits { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+/* a clickable timestamped snippet — plays the show at that second */
+.tx-hit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--paper);
+  color: var(--key);
+  border: var(--border-thin);
+  box-shadow: none;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.tx-hit:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--magenta); }
+.tx-hit__time {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--magenta);
+}
+.tx-hit__dil {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tx-hit__snip { flex: 1; min-width: 0; line-height: 1.4; }
+
 /* ===== Historie (local view/listen history) ===== */
 .history__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .history__head h1 { margin: 0; }

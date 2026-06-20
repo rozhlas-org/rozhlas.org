@@ -1,10 +1,17 @@
 import type { Job } from "bullmq";
-import { createLogger } from "@rozhlas/core";
+import { config, createLogger } from "@rozhlas/core";
 import { enqueue, type JobData, type QueueName } from "@rozhlas/jobs";
 import { getScraper, createScrapeCtx } from "@rozhlas/scrapers";
-import { acquireAudio, discardTemp, makeThumbnail } from "@rozhlas/media";
+import {
+  acquireAudio,
+  discardTemp,
+  makeThumbnail,
+  transcribeAudio,
+  transcriptionEnabled,
+  chunkSegments,
+} from "@rozhlas/media";
 import { ipfs } from "@rozhlas/ipfs";
-import { getProvider, embedShows } from "@rozhlas/embeddings";
+import { getProvider, embedShows, embedTranscriptChunks } from "@rozhlas/embeddings";
 import * as repo from "./repo.ts";
 
 const log = createLogger("worker:pipeline");
@@ -207,7 +214,14 @@ async function ipfsVerify(job: Job<JobData["ipfs-verify"]>) {
   if (!audio?.ipfsCid) throw new Error(`audio ${audioFileId}: no cid`);
   const v = await ipfs.verifyStreamable(audio.ipfsCid);
   await repo.setAudioStreamable(audioFileId, v.streamable);
-  if (v.streamable) await enqueue("index", { showId: audio.showId });
+  if (v.streamable) {
+    await enqueue("index", { showId: audio.showId });
+    // Steady-state: transcribe newly-streamable audio as it arrives (the bulk
+    // backfill is a separate, opt-in/off-box concern — see TRANSCRIBE_BACKFILL).
+    if (transcriptionEnabled()) {
+      await enqueue("transcribe", { audioFileId }, { jobId: `tx-${audioFileId}`, removeOnComplete: true });
+    }
+  }
   return v;
 }
 
@@ -230,6 +244,53 @@ async function reserved(name: QueueName) {
   };
 }
 
+// faster-whisper on the i7-6700 runs ~0.9× realtime, so a long episode can take
+// hours; cap generously so a genuinely stuck job still frees the slot eventually.
+const TRANSCRIBE_HARD_MS = 4 * 60 * 60_000;
+
+/** transcribe → pull pinned audio by CID, run whisper, store transcript + chunks. */
+async function transcribe(job: Job<JobData["transcribe"]>) {
+  const { audioFileId } = job.data;
+  if (!transcriptionEnabled()) return { skipped: "disabled" }; // WHISPER_PYTHON unset
+  const audio = await repo.getAudio(audioFileId);
+  if (!audio?.ipfsCid) return { skipped: "no-cid" };
+  if (await repo.transcriptExists(audioFileId)) return { skipped: "already" };
+
+  const ac = new AbortController();
+  const watchdog = setTimeout(() => ac.abort(), TRANSCRIBE_HARD_MS);
+  try {
+    await job.updateProgress({ stage: "transcribe", percent: 0 });
+    const t = await transcribeAudio(ipfs.gatewayFor(audio.ipfsCid), `af${audioFileId}`, {
+      signal: ac.signal,
+    });
+    const chunks = chunkSegments(t.segments, config.TRANSCRIPT_CHUNK_CHARS);
+    const transcriptId = repo.saveTranscript(audioFileId, audio.showId, {
+      lang: t.lang,
+      model: t.model,
+      text: t.text,
+      segmentsJson: JSON.stringify(t.segments),
+      durationSec: t.durationSec,
+      chunks,
+    });
+    // FTS is trigger-maintained on insert → keyword transcript search works now;
+    // the embed stage adds semantic vectors (best-effort).
+    await enqueue("embed-transcript", { transcriptId }, { jobId: `emb-${transcriptId}`, removeOnComplete: true });
+    await job.updateProgress({ stage: "done", percent: 100 });
+    log.info("transcribed", { audioFileId, transcriptId, segments: t.segments.length, chunks: chunks.length });
+    return { transcriptId, segments: t.segments.length, chunks: chunks.length };
+  } finally {
+    clearTimeout(watchdog);
+  }
+}
+
+/** embed-transcript → embed a transcript's chunks into vec_chunks (Voyage). */
+async function embedTranscript(job: Job<JobData["embed-transcript"]>) {
+  const { transcriptId } = job.data;
+  const r = await embedTranscriptChunks(getProvider(), { transcriptId });
+  log.info("embedded transcript", { transcriptId, ...r });
+  return r;
+}
+
 export async function buildProcessors(): Promise<
   Partial<Record<QueueName, (job: Job<any>) => Promise<unknown>>>
 > {
@@ -240,6 +301,8 @@ export async function buildProcessors(): Promise<
     "ipfs-add": ipfsAdd,
     "ipfs-verify": ipfsVerify,
     index,
+    transcribe,
+    "embed-transcript": embedTranscript,
     "fetch-metadata": await reserved("fetch-metadata"),
     "extract-tags": await reserved("extract-tags"),
   };
