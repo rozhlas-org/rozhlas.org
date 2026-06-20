@@ -16,6 +16,14 @@ const concurrency: Partial<Record<QueueName, number>> = {
   "ipfs-add": 4,
 };
 
+// Long-running jobs need a longer lock than BullMQ's 30s default, or a busy event
+// loop (a big discover save of thousands of rows, or minutes-long ffmpeg) misses a
+// lock renewal and the job is wrongly declared "stalled" and killed.
+const lockDuration: Partial<Record<QueueName, number>> = {
+  discover: 900_000, // 15 min — a full-archive save is thousands of synchronous upserts
+  "acquire-audio": 360_000, // 6 min — ffmpeg assembly can run minutes
+};
+
 function fallback(name: QueueName): Processor {
   return async (job: Job) => {
     log.warn(`no processor registered for ${name}`, { jobId: job.id });
@@ -27,6 +35,7 @@ const workers = QUEUE_NAMES.map((name) => {
   const w = new Worker(name, processors[name] ?? fallback(name), {
     connection,
     concurrency: concurrency[name] ?? 5,
+    ...(lockDuration[name] ? { lockDuration: lockDuration[name] } : {}),
   });
   w.on("completed", (job) => log.debug(`${name} completed`, { jobId: job.id }));
   w.on("failed", (job, err) =>
