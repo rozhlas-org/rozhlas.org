@@ -54,7 +54,12 @@ export async function* iterateEpisodes(
     fetches++;
     onPage();
     if (!res.ok) throw new Error(`mujrozhlas ${res.status} for ${url}`);
-    const json: any = await res.json();
+    // Hard-time the body read: fetch's AbortSignal doesn't reliably abort a hung
+    // res.json() in Bun, which would wedge the whole crawl.
+    const json: any = await Promise.race([
+      res.json(),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("body read timeout")), PER_FETCH_MS)),
+    ]);
     for (const ep of (json.data ?? []) as ApiEpisode[]) yield ep;
     url = nextLink(json);
   }
