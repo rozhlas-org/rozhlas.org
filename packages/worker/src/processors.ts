@@ -193,7 +193,14 @@ async function ipfsVerify(job: Job<JobData["ipfs-verify"]>) {
   if (!audio?.ipfsCid) throw new Error(`audio ${audioFileId}: no cid`);
   const v = await ipfs.verifyStreamable(audio.ipfsCid);
   await repo.setAudioStreamable(audioFileId, v.streamable);
-  if (v.streamable) await enqueue("index", { showId: audio.showId });
+  if (v.streamable) {
+    await enqueue("index", { showId: audio.showId });
+    // Steady-state: transcribe newly-streamable audio as it arrives (the bulk
+    // backfill is a separate, opt-in/off-box concern — see TRANSCRIBE_BACKFILL).
+    if (transcriptionEnabled()) {
+      await enqueue("transcribe", { audioFileId }, { jobId: `tx-${audioFileId}`, removeOnComplete: true });
+    }
+  }
   return v;
 }
 
