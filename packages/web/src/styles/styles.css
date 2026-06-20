@@ -343,24 +343,19 @@ button:active,
   padding: 14px 16px;
   margin-bottom: var(--gap);
 }
-/* listened-to díl: revealed checkmark + cyan frame, title dimmed */
+/* listened-to díl: light cyan tint + cyan frame, small inline ✓ at the line start
+   (a fixed corner box would shift the trailing ＋ out of line with other rows) */
 .part__check {
   display: none;
-  position: absolute;
-  top: 12px;
-  right: 14px;
-  width: 26px;
-  height: 26px;
-  line-height: 22px;
-  text-align: center;
+  flex: none;
   font-family: var(--font-display);
   font-weight: 800;
-  color: var(--key);
-  background: var(--cyan);
-  border: var(--border-thin);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--cyan);
 }
-.part--played { border-color: var(--cyan); }
-.part--played .part__check { display: block; }
+.part--played { border-color: var(--cyan); background: color-mix(in srgb, var(--cyan) 12%, var(--paper)); }
+.part--played .part__check { display: inline-block; }
 .part--played .part__title { color: var(--muted); }
 /* resume hint for an in-progress díl */
 .part__resume {
@@ -766,8 +761,6 @@ body.has-player { padding-bottom: 92px; }
 }
 .queue-add--part:hover { transform: translateY(-50%); box-shadow: 2px 2px 0 var(--cyan); }
 .part:has(.queue-add--part) { padding-right: 52px; } /* keep title/length clear of the ＋ */
-.part--played .queue-add--part { right: 48px; } /* sit left of the ✓ on listened rows */
-.part--played:has(.queue-add--part) { padding-right: 86px; }
 
 /* marquee: long titles scroll right-to-left in a seamless loop (player.ts measures
    overflow and adds .marquee--on with a width-proportional --marquee-dur) */
