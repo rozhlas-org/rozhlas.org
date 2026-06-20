@@ -465,6 +465,16 @@ export async function showView(slug: string): Promise<ViewResult> {
       : `<p class="notice">Audio se zpracovává…</p>`;
   }
 
+  // "Přepis" — shown only when a transcript exists; lazy-loaded on toggle.
+  const hasTranscript =
+    show.parts.some((p) => p.audio?.hasTranscript) || show.audio.some((a) => a.hasTranscript);
+  const transcriptSection = hasTranscript
+    ? `<section class="transcript">
+        <button class="transcript-toggle" type="button" data-slug="${attr(show.slug)}" aria-expanded="false">Zobrazit přepis</button>
+        <div class="transcript-body" hidden></div>
+      </section>`
+    : "";
+
   return {
     title: show.title,
     html: `
@@ -492,6 +502,7 @@ export async function showView(slug: string): Promise<ViewResult> {
           ${desc}
           ${people}
           ${audioBlock}
+          ${transcriptSection}
         </div>
       </article>
       <section class="similar" id="similar-mount" data-slug="${attr(show.slug)}" hidden>
