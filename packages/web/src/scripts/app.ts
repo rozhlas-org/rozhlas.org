@@ -5,6 +5,7 @@
 
 import {
   browseView,
+  historyView,
   omnisearchView,
   programmeView,
   programmesView,
@@ -13,6 +14,7 @@ import {
   type ViewResult,
 } from "./views.ts";
 import { wireAudioProgress } from "./progress.ts";
+import { clearHistory } from "./history.ts";
 import { initPlayer, syncNowPlaying } from "./player.ts";
 
 const app = document.getElementById("app")!;
@@ -33,6 +35,7 @@ async function resolve(): Promise<ViewResult> {
   if (path === "/search") return searchView(params);
   if (path === "/omnisearch") return omnisearchView(params);
   if (path === "/programmes") return programmesView();
+  if (path === "/historie") return historyView(params);
 
   const show = path.match(/^\/show\/(.+)$/);
   if (show) return showView(decodeSeg(show[1]));
@@ -107,6 +110,19 @@ document.addEventListener("submit", (e) => {
 });
 
 window.addEventListener("popstate", render);
+
+// "Vymazat historii" on the /historie page (two-step confirm, then re-render).
+document.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".history-clear");
+  if (!btn) return;
+  if (btn.dataset.confirm === "1") {
+    clearHistory();
+    void render();
+  } else {
+    btn.dataset.confirm = "1";
+    btn.textContent = "Opravdu vymazat?";
+  }
+});
 
 // (Play counting lives in player.ts now — it records once per track start using
 // the playing track's slug, which is reliable across the single shared <audio>.)
