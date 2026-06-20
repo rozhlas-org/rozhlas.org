@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql, count } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, count } from "drizzle-orm";
 import { config, db, schema, toFtsQuery, getEmbedding, knnShows } from "@rozhlas/core";
 
 const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources } =
@@ -24,6 +24,8 @@ export interface ShowListItem {
   durationSec: number | null;
   artworkUrl: string | null;
   streamable: boolean;
+  /** Count of parts (díly) with streamable audio. 0 for single-audio shows. */
+  streamablePartCount: number;
   streamUrl: string | null;
   plays: number;
   displays: number;
@@ -92,6 +94,7 @@ export async function listShows(f: ListFilters) {
 
   const ids = rows.map((r) => r.id);
   const audioByShow = await audioForShows(ids);
+  const partsByShow = await streamablePartsForShows(ids);
   const artByShow = await artworkForShows(ids);
 
   const items: ShowListItem[] = rows.map((r) => {
@@ -105,6 +108,7 @@ export async function listShows(f: ListFilters) {
       durationSec: r.durationSec ?? a?.durationSec ?? null,
       artworkUrl: artByShow.get(r.id) ?? null,
       streamable: a?.streamable ?? false,
+      streamablePartCount: partsByShow.get(r.id) ?? 0,
       streamUrl: streamUrl(a?.ipfsCid ?? null),
       plays: r.plays,
       displays: r.displays,
@@ -127,6 +131,30 @@ async function audioForShows(ids: number[]) {
     .from(audioFiles)
     .where(and(inArray(audioFiles.showId, ids), isNull(audioFiles.partId)));
   for (const r of rows) if (!map.has(r.showId)) map.set(r.showId, r);
+  return map;
+}
+
+/**
+ * Per show, how many parts (díly) have streamable audio. Serialized shows keep
+ * their audio on parts (part_id set), so this is what tells a list card "this is
+ * a multi-part, playable show" — show-level `streamable` (part_id IS NULL) is
+ * false for them. One batched grouped count over the page's ids; 0 if no parts.
+ */
+async function streamablePartsForShows(ids: number[]) {
+  const map = new Map<number, number>();
+  if (!ids.length) return map;
+  const rows = await db
+    .select({ showId: audioFiles.showId, c: count() })
+    .from(audioFiles)
+    .where(
+      and(
+        inArray(audioFiles.showId, ids),
+        isNotNull(audioFiles.partId),
+        eq(audioFiles.streamable, true),
+      ),
+    )
+    .groupBy(audioFiles.showId);
+  for (const r of rows) map.set(r.showId, r.c);
   return map;
 }
 
@@ -164,6 +192,7 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
     .from(shows)
     .where(inArray(shows.id, ids));
   const audio = await audioForShows(ids);
+  const partsByShow = await streamablePartsForShows(ids);
   const art = await artworkForShows(ids);
   for (const r of rows) {
     const a = audio.get(r.id);
@@ -176,6 +205,7 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
       durationSec: r.durationSec ?? a?.durationSec ?? null,
       artworkUrl: art.get(r.id) ?? null,
       streamable: a?.streamable ?? false,
+      streamablePartCount: partsByShow.get(r.id) ?? 0,
       streamUrl: a?.ipfsCid ? streamUrl(a.ipfsCid) : null,
       plays: r.plays,
       displays: r.displays,
@@ -217,7 +247,9 @@ export async function similarShows(showId: number, limit = 4): Promise<ShowListI
   const seenTitles = new Set<string>();
   for (const h of hits) {
     const item = map.get(h.showId);
-    if (!item || !item.streamable) continue; // never recommend something unplayable
+    // never recommend something unplayable — but multi-part shows are playable
+    // via their parts even though show-level `streamable` is false.
+    if (!item || !(item.streamable || item.streamablePartCount > 0)) continue;
     const titleKey = item.title.toLowerCase();
     if (seenTitles.has(titleKey)) continue; // drop re-published near-duplicates
     const key = item.showName ?? "";
