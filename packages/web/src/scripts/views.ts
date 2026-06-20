@@ -429,9 +429,11 @@ export async function showView(slug: string): Promise<ViewResult> {
             })
           : "";
         // idx + title share one line; the title clips and marquee-scrolls if long
-        // (player.ts applies the scroll after render). dur/resume sit below.
-        const line = `<span class="part__line">${num}<span class="part__title">${esc(p.title ?? "díl")}</span></span>`;
-        return `<li class="${cls}"${data}>${play}${check}${line}${dur}${resume}${addPart}</li>`;
+        // (player.ts applies the scroll after render). dur/resume sit below. The
+        // played ✓ sits inline at the line start (not a corner box) so it never
+        // shifts the trailing ＋ — the row's cyan tint is the main "done" signal.
+        const line = `<span class="part__line">${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span></span>`;
+        return `<li class="${cls}"${data}>${play}${line}${dur}${resume}${addPart}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
