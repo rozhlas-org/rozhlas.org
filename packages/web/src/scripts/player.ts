@@ -84,6 +84,32 @@ function showBar(): void {
   document.body.classList.add("has-player");
 }
 
+const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
+/**
+ * Put `text` in `el`, and if it overflows the element, loop it as a marquee
+ * (slow right-to-left scroll). Seamless: the text is duplicated with a trailing
+ * gap and the inner is animated by -50%, so one copy+gap == one period. Static
+ * (ellipsis) when it fits or under prefers-reduced-motion.
+ */
+function setScrollingTitle(el: HTMLElement, text: string): void {
+  el.classList.add("marquee");
+  el.classList.remove("marquee--on");
+  el.style.removeProperty("--marquee-dur");
+  el.innerHTML = `<span class="marquee__inner">${esc(text)}</span>`;
+  if (reduceMotion || !text) return;
+  const inner = el.firstElementChild as HTMLElement;
+  requestAnimationFrame(() => {
+    if (inner.scrollWidth - el.clientWidth <= 4) return; // fits — leave static
+    inner.innerHTML =
+      `<span class="marquee__seg">${esc(text)}</span>` +
+      `<span class="marquee__seg" aria-hidden="true">${esc(text)}</span>`;
+    const period = inner.scrollWidth / 2; // one copy + gap, in px
+    el.style.setProperty("--marquee-dur", `${Math.max(6, Math.round(period / 40))}s`); // ~40 px/s
+    el.classList.add("marquee--on");
+  });
+}
+
 function clock(sec: number): string {
   return formatDuration(Math.max(0, Math.floor(sec || 0))) || "0:00";
 }
@@ -154,7 +180,7 @@ function load(autoplay: boolean): void {
   audio.src = t.streamUrl;
   audio.load();
   nowEl.textContent = q.parts.length > 1 ? `Nyní hraje · díl ${q.index + 1}/${q.parts.length}` : "Nyní hraje";
-  titleLink.textContent = t.title;
+  setScrollingTitle(titleLink, t.title);
   titleLink.href = `/show/${encodeURIComponent(q.slug)}`;
   prevBtn.disabled = q.index === 0 && audio.currentTime < 3;
   nextBtn.disabled = q.index >= q.parts.length - 1;
@@ -277,6 +303,8 @@ function renderQueuePanel(): void {
     : `<p class="queue__empty">Fronta je prázdná.<br /><span class="queue__hint">Přidejte pořady tlačítkem ＋ na kartě.</span></p>`;
   const clear = items.length ? `<button class="queue__clear" type="button">Vymazat frontu</button>` : "";
   queuePanel.innerHTML = `<div class="queue__head"><span class="queue__heading">Fronta</span>${clear}</div>${nowRow}${list}`;
+  // Marquee any title that overflows its row.
+  queuePanel.querySelectorAll<HTMLElement>(".qrow__title").forEach((el) => setScrollingTitle(el, el.textContent ?? ""));
 }
 
 function openQueuePanel(): void {
@@ -413,6 +441,16 @@ export function initPlayer(): void {
 
   onQueueChange(onQueueChanged);
   onQueueChanged(); // initial badge from any persisted queue
+
+  // Re-measure marquees when the available width changes (resize / rotate).
+  let resizeT: ReturnType<typeof setTimeout> | undefined;
+  window.addEventListener("resize", () => {
+    if (resizeT) clearTimeout(resizeT);
+    resizeT = setTimeout(() => {
+      if (q) setScrollingTitle(titleLink, q.parts[q.index]!.title);
+      if (queuePanelOpen()) renderQueuePanel();
+    }, 200);
+  });
 
   // Seek bar (0..1000 fraction of duration). Commit the seek ONCE, on release.
   // A type=range fires `input` continuously while dragging; writing currentTime on
