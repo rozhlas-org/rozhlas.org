@@ -12,16 +12,23 @@ export interface ViewResult {
   html: string;
 }
 
-/** Add-to-queue button → player.ts enqueues from the data attributes (no fetch). */
+/**
+ * Add-to-queue button. player.ts reads the data attributes:
+ *   - no `data-idx`  → "add all": fetch the show and queue every streamable díl.
+ *   - with `data-idx`→ add just that one díl (`data-parttitle` is its row label).
+ * `data-title`/`data-showname` carry the show meta for the queue entry.
+ */
 function queueAddBtn(
   slug: string,
   title: string,
   showName: string | null,
-  opts: { label?: string; cls?: string; title?: string } = {},
+  opts: { label?: string; cls?: string; title?: string; idx?: string | number; partTitle?: string } = {},
 ): string {
   const t = opts.title ?? "Přidat do fronty";
+  const idxAttr = opts.idx != null ? ` data-idx="${attr(String(opts.idx))}"` : "";
+  const ptAttr = opts.partTitle != null ? ` data-parttitle="${attr(opts.partTitle)}"` : "";
   return `<button class="queue-add${opts.cls ? ` ${opts.cls}` : ""}" type="button"
-    data-slug="${attr(slug)}" data-title="${attr(title)}" data-showname="${attr(showName ?? "")}"
+    data-slug="${attr(slug)}" data-title="${attr(title)}" data-showname="${attr(showName ?? "")}"${idxAttr}${ptAttr}
     aria-label="${attr(t)}" title="${attr(t)}">${opts.label ?? "＋"}</button>`;
 }
 
@@ -412,7 +419,16 @@ export async function showView(slug: string): Promise<ViewResult> {
           : "";
         const cls = `part${played ? " part--played" : ""}${canPlay ? " part--playable" : ""}`;
         const data = canPlay ? ` data-slug="${attr(show.slug)}" data-idx="${attr(String(p.idx))}"` : "";
-        return `<li class="${cls}"${data}>${play}${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span>${dur}${resume}</li>`;
+        // Per-díl "add to queue" (trailing) — distinct from the row's ▶ play.
+        const addPart = canPlay
+          ? queueAddBtn(show.slug, show.title, show.showName, {
+              idx: p.idx,
+              partTitle: p.title ?? `${p.idx}. díl`,
+              title: "Přidat tento díl do fronty",
+              cls: "queue-add--part",
+            })
+          : "";
+        return `<li class="${cls}"${data}>${play}${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span>${dur}${resume}${addPart}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
