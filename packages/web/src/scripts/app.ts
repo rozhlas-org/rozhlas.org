@@ -18,6 +18,7 @@ import {
 import { wireAudioProgress } from "./progress.ts";
 import { clearHistory } from "./history.ts";
 import { applyPartMarquees, initPlayer, syncNowPlaying } from "./player.ts";
+import { wireTranscript } from "./transcript.ts";
 
 const app = document.getElementById("app")!;
 
@@ -136,5 +137,7 @@ document.addEventListener("click", (e) => {
 wireAudioProgress();
 // Persistent bottom player (lives in the shell, survives navigation).
 initPlayer();
+// Lazy "Přepis" disclosure on show detail pages.
+wireTranscript();
 
 render();
