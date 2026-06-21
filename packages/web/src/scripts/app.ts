@@ -156,7 +156,10 @@ document.addEventListener("click", (e) => {
     displays: Number(d.displays ?? "0"),
   });
   if (btn.classList.contains("show-card__fav")) {
-    void render(); // Oblíbené page: reflect the removal (and the empty state)
+    // On the Oblíbené page un-saving drops the card → re-render (cheap, no fetch).
+    // On any other listing just flip the star in place (don't refetch / lose scroll).
+    if (location.pathname.replace(/\/+$/, "") === "/oblibene") void render();
+    else btn.setAttribute("aria-pressed", String(nowFav));
     return;
   }
   btn.setAttribute("aria-pressed", String(nowFav));
