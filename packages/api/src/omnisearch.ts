@@ -1,4 +1,4 @@
-import { createLogger, sqlite, toFtsQuery, type KnnHit } from "@rozhlas/core";
+import { createLogger, sqlite, stripHtml, toFtsQuery, type KnnHit } from "@rozhlas/core";
 import { getProvider, vectorSearch } from "@rozhlas/embeddings";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
 import { parseIntent, type Intent } from "./intent.ts";
@@ -26,43 +26,88 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Lowercase + strip diacritics, for forgiving title-match boosting. */
-function deburr(s: string): string {
-  return s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+// Czech diacritic fold, ONE code point in → one out, so a folded string stays
+// index-aligned with the original (lets us match diacritic-insensitively but
+// highlight the original text). NFD-based stripping would change length.
+const FOLD: Record<string, string> = {
+  á: "a", č: "c", ď: "d", é: "e", ě: "e", í: "i", ň: "n", ó: "o", ř: "r",
+  š: "s", ť: "t", ú: "u", ů: "u", ý: "y", ž: "z", ä: "a", ö: "o", ü: "u",
+};
+function fold(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    const lc = ch.toLowerCase();
+    out += lc.length === 1 ? (FOLD[lc] ?? lc) : ch; // keep 1:1 even if lowercase grows
+  }
+  return out;
 }
 
-/** Significant query terms (deburred, >2 chars) for the title boost. */
+/** Decode the few HTML entities that survive tag-stripping in descriptions. */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+/** Significant query terms (folded, >2 chars) for boosting + snippet highlighting. */
 function queryTerms(q: string): string[] {
-  return deburr(q)
+  return fold(q)
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter((w) => w.length > 2);
 }
 
-// ASCII sentinels: mark hits in the raw snippet, escape the text, then swap the
-// sentinels for real <mark> tags — so description HTML can't inject markup.
-const HL_OPEN = "@@HLO@@";
-const HL_CLOSE = "@@HLC@@";
-
-/** Highlighted FTS snippets (over the description column) for the given shows. */
-function ftsSnippets(text: string, ids: number[]): Map<number, string> {
+/**
+ * Build a highlighted description excerpt for each show that actually contains a
+ * query term. Works on the plain-text description (HTML stripped), folds for
+ * diacritic-insensitive matching, and wraps the original text in <mark>. Returns
+ * nothing for shows matched only by title (the title is already shown on the card).
+ */
+function buildSnippets(query: string, ids: number[]): Map<number, string> {
   const out = new Map<number, string>();
-  const q = toFtsQuery(text);
-  if (!q || !ids.length) return out;
-  try {
-    const rows = sqlite
-      .prepare(
-        `SELECT rowid AS id, snippet(shows_fts, 1, '${HL_OPEN}', '${HL_CLOSE}', '…', 14) AS snip
-         FROM shows_fts WHERE rowid IN (${ids.map(() => "?").join(",")}) AND shows_fts MATCH ?`,
-      )
-      .all(...ids, q) as { id: number; snip: string }[];
-    for (const r of rows) {
-      if (!r.snip) continue;
-      const safe = escapeHtml(r.snip).split(HL_OPEN).join("<mark>").split(HL_CLOSE).join("</mark>");
-      out.set(r.id, safe);
+  const terms = queryTerms(query);
+  if (!ids.length || !terms.length) return out;
+  const rows = sqlite
+    .prepare(`SELECT id, description FROM shows WHERE id IN (${ids.map(() => "?").join(",")})`)
+    .all(...ids) as { id: number; description: string | null }[];
+  for (const r of rows) {
+    const text = decodeEntities(stripHtml(r.description ?? "")).replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    const folded = fold(text); // index-aligned with `text`
+    const spans: [number, number][] = [];
+    let earliest = -1;
+    for (const t of terms) {
+      for (let i = folded.indexOf(t); i >= 0; i = folded.indexOf(t, i + t.length)) {
+        spans.push([i, i + t.length]);
+        if (earliest < 0 || i < earliest) earliest = i;
+      }
     }
-  } catch (err) {
-    log.warn("snippet query failed", { err: String(err) });
+    if (earliest < 0) continue; // description doesn't contain the query → no snippet
+    const start = Math.max(0, earliest - 60);
+    const end = Math.min(text.length, start + 200);
+    const inWin = spans
+      .filter(([s, e]) => e > start && s < end)
+      .sort((a, b) => a[0] - b[0]);
+    const merged: [number, number][] = [];
+    for (const sp of inWin) {
+      const last = merged[merged.length - 1];
+      if (last && sp[0] <= last[1]) last[1] = Math.max(last[1], sp[1]);
+      else merged.push([...sp]);
+    }
+    let html = "";
+    let cur = start;
+    for (const [s, e] of merged) {
+      const s2 = Math.max(s, start);
+      const e2 = Math.min(e, end);
+      html += escapeHtml(text.slice(cur, s2)) + "<mark>" + escapeHtml(text.slice(s2, e2)) + "</mark>";
+      cur = e2;
+    }
+    html += escapeHtml(text.slice(cur, end));
+    out.set(r.id, (start > 0 ? "…" : "") + html + (end < text.length ? "…" : ""));
   }
   return out;
 }
@@ -119,7 +164,7 @@ export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
     const it = map.get(id);
     let s = rrf.get(id) ?? 0;
     if (it) {
-      const title = deburr(it.title);
+      const title = fold(it.title);
       if (terms.length && terms.some((t) => title.includes(t))) s += 0.5 * UNIT; // title hit
       s += 0.2 * UNIT * Math.min(1, Math.log10(1 + it.plays) / 3); // gentle popularity
     }
@@ -130,7 +175,7 @@ export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
     .filter((id) => map.has(id))
     .sort((a, b) => score(b) - score(a))
     .slice(0, k);
-  const snips = ftsSnippets(intent.searchText, ranked);
+  const snips = buildSnippets(query, ranked);
   const items = ranked.map((id) => {
     const it = map.get(id)!;
     const snip = snips.get(id);
