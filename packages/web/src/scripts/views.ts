@@ -344,13 +344,13 @@ export async function historyView(params: URLSearchParams): Promise<ViewResult> 
 
   const clear = all.length ? `<button class="history-clear" type="button">Vymazat historii</button>` : "";
   return {
-    title: "Historie",
+    title: "Naposledy",
     html:
       `<section class="history">` +
-      `<div class="history__head"><h1>Historie</h1>${clear}</div>` +
+      `<div class="history__head"><h1>Naposledy</h1>${clear}</div>` +
       `<div class="hist-filters"><span class="hist-filters__group">${typeChips}</span><span class="hist-filters__group">${rangeChips}</span></div>` +
       list +
-      `<p class="history__privacy">Historie se ukládá jen ve vašem prohlížeči.</p>` +
+      `<p class="history__privacy">Ukládá se jen ve vašem prohlížeči.</p>` +
       `</section>`,
   };
 }
