@@ -575,7 +575,8 @@ export function initPlayer(): void {
   // navigates. Enter/Space on the focused badge does the same.
   const playBadge = (badge: HTMLElement) => {
     const slug = badge.dataset.slug;
-    if (slug) void playFromSlug(slug, ""); // no idx match → starts at the first streamable díl
+    // data-idx set (a selection díl card) → play that díl; else "" = first streamable díl.
+    if (slug) void playFromSlug(slug, badge.dataset.idx ?? "");
   };
   document.addEventListener(
     "click",

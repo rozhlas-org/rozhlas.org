@@ -23,6 +23,24 @@ export interface ShowListItem {
   snippet?: string;
   /** Universal search: a timestamped spoken-content match (deep-links into playback). */
   transcriptHit?: { startSec: number; partIdx: number | null; snippet: string };
+  /** Selection item that is a specific díl (not the whole show): play/queue that díl. */
+  partIdx?: number | null;
+  partTitle?: string | null;
+}
+
+export interface Selection {
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  itemCount: number;
+}
+export interface SelectionDetail {
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  items: ShowListItem[];
 }
 
 export interface ListResult {
@@ -137,6 +155,8 @@ export const api = {
   transcriptSearch: (q: string, programme?: string) =>
     getJSON<TranscriptSearchResult>("/api/transcript-search", { q, programme }),
   programmes: () => getJSON<Programme[]>("/api/programmes"),
+  selections: () => getJSON<Selection[]>("/api/selections"),
+  selection: (slug: string) => getJSON<SelectionDetail>(`/api/selections/${encodeURIComponent(slug)}`),
   recordPlay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/play`),
   recordDisplay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/display`),
 };
