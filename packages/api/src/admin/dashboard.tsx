@@ -153,6 +153,7 @@ function Page({ data }: { data: DashboardData }) {
         <header class="topbar">
           <h1>rozhlas<span class="accent">.org</span> · operator</h1>
           <nav>
+            <a href="/admin/selections">Výběry</a>
             <a href="/admin/jobs">Fronty (Bull Board) →</a>
             <a href="/admin">↻ Obnovit</a>
             <a href="/admin/logout" class="logout">Odhlásit</a>
