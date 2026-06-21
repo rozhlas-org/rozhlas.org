@@ -5,6 +5,7 @@
 
 import {
   browseView,
+  favouritesView,
   historyView,
   loadSimilar,
   omnisearchView,
@@ -16,6 +17,7 @@ import {
 } from "./views.ts";
 import { wireAudioProgress } from "./progress.ts";
 import { clearHistory } from "./history.ts";
+import { clearFavourites, toggleFavourite } from "./favourites.ts";
 import { applyPartMarquees, initPlayer, syncNowPlaying } from "./player.ts";
 import { wireTranscript } from "./transcript.ts";
 
@@ -39,6 +41,7 @@ async function resolve(): Promise<ViewResult> {
   if (path === "/transcripts") return transcriptSearchView(params);
   if (path === "/programmes") return programmesView();
   if (path === "/historie") return historyView(params);
+  if (path === "/oblibene") return favouritesView();
 
   const show = path.match(/^\/show\/(.+)$/);
   if (show) return showView(decodeSeg(show[1]));
@@ -118,15 +121,49 @@ window.addEventListener("popstate", render);
 
 // "Vymazat historii" on the /historie page (two-step confirm, then re-render).
 document.addEventListener("click", (e) => {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".history-clear");
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".history-clear, .fav-clear");
   if (!btn) return;
   if (btn.dataset.confirm === "1") {
-    clearHistory();
+    if (btn.classList.contains("fav-clear")) clearFavourites();
+    else clearHistory();
     void render();
   } else {
     btn.dataset.confirm = "1";
     btn.textContent = "Opravdu vymazat?";
   }
+});
+
+// Save/unsave a show ("Oblíbené"). The button carries the card fields on data-*, so
+// no fetch. On the detail page we flip the button in place (a re-render would restart
+// the marquee / lose scroll); on the Oblíbené page we re-render so the card drops out.
+document.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".fav-toggle");
+  if (!btn) return;
+  e.preventDefault();
+  const d = btn.dataset;
+  if (!d.slug) return;
+  const nowFav = toggleFavourite({
+    slug: d.slug,
+    title: d.title ?? d.slug,
+    showName: d.showname || null,
+    source: d.source ?? "",
+    publishedAt: d.publishedat || null,
+    durationSec: d.durationsec ? Number(d.durationsec) : null,
+    artworkUrl: d.artwork || null,
+    streamable: d.streamable === "1",
+    streamablePartCount: Number(d.streamableparts ?? "0"),
+    plays: Number(d.plays ?? "0"),
+    displays: Number(d.displays ?? "0"),
+  });
+  if (btn.classList.contains("show-card__fav")) {
+    void render(); // Oblíbené page: reflect the removal (and the empty state)
+    return;
+  }
+  btn.setAttribute("aria-pressed", String(nowFav));
+  btn.textContent = nowFav ? "★ V oblíbených" : "★ Do oblíbených";
+  const t = nowFav ? "Odebrat z oblíbených" : "Přidat do oblíbených";
+  btn.setAttribute("aria-label", t);
+  btn.setAttribute("title", t);
 });
 
 // (Play counting lives in player.ts now — it records once per track start using
