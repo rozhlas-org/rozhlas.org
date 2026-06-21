@@ -6,6 +6,7 @@ import { api, type ListResult, type ShowListItem, type SortKey, type TranscriptH
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
 import { getHistory, logView, type HistoryEntry } from "./history.ts";
+import { getFavourites, isFavourite, refreshFavourite, type FavItem } from "./favourites.ts";
 
 export interface ViewResult {
   title: string;
@@ -75,7 +76,7 @@ function cardTxHit(s: ShowListItem): string {
   return `<button class="tx-hit tx-hit--card" type="button" data-slug="${attr(s.slug)}" data-part="${attr(part)}" data-seek="${h.startSec}" aria-label="Přehrát od ${esc(formatDuration(h.startSec))}"><span class="tx-hit__time">▶ ${esc(formatDuration(h.startSec))}</span>${dil}<span class="tx-hit__snip">${h.snippet}…</span></button>`;
 }
 
-function showCard(s: ShowListItem): string {
+function showCard(s: ShowListItem, opts: { favControl?: boolean } = {}): string {
   const art = s.artworkUrl
     ? `<img src="${attr(s.artworkUrl)}" alt="" loading="lazy" />`
     : `<div class="show-card__art--placeholder" aria-hidden="true"></div>`;
@@ -105,9 +106,13 @@ function showCard(s: ShowListItem): string {
   const dur = s.durationSec
     ? `<span class="show-card__dur"> · ${esc(formatDuration(s.durationSec))}</span>`
     : "";
+  // Pre-pressed ★ at top-left (queue ＋ owns top-right) — used on the Oblíbené page to
+  // un-save. A real <button>, sibling of the card <a> (never inside it).
+  const fav = opts.favControl ? favBtn(s, { cls: "show-card__fav", variant: "card" }) : "";
   return `
     <article class="show-card">
       ${add}
+      ${fav}
       <a class="show-card__link" href="/show/${encodeURIComponent(s.slug)}">
         <div class="show-card__art">${art}${badge}</div>
         <h3 class="show-card__title">${esc(s.title)}</h3>
@@ -117,6 +122,27 @@ function showCard(s: ShowListItem): string {
       <p class="show-card__meta">${esc(formatDate(s.publishedAt))}${dur}</p>
       ${statsLine(s.plays, s.displays)}
     </article>`;
+}
+
+/** Fields a favourite toggle needs to render a card later — a subset of ShowListItem. */
+type FavCardData = Omit<FavItem, "addedAt">;
+
+/**
+ * "Oblíbené" save toggle. Carries every card field on `data-*` so favourites.ts can
+ * store the show without refetching. `aria-pressed` reflects the saved state at render;
+ * the click handler flips it in place. variant: detail = labelled pill, card = icon star.
+ */
+function favBtn(f: FavCardData, opts: { cls?: string; variant: "detail" | "card" }): string {
+  const saved = isFavourite(f.slug);
+  const label = opts.variant === "detail" ? (saved ? "★ V oblíbených" : "★ Do oblíbených") : "★";
+  const t = saved ? "Odebrat z oblíbených" : "Přidat do oblíbených";
+  return `<button class="fav-toggle${opts.cls ? ` ${opts.cls}` : ""}" type="button" aria-pressed="${saved}"
+    data-slug="${attr(f.slug)}" data-title="${attr(f.title)}" data-showname="${attr(f.showName ?? "")}"
+    data-source="${attr(f.source)}" data-artwork="${attr(f.artworkUrl ?? "")}"
+    data-durationsec="${attr(f.durationSec == null ? "" : String(f.durationSec))}" data-publishedat="${attr(f.publishedAt ?? "")}"
+    data-plays="${attr(String(f.plays))}" data-displays="${attr(String(f.displays))}"
+    data-streamable="${f.streamable ? "1" : "0"}" data-streamableparts="${attr(String(f.streamablePartCount))}"
+    aria-label="${attr(t)}" title="${attr(t)}">${label}</button>`;
 }
 
 /** Plays + displays counters (mono, muted). ▶ = přehrání, plus zobrazení. */
@@ -148,9 +174,9 @@ function sortControl(current: SortKey, params: URLSearchParams): string {
   return `<div class="sort"><span class="sort__label">Řadit</span>${links}</div>`;
 }
 
-function showGrid(items: ShowListItem[]): string {
+function showGrid(items: ShowListItem[], opts: { favControl?: boolean } = {}): string {
   if (!items.length) return `<p class="empty">Žádné pořady.</p>`;
-  return `<div class="show-grid">${items.map(showCard).join("")}</div>`;
+  return `<div class="show-grid">${items.map((s) => showCard(s, opts)).join("")}</div>`;
 }
 
 /** `base` ends with "&" or "?" — e.g. "/?q=foo&" or "/search?q=foo&". */
@@ -367,6 +393,28 @@ export async function historyView(params: URLSearchParams): Promise<ViewResult> 
   };
 }
 
+// ---- Oblíbené (saved shows) ----
+
+export async function favouritesView(): Promise<ViewResult> {
+  const favs = getFavourites();
+  const clear = favs.length ? `<button class="history-clear fav-clear" type="button">Vymazat oblíbené</button>` : "";
+  const body = favs.length
+    ? showGrid(
+        favs.map((f) => ({ ...f, streamUrl: null })),
+        { favControl: true },
+      )
+    : `<p class="empty">Zatím nemáte žádné oblíbené pořady. Až si nějaký uložíte hvězdičkou ★, najdete ho tady. <a href="/">Procházet pořady →</a></p>`;
+  return {
+    title: "Oblíbené",
+    html:
+      `<section class="favourites">` +
+      `<div class="history__head"><h1>Oblíbené</h1>${clear}</div>` +
+      body +
+      `<p class="history__privacy">Ukládá se jen ve vašem prohlížeči.</p>` +
+      `</section>`,
+  };
+}
+
 export async function omnisearchView(params: URLSearchParams): Promise<ViewResult> {
   const q = (params.get("q") ?? "").trim();
   const result = q ? await api.omnisearch(q) : null;
@@ -388,6 +436,20 @@ export async function showView(slug: string): Promise<ViewResult> {
   }
   api.recordDisplay(slug); // count this detail view (fire-and-forget)
   logView({ slug, title: show.title, showName: show.showName }); // local Historie (coalesced)
+  const favData: FavCardData = {
+    slug: show.slug,
+    title: show.title,
+    showName: show.showName,
+    source: show.source,
+    publishedAt: show.publishedAt,
+    durationSec: show.durationSec,
+    artworkUrl: show.artworkUrl,
+    streamable: show.audio.some((a) => a.streamable),
+    streamablePartCount: show.parts.filter((p) => p.audio?.streamable).length,
+    plays: show.plays,
+    displays: show.displays,
+  };
+  refreshFavourite(favData); // keep a saved show's stored card fields fresh (no-op if not saved)
   const hasParts = show.parts.length > 0;
   const art = show.artworkUrl ? `<img class="show-detail__art" src="${attr(show.artworkUrl)}" alt="" />` : "";
   const programme = show.showName
@@ -477,6 +539,7 @@ export async function showView(slug: string): Promise<ViewResult> {
           <h1>${esc(show.title)}</h1>
           <p class="show-detail__meta">${meta}</p>
           ${statsLine(show.plays, show.displays)}
+          <div class="show-detail__actions">
           ${(() => {
             // Count streamable parts client-side from the loaded detail (no API
             // dependency). Adding the show queues ALL parts — the label says so.
@@ -491,6 +554,8 @@ export async function showView(slug: string): Promise<ViewResult> {
               artworkUrl: show.artworkUrl,
             });
           })()}
+          ${favBtn(favData, { cls: "fav-toggle--detail", variant: "detail" })}
+          </div>
           ${desc}
           ${people}
           ${audioBlock}
@@ -574,6 +639,6 @@ export async function loadSimilar(): Promise<void> {
   if (!live || live.dataset.slug !== slug || !items.length) return;
   const grid = live.querySelector<HTMLElement>("#similar-grid");
   if (!grid) return;
-  grid.innerHTML = items.map(showCard).join("");
+  grid.innerHTML = items.map((s) => showCard(s)).join("");
   live.hidden = false;
 }
