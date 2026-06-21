@@ -76,7 +76,7 @@ function cardTxHit(s: ShowListItem): string {
   return `<button class="tx-hit tx-hit--card" type="button" data-slug="${attr(s.slug)}" data-part="${attr(part)}" data-seek="${h.startSec}" aria-label="Přehrát od ${esc(formatDuration(h.startSec))}"><span class="tx-hit__time">▶ ${esc(formatDuration(h.startSec))}</span>${dil}<span class="tx-hit__snip">${h.snippet}…</span></button>`;
 }
 
-function showCard(s: ShowListItem, opts: { favControl?: boolean } = {}): string {
+function showCard(s: ShowListItem): string {
   const art = s.artworkUrl
     ? `<img src="${attr(s.artworkUrl)}" alt="" loading="lazy" />`
     : `<div class="show-card__art--placeholder" aria-hidden="true"></div>`;
@@ -106,9 +106,9 @@ function showCard(s: ShowListItem, opts: { favControl?: boolean } = {}): string 
   const dur = s.durationSec
     ? `<span class="show-card__dur"> · ${esc(formatDuration(s.durationSec))}</span>`
     : "";
-  // Pre-pressed ★ at top-left (queue ＋ owns top-right) — used on the Oblíbené page to
-  // un-save. A real <button>, sibling of the card <a> (never inside it).
-  const fav = opts.favControl ? favBtn(s, { cls: "show-card__fav", variant: "card" }) : "";
+  // ★ save toggle at top-left (queue ＋ owns top-right). Reflects the saved state and
+  // toggles it. A real <button>, sibling of the card <a> (never inside it).
+  const fav = favBtn(s, { cls: "show-card__fav", variant: "card" });
   return `
     <article class="show-card">
       ${add}
@@ -174,9 +174,9 @@ function sortControl(current: SortKey, params: URLSearchParams): string {
   return `<div class="sort"><span class="sort__label">Řadit</span>${links}</div>`;
 }
 
-function showGrid(items: ShowListItem[], opts: { favControl?: boolean } = {}): string {
+function showGrid(items: ShowListItem[]): string {
   if (!items.length) return `<p class="empty">Žádné pořady.</p>`;
-  return `<div class="show-grid">${items.map((s) => showCard(s, opts)).join("")}</div>`;
+  return `<div class="show-grid">${items.map((s) => showCard(s)).join("")}</div>`;
 }
 
 /** `base` ends with "&" or "?" — e.g. "/?q=foo&" or "/search?q=foo&". */
@@ -399,10 +399,7 @@ export async function favouritesView(): Promise<ViewResult> {
   const favs = getFavourites();
   const clear = favs.length ? `<button class="history-clear fav-clear" type="button">Vymazat oblíbené</button>` : "";
   const body = favs.length
-    ? showGrid(
-        favs.map((f) => ({ ...f, streamUrl: null })),
-        { favControl: true },
-      )
+    ? showGrid(favs.map((f) => ({ ...f, streamUrl: null })))
     : `<p class="empty">Zatím nemáte žádné oblíbené pořady. Až si nějaký uložíte hvězdičkou ★, najdete ho tady. <a href="/">Procházet pořady →</a></p>`;
   return {
     title: "Oblíbené",
