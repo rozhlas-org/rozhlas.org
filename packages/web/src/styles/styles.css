@@ -792,6 +792,48 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   box-shadow: 4px 4px 0 var(--cyan);
 }
 .queue-add--detail:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--cyan); }
+
+/* ===== Oblíbené (favourite) toggle ===== */
+/* Secondary, outline form so it never reads as the cyan-filled queue pill. Saved =
+   yellow fill (the one unused CMYK accent → can't be confused with cyan/magenta). */
+.fav-toggle {
+  background: var(--paper);
+  color: var(--key);
+  border: var(--border-thin);
+  box-shadow: none;
+  display: grid;
+  place-items: center;
+}
+.fav-toggle[aria-pressed="true"] { background: var(--yellow); color: var(--key); }
+.fav-toggle--detail {
+  width: auto;
+  height: auto;
+  padding: 9px 16px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 3px 3px 0 var(--key);
+}
+.fav-toggle--detail:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--yellow); }
+/* grouped action row on the detail page: queue pill + favourite */
+.show-detail__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 6px 0 4px; }
+.show-detail__actions .queue-add--detail { margin: 0; }
+/* card variant: pre-pressed ★ at top-left (queue ＋ owns top-right) to un-save */
+.show-card__fav {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+.show-card__fav:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--key); }
+
 /* pending state for "add all" (fetching the show) — dimmed, label kept, no jitter */
 .queue-add:disabled,
 .queue-add[aria-busy="true"] { opacity: 0.5; cursor: default; }
