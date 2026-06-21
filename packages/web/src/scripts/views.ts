@@ -484,6 +484,9 @@ export async function showView(slug: string): Promise<ViewResult> {
         const resume = resumeAt
           ? `<span class="part__resume">pokračovat od ${esc(formatDuration(resumeAt))}</span>`
           : "";
+        const cid = p.audio?.cid
+          ? `<span class="part__cid">IPFS: <code>${esc(p.audio.cid)}</code></span>`
+          : "";
         const cls = `part${played ? " part--played" : ""}${canPlay ? " part--playable" : ""}`;
         const data = canPlay ? ` data-slug="${attr(show.slug)}" data-idx="${attr(String(p.idx))}"` : "";
         // Per-díl "add to queue" (trailing) — distinct from the row's ▶ play.
@@ -501,7 +504,7 @@ export async function showView(slug: string): Promise<ViewResult> {
         // played ✓ sits inline at the line start (not a corner box) so it never
         // shifts the trailing ＋ — the row's cyan tint is the main "done" signal.
         const line = `<span class="part__line">${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span></span>`;
-        return `<li class="${cls}"${data}>${play}${line}${dur}${resume}${addPart}</li>`;
+        return `<li class="${cls}"${data}>${play}${line}${dur}${resume}${cid}${addPart}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;

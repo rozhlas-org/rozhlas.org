@@ -363,6 +363,9 @@ button:active,
 .show-detail__desc { font-size: 17px; line-height: 1.55; max-width: 60ch; text-wrap: pretty; }
 .show-detail__cid { border-top: var(--border-thin); padding-top: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 .show-detail__cid code { font-size: 11px; word-break: break-all; }
+/* Per-díl IPFS CID, on its own line under the multi-part row. */
+.part__cid { display: block; margin-top: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.part__cid code { word-break: break-all; }
 
 /* native audio element — framed to match the kit */
 .player {
