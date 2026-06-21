@@ -11,6 +11,7 @@ import {
   omnisearchView,
   programmeView,
   programmesView,
+  selectionView,
   showView,
   transcriptSearchView,
   type ViewResult,
@@ -48,6 +49,9 @@ async function resolve(): Promise<ViewResult> {
 
   const programme = path.match(/^\/programme\/(.+)$/);
   if (programme) return programmeView(decodeSeg(programme[1]));
+
+  const vyber = path.match(/^\/vyber\/(.+)$/);
+  if (vyber) return selectionView(decodeSeg(vyber[1]));
 
   return { title: "Nenalezeno", html: `<section><h1>Stránka nenalezena</h1></section>` };
 }

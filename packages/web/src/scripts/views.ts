@@ -2,7 +2,7 @@
 // Each exported view is async: it fetches from the API and returns an HTML string
 // (plus the document <title>). The router in app.ts swaps the result into #app.
 
-import { api, type ListResult, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
+import { api, type ListResult, type Selection, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
 import { getHistory, logView, type HistoryEntry } from "./history.ts";
@@ -88,17 +88,34 @@ function showCard(s: ShowListItem): string {
   // before the card link navigates). role/tabindex make it keyboard-operable; it
   // stays a <span> because it lives inside the card's <a> (a <button> there is
   // invalid HTML and gets reparented by the browser).
+  // Selection items can pin a specific díl: the badge/queue act on that díl, the card
+  // carries a magenta "N. díl" tag, and the ★ is hidden (favourites are per whole show).
+  const isPart = s.partIdx != null;
   const badge = playable
-    ? `<span class="show-card__badge" role="button" tabindex="0" data-slug="${attr(s.slug)}" aria-label="Přehrát pořad">▶</span>`
+    ? `<span class="show-card__badge" role="button" tabindex="0" data-slug="${attr(s.slug)}"${
+        isPart ? ` data-idx="${attr(String(s.partIdx))}"` : ""
+      } aria-label="${isPart ? attr(`Přehrát ${s.partIdx}. díl`) : "Přehrát pořad"}">▶</span>`
     : "";
   const lbl = queueAddLabel(n, { compact: true });
-  const add = playable
-    ? queueAddBtn(s.slug, s.title, s.showName, {
-        cls: `show-card__add${n > 1 ? " show-card__add--multi" : ""}`,
-        label: lbl.label,
-        title: lbl.title,
-        artworkUrl: s.artworkUrl,
-      })
+  const add = !playable
+    ? ""
+    : isPart
+      ? queueAddBtn(s.slug, s.title, s.showName, {
+          cls: "show-card__add",
+          idx: s.partIdx!,
+          partTitle: s.partTitle ?? `${s.partIdx}. díl`,
+          label: "＋",
+          title: "Přidat díl do fronty",
+          artworkUrl: s.artworkUrl,
+        })
+      : queueAddBtn(s.slug, s.title, s.showName, {
+          cls: `show-card__add${n > 1 ? " show-card__add--multi" : ""}`,
+          label: lbl.label,
+          title: lbl.title,
+          artworkUrl: s.artworkUrl,
+        });
+  const dilTag = isPart
+    ? `<span class="show-card__dil" title="${attr(s.partTitle ?? "")}">${esc(`${s.partIdx}. díl`)}</span>`
     : "";
   const programme = s.showName
     ? `<a class="show-card__programme" href="/programme/${encodeURIComponent(s.showName)}">${esc(s.showName)}</a>`
@@ -108,13 +125,13 @@ function showCard(s: ShowListItem): string {
     : "";
   // ★ save toggle at top-left (queue ＋ owns top-right). Reflects the saved state and
   // toggles it. A real <button>, sibling of the card <a> (never inside it).
-  const fav = favBtn(s, { cls: "show-card__fav", variant: "card" });
+  const fav = isPart ? "" : favBtn(s, { cls: "show-card__fav", variant: "card" });
   return `
     <article class="show-card">
       ${add}
       ${fav}
       <a class="show-card__link" href="/show/${encodeURIComponent(s.slug)}">
-        <div class="show-card__art">${art}${badge}</div>
+        <div class="show-card__art">${art}${badge}${dilTag}</div>
         <h3 class="show-card__title">${esc(s.title)}</h3>
       </a>
       ${programme}
@@ -229,7 +246,12 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
   const sortRaw = params.get("sort");
   const sort: SortKey = sortRaw === "plays" || sortRaw === "alpha" ? sortRaw : "added";
   const page = params.get("page") ? Number(params.get("page")) : 1;
-  const data = await api.shows({ q, programme, source, sort, page });
+  // Show the "Výběry" rail only on the bare main page (no filter/search/paging).
+  const showRail = !q && !programme && !source && page === 1;
+  const [data, sels] = await Promise.all([
+    api.shows({ q, programme, source, sort, page }),
+    showRail ? api.selections().catch(() => []) : Promise.resolve([]),
+  ]);
 
   const qs = new URLSearchParams();
   if (q) qs.set("q", q);
@@ -250,6 +272,7 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
     title: programme ?? "Pořady",
     html:
       searchBox("", "h2") +
+      selectionsRail(sels) +
       `<section>
         <div class="browse__head">
           <h1>${esc(heading)}</h1>
@@ -262,6 +285,49 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
         ${showGrid(data.items)}
         ${pagination(data.page, data.pageSize, data.total, base)}
       </section>`,
+  };
+}
+
+/** "Výběry" rail on the main page — a horizontal row of editorial tiles. */
+function selectionsRail(sels: Selection[]): string {
+  if (!sels.length) return "";
+  const tiles = sels
+    .map(
+      (s) => `
+      <a class="vyber-tile" href="/vyber/${encodeURIComponent(s.slug)}">
+        <div class="vyber-tile__art">${
+          s.thumbnailUrl
+            ? `<img src="${attr(s.thumbnailUrl)}" alt="" loading="lazy" />`
+            : `<div class="vyber-tile__ph" aria-hidden="true"></div>`
+        }</div>
+        <h3 class="vyber-tile__title">${esc(s.title)}</h3>
+        ${s.description ? `<p class="vyber-tile__desc">${esc(s.description)}</p>` : ""}
+        <span class="vyber-tile__count">${s.itemCount} pořadů</span>
+      </a>`,
+    )
+    .join("");
+  return `
+    <section class="vybery">
+      <h2 class="vybery__title">Výběry</h2>
+      <div class="vybery__rail">${tiles}</div>
+    </section>`;
+}
+
+/** Dedicated page for one selection — its shows in the usual card grid. */
+export async function selectionView(slug: string): Promise<ViewResult> {
+  const sel = await api.selection(slug).catch(() => null);
+  if (!sel) {
+    return { title: "Nenalezeno", html: `<section><h1>Výběr nenalezen</h1><p><a href="/">← Výběry</a></p></section>` };
+  }
+  return {
+    title: sel.title,
+    html:
+      `<section class="selection">` +
+      `<p class="selection__back"><a href="/">← Výběry</a></p>` +
+      `<h1>${esc(sel.title)}</h1>` +
+      (sel.description ? `<p class="selection__desc">${esc(stripHtml(sel.description))}</p>` : "") +
+      showGrid(sel.items) +
+      `</section>`,
   };
 }
 
