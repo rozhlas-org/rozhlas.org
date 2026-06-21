@@ -265,6 +265,52 @@ export const transcriptChunks = sqliteTable(
   }),
 );
 
+/**
+ * Editorial "selections" (Výběry) — operator-curated collections shown as tiles on the
+ * main page, each opening a dedicated page of its shows. Admin-managed only.
+ */
+export const selections = sqliteTable(
+  "selections",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    slug: text("slug").notNull().unique(), // -> /vyber/:slug; set once on create
+    title: text("title").notNull(),
+    description: text("description"),
+    thumbnailCid: text("thumbnail_cid"), // pinned cover (later phase); resolves via gateway
+    thumbnailUrl: text("thumbnail_url"), // escape-hatch URL; else falls back to first item's artwork
+    published: integer("published", { mode: "boolean" }).notNull().default(false),
+    position: integer("position").notNull().default(0), // order among selections
+    ...timestamps,
+  },
+  (t) => ({ publishedPosIdx: index("selections_published_pos_idx").on(t.published, t.position) }),
+);
+
+/** A show (whole, or one specific díl) inside a selection, in display order. */
+export const selectionItems = sqliteTable(
+  "selection_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    selectionId: integer("selection_id")
+      .notNull()
+      .references(() => selections.id, { onDelete: "cascade" }),
+    showId: integer("show_id")
+      .notNull()
+      .references(() => shows.id, { onDelete: "cascade" }),
+    // null = whole show; set = a specific díl. References the stable PK (not show_parts.idx,
+    // which is re-keyed on re-scrape) so a curated part can't silently re-point.
+    partId: integer("part_id").references(() => showParts.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0), // order within the selection
+    ...timestamps,
+  },
+  (t) => ({
+    itemUnique: uniqueIndex("selection_items_unique").on(t.selectionId, t.showId, t.partId),
+    selectionPosIdx: index("selection_items_selection_pos_idx").on(t.selectionId, t.position),
+  }),
+);
+
+export type Selection = typeof selections.$inferSelect;
+export type SelectionItem = typeof selectionItems.$inferSelect;
+
 export type Show = typeof shows.$inferSelect;
 export type NewShow = typeof shows.$inferInsert;
 export type AudioFile = typeof audioFiles.$inferSelect;
