@@ -218,7 +218,8 @@ async function ipfsVerify(job: Job<JobData["ipfs-verify"]>) {
     await enqueue("index", { showId: audio.showId });
     // Steady-state: transcribe newly-streamable audio as it arrives (the bulk
     // backfill is a separate, opt-in/off-box concern — see TRANSCRIBE_BACKFILL).
-    if (transcriptionEnabled()) {
+    // Skip sources flagged transcribe=false (high-volume additions we defer).
+    if (transcriptionEnabled() && (await repo.sourceTranscribes(audioFileId))) {
       await enqueue("transcribe", { audioFileId }, { jobId: `tx-${audioFileId}`, removeOnComplete: true });
     }
   }
