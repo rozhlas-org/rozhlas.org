@@ -124,6 +124,7 @@ button:active,
 }
 .site-header__brand .accent { color: var(--cyan); }
 
+.site-nav-wrap { position: relative; min-width: 0; }
 .site-nav {
   display: flex;
   gap: 22px;
@@ -133,8 +134,40 @@ button:active,
   color: var(--muted);
   text-transform: uppercase;
 }
-.site-nav a { color: var(--muted); }
+.site-nav a { color: var(--muted); white-space: nowrap; }
 .site-nav a:hover { color: var(--key); }
+/* Chevron scroll cue — only shown on mobile when the nav overflows (see media query). */
+.site-nav-wrap::after {
+  content: "›";
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: none;
+  align-items: center;
+  height: 100%;
+  padding: 0 4px 0 24px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--cyan);
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--paper) 55%);
+  transition: opacity 0.15s ease;
+}
+/* hidden when not scrollable, or once scrolled to the end (JS toggles these) */
+.site-nav-wrap--scroll.site-nav-wrap--end::after { opacity: 0; }
+@media (max-width: 640px) {
+  .site-nav-wrap { flex: 1 1 100%; } /* nav drops to its own full-width row */
+  .site-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* hide the scrollbar; the chevron is the cue */
+    padding-right: 28px; /* room so the last link clears the chevron */
+  }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-nav-wrap--scroll::after { display: flex; }
+}
 
 .search { margin-left: auto; display: flex; gap: 0.6rem; }
 .search input {

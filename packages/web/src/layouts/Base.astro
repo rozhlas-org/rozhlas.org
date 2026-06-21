@@ -22,12 +22,14 @@ import "../styles/styles.css";
   <body class="has-player">
     <header class="site-header">
       <a class="site-header__brand" href="/">rozhlas<span class="accent">.org</span></a>
-      <nav class="site-nav">
-        <a href="/">Pořady</a>
-        <a href="/programmes">Kategorie</a>
-        <a href="/historie">Historie</a>
-        <a href="/transcripts">V přepisech</a>
-      </nav>
+      <div class="site-nav-wrap">
+        <nav class="site-nav" id="site-nav">
+          <a href="/">Pořady</a>
+          <a href="/programmes">Kategorie</a>
+          <a href="/historie">Historie</a>
+          <a href="/transcripts">V přepisech</a>
+        </nav>
+      </div>
     </header>
     <main class="site-main" id="app" aria-busy="true">
       <p class="notice">Načítám…</p>

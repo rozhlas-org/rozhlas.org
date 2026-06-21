@@ -133,6 +133,25 @@ document.addEventListener("click", (e) => {
 // (Play counting lives in player.ts now — it records once per track start using
 // the playing track's slug, which is reliable across the single shared <audio>.)
 
+// Mobile nav: it scrolls horizontally — show a chevron cue while there's more to
+// the right, hide it once scrolled to the end (or when it all fits).
+function initNav(): void {
+  const nav = document.getElementById("site-nav");
+  const wrap = nav?.parentElement;
+  if (!nav || !wrap) return;
+  const update = () => {
+    const overflow = nav.scrollWidth - nav.clientWidth;
+    wrap.classList.toggle("site-nav-wrap--scroll", overflow > 4);
+    wrap.classList.toggle("site-nav-wrap--end", nav.scrollLeft >= overflow - 4);
+  };
+  nav.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", update);
+  // Fonts load late and change widths; re-measure when they settle.
+  document.fonts?.ready.then(update).catch(() => {});
+  update();
+}
+initNav();
+
 // Persist/restore per-díl playback progress (capture-phase, covers re-rendered audio).
 wireAudioProgress();
 // Persistent bottom player (lives in the shell, survives navigation).
