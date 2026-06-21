@@ -1104,7 +1104,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
 }
 
 /* ===== Historie (local view/listen history) ===== */
-.history__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.history__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
 .history__head h1 { margin: 0; }
 .history-clear {
   padding: 8px 14px;
