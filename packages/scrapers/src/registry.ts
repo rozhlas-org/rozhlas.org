@@ -8,6 +8,11 @@ import { poctenickoScraper } from "./poctenicko/index.ts";
 import { historiePlusScraper } from "./historie-plus/index.ts";
 import { pribehyKalendareScraper } from "./pribehy-kalendare/index.ts";
 import { hraNaSobotuScraper } from "./hra-na-sobotu/index.ts";
+import { hraNaNedeliScraper } from "./hra-na-nedeli/index.ts";
+import { pribehy20StoletiScraper } from "./pribehy-20-stoleti/index.ts";
+import { osudoveZenyScraper } from "./osudove-zeny/index.ts";
+import { historieZlocinuScraper } from "./historie-zlocinu/index.ts";
+import { zednariScraper } from "./zednari/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -18,6 +23,11 @@ export const SCRAPERS: Record<string, Scraper> = {
   [historiePlusScraper.key]: historiePlusScraper, // Historie Plus
   [pribehyKalendareScraper.key]: pribehyKalendareScraper, // Příběhy z kalendáře
   [hraNaSobotuScraper.key]: hraNaSobotuScraper, // Hra na sobotu — Saturday radio drama
+  [hraNaNedeliScraper.key]: hraNaNedeliScraper, // Hra na neděli (transcribe off)
+  [pribehy20StoletiScraper.key]: pribehy20StoletiScraper, // Příběhy 20. století (transcribe off)
+  [osudoveZenyScraper.key]: osudoveZenyScraper, // Osudové ženy (transcribe off)
+  [historieZlocinuScraper.key]: historieZlocinuScraper, // Historie českého zločinu (transcribe off)
+  [zednariScraper.key]: zednariScraper, // Zednáři (transcribe off)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };

@@ -1,0 +1,16 @@
+import { makeApiScraper } from "../mujrozhlas/index.ts";
+
+/**
+ * `zednari` — "Zednáři", Český rozhlas documentary series, via the mujRozhlas
+ * JSON:API. Single umbrella show pinned by UUID.
+ *   • Zednáři — ba9611d0-c9c3-3d34-b684-525fccaa467c
+ *
+ * `transcribe: false` for the one-time bulk load; flipped on later.
+ */
+export const zednariScraper = makeApiScraper({
+  key: "zednari",
+  title: "Český rozhlas — Zednáři",
+  schedule: "0 16 * * *", // nightly, offset from the other API sources
+  transcribe: false,
+  shows: [{ uuid: "ba9611d0-c9c3-3d34-b684-525fccaa467c", name: "Zednáři" }],
+});
