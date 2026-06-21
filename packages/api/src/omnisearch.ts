@@ -1,6 +1,7 @@
-import { createLogger, sqlite, stripHtml, toFtsQuery, type KnnHit } from "@rozhlas/core";
-import { getProvider, vectorSearch } from "@rozhlas/embeddings";
+import { createLogger, knnShows, sqlite, stripHtml, toFtsQuery, type KnnHit } from "@rozhlas/core";
+import { getProvider } from "@rozhlas/embeddings";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
+import { transcriptLegs } from "./transcript-search.ts";
 import { parseIntent, type Intent } from "./intent.ts";
 
 const log = createLogger("api:omnisearch");
@@ -62,52 +63,56 @@ function queryTerms(q: string): string[] {
 }
 
 /**
- * Build a highlighted description excerpt for each show that actually contains a
- * query term. Works on the plain-text description (HTML stripped), folds for
- * diacritic-insensitive matching, and wraps the original text in <mark>. Returns
- * nothing for shows matched only by title (the title is already shown on the card).
+ * Highlighted ~200-char excerpt of `rawText` around the first query-term match,
+ * folded for diacritic-insensitive matching and wrapped in <mark> on the original
+ * text. With `requireMatch`, returns null when no term is present (description
+ * snippets — skip when the match was only in the title); without it, falls back to
+ * a plain leading excerpt (transcript chunks, which may be semantic matches).
  */
-function buildSnippets(query: string, ids: number[]): Map<number, string> {
+function buildExcerpt(rawText: string, terms: string[], requireMatch: boolean): string | null {
+  const text = decodeEntities(stripHtml(rawText)).replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  const folded = fold(text); // index-aligned with `text`
+  const spans: [number, number][] = [];
+  let earliest = -1;
+  for (const t of terms) {
+    for (let i = folded.indexOf(t); i >= 0; i = folded.indexOf(t, i + t.length)) {
+      spans.push([i, i + t.length]);
+      if (earliest < 0 || i < earliest) earliest = i;
+    }
+  }
+  if (earliest < 0 && requireMatch) return null;
+  const start = earliest < 0 ? 0 : Math.max(0, earliest - 60);
+  const end = Math.min(text.length, start + 200);
+  const inWin = spans.filter(([s, e]) => e > start && s < end).sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const sp of inWin) {
+    const last = merged[merged.length - 1];
+    if (last && sp[0] <= last[1]) last[1] = Math.max(last[1], sp[1]);
+    else merged.push([...sp]);
+  }
+  let html = "";
+  let cur = start;
+  for (const [s, e] of merged) {
+    const s2 = Math.max(s, start);
+    const e2 = Math.min(e, end);
+    html += escapeHtml(text.slice(cur, s2)) + "<mark>" + escapeHtml(text.slice(s2, e2)) + "</mark>";
+    cur = e2;
+  }
+  html += escapeHtml(text.slice(cur, end));
+  return (start > 0 ? "…" : "") + html + (end < text.length ? "…" : "");
+}
+
+/** Description snippets for shows whose description contains a query term. */
+function descriptionSnippets(ids: number[], terms: string[]): Map<number, string> {
   const out = new Map<number, string>();
-  const terms = queryTerms(query);
   if (!ids.length || !terms.length) return out;
   const rows = sqlite
     .prepare(`SELECT id, description FROM shows WHERE id IN (${ids.map(() => "?").join(",")})`)
     .all(...ids) as { id: number; description: string | null }[];
   for (const r of rows) {
-    const text = decodeEntities(stripHtml(r.description ?? "")).replace(/\s+/g, " ").trim();
-    if (!text) continue;
-    const folded = fold(text); // index-aligned with `text`
-    const spans: [number, number][] = [];
-    let earliest = -1;
-    for (const t of terms) {
-      for (let i = folded.indexOf(t); i >= 0; i = folded.indexOf(t, i + t.length)) {
-        spans.push([i, i + t.length]);
-        if (earliest < 0 || i < earliest) earliest = i;
-      }
-    }
-    if (earliest < 0) continue; // description doesn't contain the query → no snippet
-    const start = Math.max(0, earliest - 60);
-    const end = Math.min(text.length, start + 200);
-    const inWin = spans
-      .filter(([s, e]) => e > start && s < end)
-      .sort((a, b) => a[0] - b[0]);
-    const merged: [number, number][] = [];
-    for (const sp of inWin) {
-      const last = merged[merged.length - 1];
-      if (last && sp[0] <= last[1]) last[1] = Math.max(last[1], sp[1]);
-      else merged.push([...sp]);
-    }
-    let html = "";
-    let cur = start;
-    for (const [s, e] of merged) {
-      const s2 = Math.max(s, start);
-      const e2 = Math.min(e, end);
-      html += escapeHtml(text.slice(cur, s2)) + "<mark>" + escapeHtml(text.slice(s2, e2)) + "</mark>";
-      cur = e2;
-    }
-    html += escapeHtml(text.slice(cur, end));
-    out.set(r.id, (start > 0 ? "…" : "") + html + (end < text.length ? "…" : ""));
+    const html = buildExcerpt(r.description ?? "", terms, true);
+    if (html) out.set(r.id, html);
   }
   return out;
 }
@@ -120,37 +125,43 @@ export interface OmniResult {
 }
 
 /**
- * Universal search: parse intent → semantic vector KNN + keyword FTS, fused with
- * Reciprocal Rank Fusion (rank-based, so the two score scales don't fight), then
- * nudged by a couple of obvious signals (exact title hit, popularity). Highlighted
- * description snippets are attached for the keyword matches.
+ * Universal search: parse intent → four retrieval legs (show vector + show FTS,
+ * transcript-chunk vector + transcript-chunk FTS) fused with Reciprocal Rank
+ * Fusion, then nudged by obvious signals (exact title hit, popularity). Shows
+ * surfaced by spoken content carry a timestamped transcript hit; others get a
+ * highlighted description snippet.
  */
 export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
   const intent = await parseIntent(query);
   const provider = getProvider();
-  // What to embed for the semantic leg: an LLM-rewritten phrase when one ran
-  // (claude/ollama), else the RAW query — Voyage is multilingual and matches a
-  // full Czech sentence better than keyword soup. FTS always uses the (diacritic-
-  // preserving, prefix) keyword list so the keyword leg actually returns hits.
+  // What to embed: an LLM-rewritten phrase when one ran (claude/ollama), else the
+  // RAW query — Voyage is multilingual and matches a full Czech sentence better than
+  // keyword soup. FTS legs use the (diacritic-preserving, prefix) keyword list.
   const vectorText = intent.provider === "heuristic" ? query : intent.searchText;
-  // Semantic search is best-effort: if the embedding provider is down or rate
-  // limited (e.g. Voyage 429), degrade to keyword (FTS) search instead of failing.
-  let knn: KnnHit[] = [];
+  // Embed the query ONCE and feed both the show- and transcript-chunk vector legs.
+  // Best-effort: if Voyage is down/429, degrade to the keyword legs instead of failing.
+  let queryVec: Float32Array | undefined;
   try {
-    knn = await vectorSearch(provider, vectorText, 60);
+    [queryVec] = await provider.embed([vectorText], "query");
   } catch (err) {
-    log.warn("vector search unavailable; using keyword search only", { err: String(err) });
+    log.warn("query embedding unavailable; using keyword search only", { err: String(err) });
   }
+  const knn: KnnHit[] = queryVec ? knnShows(queryVec, 60) : [];
   const fIds = ftsIds(intent.searchText, 100);
+  const tx = await transcriptLegs(queryVec, intent.searchText);
 
-  // Reciprocal Rank Fusion: each list contributes 1/(K+rank), so a show that
-  // ranks in both legs naturally rises. Scale-free, nothing to hand-tune.
+  // Reciprocal Rank Fusion: each leg contributes 1/(K+rank), so a show ranking in
+  // several legs rises. Transcript legs are slightly down-weighted — a passing
+  // spoken mention shouldn't outrank a show that's actually about the topic.
   const RRF_K = 60;
   const UNIT = 1 / RRF_K; // one rank-slot of score — the unit for the boosts below
+  const TX_WEIGHT = 0.6;
   const rrf = new Map<number, number>();
   const add = (id: number, s: number) => rrf.set(id, (rrf.get(id) ?? 0) + s);
   knn.forEach((h, i) => add(h.showId, 1 / (RRF_K + i)));
   fIds.forEach((id, i) => add(id, 1 / (RRF_K + i)));
+  tx.vectorShowIds.forEach((id, i) => add(id, TX_WEIGHT / (RRF_K + i)));
+  tx.ftsShowIds.forEach((id, i) => add(id, TX_WEIGHT / (RRF_K + i)));
 
   // Fetch metadata for a generous candidate pool, then re-rank with light boosts
   // (these only move near-ties; retrieval still dominates).
@@ -175,9 +186,22 @@ export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
     .filter((id) => map.has(id))
     .sort((a, b) => score(b) - score(a))
     .slice(0, k);
-  const snips = buildSnippets(query, ranked);
+  const snips = descriptionSnippets(ranked, terms);
   const items = ranked.map((id) => {
     const it = map.get(id)!;
+    // Prefer the (actionable, timestamped) transcript hit when the show matched on
+    // spoken content; otherwise fall back to the highlighted description snippet.
+    const hit = tx.best.get(id);
+    if (hit) {
+      return {
+        ...it,
+        transcriptHit: {
+          startSec: hit.startSec,
+          partIdx: hit.partIdx,
+          snippet: buildExcerpt(hit.text, terms, false) ?? "",
+        },
+      };
+    }
     const snip = snips.get(id);
     return snip ? { ...it, snippet: snip } : it;
   });

@@ -1,10 +1,96 @@
-import { createLogger, db, schema, sqlite, toFtsQuery, type ChunkKnnHit } from "@rozhlas/core";
+import { createLogger, db, knnChunks, schema, sqlite, toFtsQuery, type ChunkKnnHit } from "@rozhlas/core";
 import { eq, inArray } from "drizzle-orm";
 import { getProvider, chunkVectorSearch } from "@rozhlas/embeddings";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
 
 const log = createLogger("api:transcript-search");
 const { transcriptChunks, transcripts, audioFiles, showParts } = schema;
+
+/** The best transcript chunk for a show: where it is + the spoken text. */
+export interface TranscriptShowHit {
+  startSec: number;
+  partIdx: number | null; // which díl (null = single-audio show)
+  text: string;
+}
+/** Show-level transcript retrieval legs, for folding into the universal search. */
+export interface TranscriptLegs {
+  vectorShowIds: number[]; // shows ranked by chunk-vector hits (deduped by show)
+  ftsShowIds: number[]; // shows ranked by chunk-FTS hits (deduped by show)
+  best: Map<number, TranscriptShowHit>; // showId → best chunk for display
+  vectorHits: number;
+  ftsHits: number;
+}
+
+/**
+ * Transcript retrieval as show-level ranked lists (+ the best chunk per show),
+ * for the universal search to fuse alongside metadata. Takes a precomputed query
+ * vector so the caller embeds the query once for both the show and chunk legs.
+ */
+export async function transcriptLegs(
+  queryVec: Float32Array | undefined,
+  ftsText: string,
+): Promise<TranscriptLegs> {
+  let knn: ChunkKnnHit[] = [];
+  if (queryVec) {
+    try {
+      knn = knnChunks(queryVec, 60);
+    } catch (err) {
+      log.warn("chunk vector search unavailable; keyword only", { err: String(err) });
+    }
+  }
+  const fIds = ftsChunkIds(ftsText, 120);
+  const empty: TranscriptLegs = {
+    vectorShowIds: [],
+    ftsShowIds: [],
+    best: new Map(),
+    vectorHits: knn.length,
+    ftsHits: fIds.length,
+  };
+  const chunkOrder = [...knn.map((h) => h.chunkId), ...fIds];
+  const allIds = [...new Set(chunkOrder)];
+  if (!allIds.length) return empty;
+
+  const rows = await db
+    .select({
+      id: transcriptChunks.id,
+      showId: transcriptChunks.showId,
+      startSec: transcriptChunks.startSec,
+      text: transcriptChunks.text,
+      partIdx: showParts.idx, // null for single-audio shows
+    })
+    .from(transcriptChunks)
+    .innerJoin(transcripts, eq(transcripts.id, transcriptChunks.transcriptId))
+    .innerJoin(audioFiles, eq(audioFiles.id, transcripts.audioFileId))
+    .leftJoin(showParts, eq(showParts.id, audioFiles.partId))
+    .where(inArray(transcriptChunks.id, allIds));
+  const info = new Map(rows.map((r) => [r.id, r]));
+
+  const dedupByShow = (chunkIds: number[]): number[] => {
+    const out: number[] = [];
+    const seen = new Set<number>();
+    for (const cid of chunkIds) {
+      const ci = info.get(cid);
+      if (!ci || seen.has(ci.showId)) continue;
+      seen.add(ci.showId);
+      out.push(ci.showId);
+    }
+    return out;
+  };
+  // Best chunk per show = first occurrence in vector-then-FTS rank order.
+  const best = new Map<number, TranscriptShowHit>();
+  for (const cid of chunkOrder) {
+    const ci = info.get(cid);
+    if (!ci || best.has(ci.showId)) continue;
+    best.set(ci.showId, { startSec: ci.startSec, partIdx: ci.partIdx, text: ci.text });
+  }
+  return {
+    vectorShowIds: dedupByShow(knn.map((h) => h.chunkId)),
+    ftsShowIds: dedupByShow(fIds),
+    best,
+    vectorHits: knn.length,
+    ftsHits: fIds.length,
+  };
+}
 
 export interface TranscriptHit {
   startSec: number; // deep-link target in the player

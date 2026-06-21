@@ -21,6 +21,8 @@ export interface ShowListItem {
   displays: number;
   /** Highlighted description snippet (universal search keyword matches; safe HTML). */
   snippet?: string;
+  /** Universal search: a timestamped spoken-content match (deep-links into playback). */
+  transcriptHit?: { startSec: number; partIdx: number | null; snippet: string };
 }
 
 export interface ListResult {
