@@ -105,15 +105,16 @@ apiRoutes.get("/programmes", async (c) => c.json(await listProgrammes()));
 apiRoutes.get("/sources", async (c) => c.json(await listSources()));
 
 // Editorial selections ("Výběry") — published only. Tiles on the main page + a
-// dedicated page per selection. Curated in /admin → changes rarely → cache.
+// dedicated page per selection. `no-cache` so an operator's admin edit/delete/publish
+// shows up immediately (tiny payload; revalidates rather than serving stale for 5 min).
 apiRoutes.get("/selections", async (c) => {
-  c.header("Cache-Control", "public, max-age=300");
+  c.header("Cache-Control", "no-cache");
   return c.json(await listPublishedSelections());
 });
 
 apiRoutes.get("/selections/:slug", async (c) => {
   const sel = await getPublishedSelection(c.req.param("slug"));
   if (!sel) return c.json({ error: "not found" }, 404);
-  c.header("Cache-Control", "public, max-age=300");
+  c.header("Cache-Control", "no-cache");
   return c.json(sel);
 });
