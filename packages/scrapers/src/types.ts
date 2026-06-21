@@ -77,6 +77,8 @@ export interface Scraper {
   title?: string;
   /** cron expression for the repeatable discover job. */
   schedule?: string;
+  /** Auto-transcribe this source's audio? Default true; false skips transcription. */
+  transcribe?: boolean;
   discover(ctx: ScrapeCtx): Promise<ScrapedShow[]>;
   fetchShow?(ref: ShowRef, ctx: ScrapeCtx): Promise<ScrapedShow>;
 }

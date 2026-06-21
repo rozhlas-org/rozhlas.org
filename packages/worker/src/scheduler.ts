@@ -13,7 +13,7 @@ const log = createLogger("worker:scheduler");
 export async function setupSchedules() {
   const discoverQ = getQueue("discover");
   for (const s of listScrapers()) {
-    await upsertSource(s.key, s.title ?? s.key, s.schedule);
+    await upsertSource(s.key, s.title ?? s.key, s.schedule, s.transcribe ?? true);
     if (s.schedule) {
       await discoverQ.upsertJobScheduler(
         `discover:${s.key}`,

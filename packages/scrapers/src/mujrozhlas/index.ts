@@ -17,6 +17,8 @@ export interface ApiScraperConfig {
   key: string;
   title: string;
   schedule?: string;
+  /** Auto-transcribe this source's audio? Default true; false skips transcription. */
+  transcribe?: boolean;
   /** Explicit show UUIDs (single-programme sources like pohadka/wave). */
   shows?: ApiShowRef[];
   /** Or a category hub to enumerate show UUIDs from (cetba/junior). */
@@ -59,6 +61,7 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
     key: cfg.key,
     title: cfg.title,
     schedule: cfg.schedule,
+    transcribe: cfg.transcribe,
 
     async discover(ctx: ScrapeCtx): Promise<ScrapedShow[]> {
       const limit = ctx.limit ?? 50_000; // effectively "all" (watchdog/budget still bound a run)
