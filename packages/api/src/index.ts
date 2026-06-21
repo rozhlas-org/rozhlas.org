@@ -7,6 +7,7 @@ import { connection, mountBullBoard } from "@rozhlas/jobs";
 import { apiRoutes } from "./routes/api.ts";
 import { adminAuth, adminAuthRoutes } from "./admin-auth.ts";
 import { adminDashboard } from "./admin/dashboard.tsx";
+import { adminSelections } from "./admin/selections.tsx";
 
 const log = createLogger("api");
 const app = new Hono();
@@ -58,6 +59,7 @@ app.route("/api", apiRoutes);
 app.use("/admin", adminAuth);
 app.use("/admin/*", adminAuth);
 app.route("/", adminAuthRoutes);
+app.route("/admin/selections", adminSelections); // before the dashboard mount (more specific)
 app.route("/admin", adminDashboard);
 // Bull Board's SPA lives at the trailing-slash base (it emits <base href="/admin/jobs/">),
 // but the Hono mount below only answers the no-slash path — so reloading or bookmarking

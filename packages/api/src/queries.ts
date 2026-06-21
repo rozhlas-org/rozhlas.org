@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, count } from "drizzle-orm";
 import { config, db, schema, toFtsQuery, getEmbedding, knnShows } from "@rozhlas/core";
 
-const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts } =
+const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts, selections, selectionItems } =
   schema;
 
 export type SortKey = "added" | "plays" | "alpha";
@@ -221,6 +221,336 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
 export async function showIdBySlug(slug: string): Promise<number | null> {
   const [r] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1);
   return r?.id ?? null;
+}
+
+// ===================== Selections ("Výběry") =====================
+
+export type SelectionRow = typeof selections.$inferSelect;
+
+export interface SelectionListItem {
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  itemCount: number;
+}
+export interface SelectionItemView extends ShowListItem {
+  partIdx: number | null; // set = a specific díl
+  partTitle: string | null;
+}
+export interface SelectionDetail {
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  items: SelectionItemView[];
+}
+
+/** cs-aware slug: strip diacritics, lower, hyphenate. */
+function slugifyTitle(title: string): string {
+  return (
+    title
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "vyber"
+  );
+}
+
+/** itemCount per selection id (batched). */
+async function itemCounts(ids: number[]): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (!ids.length) return map;
+  const rows = await db
+    .select({ sid: selectionItems.selectionId, c: count() })
+    .from(selectionItems)
+    .where(inArray(selectionItems.selectionId, ids))
+    .groupBy(selectionItems.selectionId);
+  for (const r of rows) map.set(r.sid, r.c);
+  return map;
+}
+
+/** Resolve each selection's thumbnail URL: own CID → own URL → first item's show artwork. */
+async function thumbForSelections(rows: SelectionRow[]): Promise<Map<number, string | null>> {
+  const map = new Map<number, string | null>();
+  const needFallback: number[] = [];
+  for (const s of rows) {
+    if (s.thumbnailCid) map.set(s.id, streamUrl(s.thumbnailCid));
+    else if (s.thumbnailUrl) map.set(s.id, s.thumbnailUrl);
+    else needFallback.push(s.id);
+  }
+  if (needFallback.length) {
+    const items = await db
+      .select({ sid: selectionItems.selectionId, showId: selectionItems.showId })
+      .from(selectionItems)
+      .where(inArray(selectionItems.selectionId, needFallback))
+      .orderBy(asc(selectionItems.position), asc(selectionItems.id));
+    const firstShow = new Map<number, number>();
+    for (const it of items) if (!firstShow.has(it.sid)) firstShow.set(it.sid, it.showId);
+    const art = await artworkForShows([...new Set(firstShow.values())]);
+    for (const sid of needFallback) {
+      const sh = firstShow.get(sid);
+      map.set(sid, sh != null ? (art.get(sh) ?? null) : null);
+    }
+  }
+  return map;
+}
+
+/** Public: published selections, ordered, with itemCount + resolved thumbnail. Skips empties. */
+export async function listPublishedSelections(): Promise<SelectionListItem[]> {
+  const rows = await db
+    .select()
+    .from(selections)
+    .where(eq(selections.published, true))
+    .orderBy(asc(selections.position), asc(selections.id));
+  if (!rows.length) return [];
+  const counts = await itemCounts(rows.map((r) => r.id));
+  const thumbs = await thumbForSelections(rows);
+  const out: SelectionListItem[] = [];
+  for (const s of rows) {
+    const n = counts.get(s.id) ?? 0;
+    if (n === 0) continue; // defensive: never surface an empty selection
+    out.push({ slug: s.slug, title: s.title, description: s.description, thumbnailUrl: thumbs.get(s.id) ?? null, itemCount: n });
+  }
+  return out;
+}
+
+/** Hydrate a list of selection items (array — preserves order + duplicate shows). */
+async function hydrateItems(
+  items: { showId: number; partId: number | null }[],
+): Promise<SelectionItemView[]> {
+  if (!items.length) return [];
+  const showIds = [...new Set(items.map((i) => i.showId))];
+  const showRows = await db
+    .select({
+      id: shows.id,
+      slug: shows.slug,
+      title: shows.title,
+      showName: shows.showName,
+      source: shows.sourceKey,
+      publishedAt: shows.publishedAt,
+      durationSec: shows.durationSec,
+      plays: shows.plays,
+      displays: shows.displays,
+    })
+    .from(shows)
+    .where(inArray(shows.id, showIds));
+  const showMap = new Map(showRows.map((r) => [r.id, r]));
+  const audio = await audioForShows(showIds);
+  const partsByShow = await streamablePartsForShows(showIds);
+  const art = await artworkForShows(showIds);
+  const partIds = items.map((i) => i.partId).filter((x): x is number => x != null);
+  const partMap = new Map<number, { idx: number; title: string | null }>();
+  if (partIds.length) {
+    const pr = await db
+      .select({ id: showParts.id, idx: showParts.idx, title: showParts.title })
+      .from(showParts)
+      .where(inArray(showParts.id, partIds));
+    for (const p of pr) partMap.set(p.id, { idx: p.idx, title: p.title });
+  }
+  const out: SelectionItemView[] = [];
+  for (const it of items) {
+    const r = showMap.get(it.showId);
+    if (!r) continue; // half-cascaded / deleted show — skip defensively
+    const a = audio.get(it.showId);
+    const part = it.partId != null ? partMap.get(it.partId) : undefined;
+    out.push({
+      slug: r.slug,
+      title: r.title,
+      showName: r.showName,
+      source: r.source,
+      publishedAt: r.publishedAt,
+      durationSec: r.durationSec ?? a?.durationSec ?? null,
+      artworkUrl: art.get(it.showId) ?? null,
+      streamable: a?.streamable ?? false,
+      streamablePartCount: partsByShow.get(it.showId) ?? 0,
+      streamUrl: a?.ipfsCid ? streamUrl(a.ipfsCid) : null,
+      plays: r.plays,
+      displays: r.displays,
+      partIdx: part?.idx ?? null,
+      partTitle: part?.title ?? null,
+    });
+  }
+  return out;
+}
+
+/** Public: a published selection by slug + its hydrated items. null if missing/unpublished. */
+export async function getPublishedSelection(slug: string): Promise<SelectionDetail | null> {
+  const [s] = await db
+    .select()
+    .from(selections)
+    .where(and(eq(selections.slug, slug), eq(selections.published, true)))
+    .limit(1);
+  if (!s) return null;
+  const rows = await db
+    .select({ showId: selectionItems.showId, partId: selectionItems.partId })
+    .from(selectionItems)
+    .where(eq(selectionItems.selectionId, s.id))
+    .orderBy(asc(selectionItems.position), asc(selectionItems.id));
+  const items = await hydrateItems(rows);
+  const thumb = (await thumbForSelections([s])).get(s.id) ?? null;
+  return { slug: s.slug, title: s.title, description: s.description, thumbnailUrl: thumb, items };
+}
+
+// ---- admin (write + draft-inclusive reads) ----
+
+export async function adminListSelections() {
+  const rows = await db.select().from(selections).orderBy(asc(selections.position), asc(selections.id));
+  const counts = await itemCounts(rows.map((r) => r.id));
+  return rows.map((s) => ({ ...s, itemCount: counts.get(s.id) ?? 0 }));
+}
+
+export async function adminGetSelection(id: number): Promise<SelectionRow | null> {
+  const [s] = await db.select().from(selections).where(eq(selections.id, id)).limit(1);
+  return s ?? null;
+}
+
+/** Items of a selection with show title + díl label, for the admin editor. */
+export async function adminGetSelectionItems(selectionId: number) {
+  const items = await db
+    .select({
+      id: selectionItems.id,
+      showId: selectionItems.showId,
+      partId: selectionItems.partId,
+      slug: shows.slug,
+      title: shows.title,
+      showName: shows.showName,
+    })
+    .from(selectionItems)
+    .innerJoin(shows, eq(selectionItems.showId, shows.id))
+    .where(eq(selectionItems.selectionId, selectionId))
+    .orderBy(asc(selectionItems.position), asc(selectionItems.id));
+  const partIds = items.map((i) => i.partId).filter((x): x is number => x != null);
+  const partMap = new Map<number, { idx: number; title: string | null }>();
+  if (partIds.length) {
+    const pr = await db
+      .select({ id: showParts.id, idx: showParts.idx, title: showParts.title })
+      .from(showParts)
+      .where(inArray(showParts.id, partIds));
+    for (const p of pr) partMap.set(p.id, { idx: p.idx, title: p.title });
+  }
+  return items.map((i) => ({
+    ...i,
+    partIdx: i.partId != null ? (partMap.get(i.partId)?.idx ?? null) : null,
+    partTitle: i.partId != null ? (partMap.get(i.partId)?.title ?? null) : null,
+  }));
+}
+
+async function uniqueSelectionSlug(title: string): Promise<string> {
+  const base = slugifyTitle(title);
+  let slug = base;
+  let n = 2;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const [hit] = await db.select({ id: selections.id }).from(selections).where(eq(selections.slug, slug)).limit(1);
+    if (!hit) return slug;
+    slug = `${base}-${n++}`;
+  }
+}
+
+export interface SelectionInput {
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  published: boolean;
+}
+
+export async function adminCreateSelection(data: SelectionInput): Promise<number> {
+  const slug = await uniqueSelectionSlug(data.title);
+  const [m] = await db.select({ max: sql<number>`coalesce(max(${selections.position}), 0)` }).from(selections);
+  const [r] = await db
+    .insert(selections)
+    .values({ slug, title: data.title, description: data.description, thumbnailUrl: data.thumbnailUrl, published: data.published, position: (m?.max ?? 0) + 1 })
+    .returning({ id: selections.id });
+  return r!.id;
+}
+
+export async function adminUpdateSelection(id: number, data: SelectionInput): Promise<void> {
+  await db
+    .update(selections)
+    .set({ title: data.title, description: data.description, thumbnailUrl: data.thumbnailUrl, published: data.published })
+    .where(eq(selections.id, id));
+}
+
+export async function adminDeleteSelection(id: number): Promise<void> {
+  await db.delete(selections).where(eq(selections.id, id)); // cascades items
+}
+
+/** Swap a selection's position with its neighbour (-1 up / +1 down). */
+export async function adminReorderSelection(id: number, dir: -1 | 1): Promise<void> {
+  const rows = await db.select({ id: selections.id, position: selections.position }).from(selections).orderBy(asc(selections.position), asc(selections.id));
+  const i = rows.findIndex((r) => r.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= rows.length) return;
+  await db.update(selections).set({ position: rows[j]!.position }).where(eq(selections.id, rows[i]!.id));
+  await db.update(selections).set({ position: rows[i]!.position }).where(eq(selections.id, rows[j]!.id));
+}
+
+/** Add a show (whole or one díl) to a selection. De-dups (NULL part_id isn't caught by the
+ *  unique index in SQLite). Returns false if it's already present. */
+export async function adminAddItem(selectionId: number, showId: number, partId: number | null): Promise<boolean> {
+  const dup = await db
+    .select({ id: selectionItems.id })
+    .from(selectionItems)
+    .where(
+      and(
+        eq(selectionItems.selectionId, selectionId),
+        eq(selectionItems.showId, showId),
+        partId == null ? isNull(selectionItems.partId) : eq(selectionItems.partId, partId),
+      ),
+    )
+    .limit(1);
+  if (dup.length) return false;
+  const [m] = await db
+    .select({ max: sql<number>`coalesce(max(${selectionItems.position}), 0)` })
+    .from(selectionItems)
+    .where(eq(selectionItems.selectionId, selectionId));
+  await db.insert(selectionItems).values({ selectionId, showId, partId, position: (m?.max ?? 0) + 1 });
+  return true;
+}
+
+export async function adminRemoveItem(itemId: number): Promise<void> {
+  await db.delete(selectionItems).where(eq(selectionItems.id, itemId));
+}
+
+export async function adminReorderItem(itemId: number, dir: -1 | 1): Promise<void> {
+  const [item] = await db.select().from(selectionItems).where(eq(selectionItems.id, itemId)).limit(1);
+  if (!item) return;
+  const rows = await db
+    .select({ id: selectionItems.id, position: selectionItems.position })
+    .from(selectionItems)
+    .where(eq(selectionItems.selectionId, item.selectionId))
+    .orderBy(asc(selectionItems.position), asc(selectionItems.id));
+  const i = rows.findIndex((r) => r.id === itemId);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= rows.length) return;
+  await db.update(selectionItems).set({ position: rows[j]!.position }).where(eq(selectionItems.id, rows[i]!.id));
+  await db.update(selectionItems).set({ position: rows[i]!.position }).where(eq(selectionItems.id, rows[j]!.id));
+}
+
+/** Title-search shows for the admin item-picker (id + label). */
+export async function adminSearchShows(q: string) {
+  const fts = q.trim() ? toFtsQuery(q) : null;
+  const where = fts
+    ? sql`${shows.id} IN (SELECT rowid FROM shows_fts WHERE shows_fts MATCH ${fts})`
+    : undefined;
+  return db
+    .select({ id: shows.id, slug: shows.slug, title: shows.title, showName: shows.showName })
+    .from(shows)
+    .where(where)
+    .orderBy(desc(shows.publishedAt), desc(shows.id))
+    .limit(20);
+}
+
+/** Parts (díly) of a show for the admin díl chooser. */
+export async function adminShowParts(showId: number) {
+  return db
+    .select({ id: showParts.id, idx: showParts.idx, title: showParts.title })
+    .from(showParts)
+    .where(eq(showParts.showId, showId))
+    .orderBy(asc(showParts.idx));
 }
 
 // Drop neighbours looser than this L2 distance (vec0 default; Voyage vectors are
