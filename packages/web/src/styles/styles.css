@@ -277,6 +277,18 @@ button:active,
   color: var(--paper);
 }
 .show-card__meta { margin: 10px 16px 16px; }
+/* Universal-search keyword snippet: muted excerpt with highlighted matches. */
+.show-card__snippet {
+  margin: 8px 16px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.show-card__snippet mark { background: var(--cyan); color: var(--key); padding: 0 2px; }
 
 /* ===== pagination ===== */
 .pagination {
