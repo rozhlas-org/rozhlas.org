@@ -7,6 +7,7 @@ import { juniorPribehyScraper } from "./junior/index.ts";
 import { poctenickoScraper } from "./poctenicko/index.ts";
 import { historiePlusScraper } from "./historie-plus/index.ts";
 import { pribehyKalendareScraper } from "./pribehy-kalendare/index.ts";
+import { hraNaSobotuScraper } from "./hra-na-sobotu/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -14,8 +15,9 @@ export const SCRAPERS: Record<string, Scraper> = {
   [pohadkaScraper.key]: pohadkaScraper, // pohádky — fairy tales (Dvojka)
   [juniorPribehyScraper.key]: juniorPribehyScraper, // příběhy a pohádky (Rádio Junior)
   [poctenickoScraper.key]: poctenickoScraper, // Počteníčko — serialized readings
-  [historiePlusScraper.key]: historiePlusScraper, // Historie Plus (transcribe off)
-  [pribehyKalendareScraper.key]: pribehyKalendareScraper, // Příběhy z kalendáře (transcribe off)
+  [historiePlusScraper.key]: historiePlusScraper, // Historie Plus
+  [pribehyKalendareScraper.key]: pribehyKalendareScraper, // Příběhy z kalendáře
+  [hraNaSobotuScraper.key]: hraNaSobotuScraper, // Hra na sobotu — Saturday radio drama
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
