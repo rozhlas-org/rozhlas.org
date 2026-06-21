@@ -1037,6 +1037,22 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   color: var(--muted);
 }
 .tx-hit__snip { flex: 1; min-width: 0; line-height: 1.4; }
+.tx-hit mark { background: var(--cyan); color: var(--key); padding: 0 2px; }
+/* Transcript hit shown inside a universal-search result card. */
+.show-card .tx-hit--card {
+  margin: 8px 16px 0;
+  width: auto;
+  padding: 8px 10px;
+  font-size: 13px;
+  gap: 4px 8px;
+}
+.tx-hit--card .tx-hit__time { font-size: 12px; }
+.tx-hit--card .tx-hit__snip {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* ===== Historie (local view/listen history) ===== */
 .history__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
