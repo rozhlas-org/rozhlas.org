@@ -157,12 +157,15 @@ button:active,
 /* hidden when not scrollable, or once scrolled to the end (JS toggles these) */
 .site-nav-wrap--scroll.site-nav-wrap--end::after { opacity: 0; }
 @media (max-width: 640px) {
-  .site-nav-wrap { flex: 1 1 100%; } /* nav drops to its own full-width row */
+  /* Full-bleed: pull the nav out into the header's 20px side padding so the whole
+     width (margins included) is a scroll/swipe area, without enlarging the menu. */
+  .site-nav-wrap { flex: 1 1 100%; margin-left: -20px; margin-right: -20px; }
   .site-nav {
     overflow-x: auto;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none; /* hide the scrollbar; the chevron is the cue */
+    padding-left: 20px; /* keep the first link aligned with the brand */
     padding-right: 28px; /* room so the last link clears the chevron */
   }
   .site-nav::-webkit-scrollbar { display: none; }
