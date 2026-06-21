@@ -19,6 +19,8 @@ export interface ShowListItem {
   streamUrl: string | null;
   plays: number;
   displays: number;
+  /** Highlighted description snippet (universal search keyword matches; safe HTML). */
+  snippet?: string;
 }
 
 export interface ListResult {
@@ -129,8 +131,6 @@ export const api = {
   showTranscript: (slug: string) =>
     getJSON<{ parts: ShowTranscriptPart[] }>(`/api/shows/${encodeURIComponent(slug)}/transcript`),
   similar: (slug: string) => getJSON<ShowListItem[]>(`/api/shows/${encodeURIComponent(slug)}/similar`),
-  search: (q: string, page?: number) =>
-    getJSON<{ query: string } & ListResult>("/api/search", { q, page }),
   omnisearch: (q: string) => getJSON<OmniResult>("/api/omnisearch", { q }),
   transcriptSearch: (q: string, programme?: string) =>
     getJSON<TranscriptSearchResult>("/api/transcript-search", { q, programme }),

@@ -101,6 +101,7 @@ function showCard(s: ShowListItem): string {
         <h3 class="show-card__title">${esc(s.title)}</h3>
       </a>
       ${programme}
+      ${s.snippet ? `<p class="show-card__snippet">${s.snippet}</p>` : ""}
       <p class="show-card__meta">${esc(formatDate(s.publishedAt))}${dur}</p>
       ${statsLine(s.plays, s.displays)}
     </article>`;
@@ -170,15 +171,15 @@ function listSection(heading: string, sub: string, data: ListResult, base: strin
     </section>`;
 }
 
-/** "Podle nálady" (omnisearch) entry box — natural-language mood search. */
-function moodBox(q = "", heading: "h1" | "h2" = "h1"): string {
+/** Universal search box — hybrid semantic + keyword search across every show. */
+function searchBox(q = "", heading: "h1" | "h2" = "h1"): string {
   return `
     <section class="mood">
-      <${heading} class="mood__title">Podle nálady</${heading}>
-      <p class="omni__hint">Popište náladu nebo situaci — třeba „jedu sám v noci a potřebuju něco napínavého" — a najdeme k tomu četbu.</p>
+      <${heading} class="mood__title">Univerzální vyhledávání</${heading}>
+      <p class="omni__hint">Hledejte podle názvu, autora, tématu i obsahu — stačí napsat, co hledáte, klidně celou větou.</p>
       <form class="omni__form" action="/omnisearch" method="get">
-        <textarea name="q" rows="2" placeholder="Co máte chuť poslouchat?">${esc(q)}</textarea>
-        <button type="submit">Najít</button>
+        <textarea name="q" rows="2" placeholder="Co hledáte?">${esc(q)}</textarea>
+        <button type="submit">Hledat</button>
       </form>
     </section>`;
 }
@@ -210,7 +211,7 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
   return {
     title: programme ?? "Pořady",
     html:
-      moodBox("", "h2") +
+      searchBox("", "h2") +
       `<section>
         <div class="browse__head">
           <h1>${esc(heading)}</h1>
@@ -220,23 +221,6 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
           <p class="result-count">${esc(`${data.total} pořadů`)}</p>
           ${sortControl(sort, params)}
         </div>
-        ${showGrid(data.items)}
-        ${pagination(data.page, data.pageSize, data.total, base)}
-      </section>`,
-  };
-}
-
-export async function searchView(params: URLSearchParams): Promise<ViewResult> {
-  const q = params.get("q") ?? "";
-  const page = params.get("page") ? Number(params.get("page")) : 1;
-  const data = await api.search(q, page);
-  const base = `/search?q=${encodeURIComponent(q)}&`;
-  return {
-    title: `Hledání: ${q}`,
-    html: `
-      <section>
-        <h1>Výsledky hledání</h1>
-        <p class="result-count">${data.total} výsledků pro „${esc(q)}"</p>
         ${showGrid(data.items)}
         ${pagination(data.page, data.pageSize, data.total, base)}
       </section>`,
@@ -375,17 +359,13 @@ export async function omnisearchView(params: URLSearchParams): Promise<ViewResul
   const q = (params.get("q") ?? "").trim();
   const result = q ? await api.omnisearch(q) : null;
   const resultHtml = result
-    ? `
-      <p class="omni__intent">
-        Hledám: <strong>${esc(result.intent.searchText)}</strong>
-        ${result.intent.themes.length ? ` · témata: ${esc(result.intent.themes.join(", "))}` : ""}
-        · intent: ${esc(result.intent.provider)} · ${result.vectorHits} sémantických / ${result.ftsHits} klíčových shod
-      </p>
-      ${showGrid(result.items)}`
+    ? result.items.length
+      ? `<p class="result-count">${result.items.length} výsledků</p>${showGrid(result.items)}`
+      : `<p class="result-count">Nic jsme nenašli pro „${esc(q)}".</p>`
     : "";
   return {
-    title: "Podle nálady",
-    html: moodBox(q, "h1") + (resultHtml ? `<section class="omni">${resultHtml}</section>` : ""),
+    title: q ? `Hledání: ${q}` : "Univerzální vyhledávání",
+    html: searchBox(q, "h1") + (resultHtml ? `<section class="omni">${resultHtml}</section>` : ""),
   };
 }
 

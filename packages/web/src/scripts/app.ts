@@ -10,7 +10,6 @@ import {
   omnisearchView,
   programmeView,
   programmesView,
-  searchView,
   showView,
   transcriptSearchView,
   type ViewResult,
@@ -35,8 +34,8 @@ async function resolve(): Promise<ViewResult> {
   const params = new URLSearchParams(location.search);
 
   if (path === "/") return browseView(params);
-  if (path === "/search") return searchView(params);
-  if (path === "/omnisearch") return omnisearchView(params);
+  // /search retired → universal search lives at /omnisearch (keep old links working).
+  if (path === "/search" || path === "/omnisearch") return omnisearchView(params);
   if (path === "/transcripts") return transcriptSearchView(params);
   if (path === "/programmes") return programmesView();
   if (path === "/historie") return historyView(params);
