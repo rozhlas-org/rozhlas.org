@@ -803,6 +803,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   box-shadow: none;
   display: grid;
   place-items: center;
+  line-height: 1; /* match .queue-add so the detail pill is the same height */
 }
 .fav-toggle[aria-pressed="true"] { background: var(--yellow); color: var(--key); }
 .fav-toggle--detail {
@@ -814,12 +815,18 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 1px;
+  white-space: nowrap;
   box-shadow: 3px 3px 0 var(--key);
 }
 .fav-toggle--detail:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--yellow); }
 /* grouped action row on the detail page: queue pill + favourite */
 .show-detail__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 6px 0 4px; }
 .show-detail__actions .queue-add--detail { margin: 0; }
+/* On mobile the two pills don't fit side by side, so stack them — keeps the favourite
+   on its own line so toggling its label can't make it jump onto the queue's row. */
+@media (max-width: 640px) {
+  .show-detail__actions { flex-direction: column; align-items: flex-start; }
+}
 /* card variant: pre-pressed ★ at top-left (queue ＋ owns top-right) to un-save */
 .show-card__fav {
   position: absolute;
