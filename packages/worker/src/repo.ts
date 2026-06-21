@@ -18,11 +18,23 @@ const {
   transcriptChunks,
 } = schema;
 
-export async function upsertSource(key: string, title: string, schedule?: string) {
+export async function upsertSource(key: string, title: string, schedule?: string, transcribe = true) {
   await db
     .insert(sources)
-    .values({ key, title, schedule })
-    .onConflictDoUpdate({ target: sources.key, set: { title, schedule } });
+    .values({ key, title, schedule, transcribe })
+    .onConflictDoUpdate({ target: sources.key, set: { title, schedule, transcribe } });
+}
+
+/** Does this audio file's source allow transcription? (per-source opt-out, default on) */
+export async function sourceTranscribes(audioFileId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ transcribe: sources.transcribe })
+    .from(audioFiles)
+    .innerJoin(shows, eq(shows.id, audioFiles.showId))
+    .innerJoin(sources, eq(sources.key, shows.sourceKey))
+    .where(eq(audioFiles.id, audioFileId))
+    .limit(1);
+  return row?.transcribe ?? true; // unknown source → default to transcribing
 }
 
 export async function touchSourceRun(key: string) {
@@ -364,7 +376,16 @@ export async function enqueuePendingTranscripts(): Promise<number> {
     .select({ id: audioFiles.id })
     .from(audioFiles)
     .leftJoin(transcripts, eq(transcripts.audioFileId, audioFiles.id))
-    .where(and(isNotNull(audioFiles.ipfsCid), eq(audioFiles.streamable, true), isNull(transcripts.id)));
+    .innerJoin(shows, eq(shows.id, audioFiles.showId))
+    .innerJoin(sources, eq(sources.key, shows.sourceKey))
+    .where(
+      and(
+        isNotNull(audioFiles.ipfsCid),
+        eq(audioFiles.streamable, true),
+        isNull(transcripts.id),
+        eq(sources.transcribe, true), // skip sources opted out of transcription
+      ),
+    );
   for (const r of rows) {
     await enqueue("transcribe", { audioFileId: r.id }, { jobId: `tx-${r.id}`, removeOnComplete: true });
   }

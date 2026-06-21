@@ -24,6 +24,9 @@ export const sources = sqliteTable("sources", {
   key: text("key").notNull().unique(), // e.g. "iradio"
   title: text("title"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  // Whether new audio from this source is auto-transcribed (steady-state + backfill).
+  // Default on; set false for high-volume sources we deliberately skip for now.
+  transcribe: integer("transcribe", { mode: "boolean" }).notNull().default(true),
   schedule: text("schedule"), // cron expression
   lastRunAt: integer("last_run_at", { mode: "timestamp_ms" }),
   ...timestamps,

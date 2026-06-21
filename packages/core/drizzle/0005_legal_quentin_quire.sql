@@ -1,0 +1,1 @@
+ALTER TABLE `sources` ADD `transcribe` integer DEFAULT true NOT NULL;
