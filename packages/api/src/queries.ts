@@ -29,6 +29,8 @@ export interface ShowListItem {
   streamUrl: string | null;
   plays: number;
   displays: number;
+  /** Highlighted description snippet (universal search keyword matches only). */
+  snippet?: string;
 }
 
 function orderForSort(sort: SortKey) {
