@@ -6,13 +6,13 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
  * (resolved from `/shows?filter[title][eq]=Historie Plus`):
  *   • Historie Plus — 6f1d6fd8-db19-3fc8-8cfc-4b8aed97ee53
  *
- * `transcribe: false` — this is a large back-catalogue; we deliberately skip
- * transcription for now to avoid flooding the (CPU-bound) transcribe queue.
+ * Transcription is on (default): the one-time bulk back-catalogue was loaded with
+ * it off; now future episodes transcribe normally. The already-loaded files stay
+ * un-transcribed (only a deliberate backfill would pick them up).
  */
 export const historiePlusScraper = makeApiScraper({
   key: "historie-plus",
   title: "Český rozhlas Plus — Historie Plus",
   schedule: "0 9 * * *", // nightly, offset from the other API sources
-  transcribe: false,
   shows: [{ uuid: "6f1d6fd8-db19-3fc8-8cfc-4b8aed97ee53", name: "Historie Plus" }],
 });
