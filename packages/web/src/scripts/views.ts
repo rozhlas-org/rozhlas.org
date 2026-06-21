@@ -63,6 +63,18 @@ function queueAddLabel(n: number, opts: { compact?: boolean } = {}): { label: st
   return { label: opts.compact ? "＋" : "＋ Přidat do fronty", title: "Přidat do fronty" };
 }
 
+/**
+ * A universal-search transcript match on a card: same `.tx-hit` button as the
+ * přepisy page (player.ts handles the click), so it plays the díl at the timestamp.
+ * `snippet` is pre-highlighted safe HTML from the API.
+ */
+function cardTxHit(s: ShowListItem): string {
+  const h = s.transcriptHit!;
+  const part = h.partIdx == null ? "single" : String(h.partIdx);
+  const dil = h.partIdx == null ? "" : `<span class="tx-hit__dil">${h.partIdx}. díl</span>`;
+  return `<button class="tx-hit tx-hit--card" type="button" data-slug="${attr(s.slug)}" data-part="${attr(part)}" data-seek="${h.startSec}" aria-label="Přehrát od ${esc(formatDuration(h.startSec))}"><span class="tx-hit__time">▶ ${esc(formatDuration(h.startSec))}</span>${dil}<span class="tx-hit__snip">${h.snippet}…</span></button>`;
+}
+
 function showCard(s: ShowListItem): string {
   const art = s.artworkUrl
     ? `<img src="${attr(s.artworkUrl)}" alt="" loading="lazy" />`
@@ -101,7 +113,7 @@ function showCard(s: ShowListItem): string {
         <h3 class="show-card__title">${esc(s.title)}</h3>
       </a>
       ${programme}
-      ${s.snippet ? `<p class="show-card__snippet">${s.snippet}</p>` : ""}
+      ${s.transcriptHit ? cardTxHit(s) : s.snippet ? `<p class="show-card__snippet">${s.snippet}</p>` : ""}
       <p class="show-card__meta">${esc(formatDate(s.publishedAt))}${dur}</p>
       ${statsLine(s.plays, s.displays)}
     </article>`;
