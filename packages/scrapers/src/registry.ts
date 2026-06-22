@@ -40,8 +40,8 @@ export const SCRAPERS: Record<string, Scraper> = {
   [toulkyPrvniRepublikouScraper.key]: toulkyPrvniRepublikouScraper, // Toulky první republikou
   [ziliByliScraper.key]: ziliByliScraper, // ŽiliByli
   [coVUcebnicichNebyloScraper.key]: coVUcebnicichNebyloScraper, // Co v učebnicích nebylo
-  [setkaniSLiteraturouScraper.key]: setkaniSLiteraturouScraper, // Setkání s literaturou (transcribe off)
-  [nedelniVlnaPardubiceScraper.key]: nedelniVlnaPardubiceScraper, // Na nedělní vlně z Pardubic (transcribe off)
+  [setkaniSLiteraturouScraper.key]: setkaniSLiteraturouScraper, // Setkání s literaturou
+  [nedelniVlnaPardubiceScraper.key]: nedelniVlnaPardubiceScraper, // Na nedělní vlně z Pardubic
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
