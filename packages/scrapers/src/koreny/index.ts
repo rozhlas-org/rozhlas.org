@@ -5,12 +5,12 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
  * Single umbrella show pinned by UUID.
  *   • Kořeny — df2ace96-2fd0-3a48-ac66-2d0164353124
  *
- * `transcribe: false` for the one-time bulk load; flipped on later.
+ * Transcription on (default): the one-time bulk back-catalogue was loaded with it
+ * off; future episodes transcribe normally (already-loaded files stay un-transcribed).
  */
 export const korenyScraper = makeApiScraper({
   key: "koreny",
   title: "Český rozhlas — Kořeny",
   schedule: "30 7 * * *", // nightly; :30 offset (the hourly slots are taken)
-  transcribe: false,
   shows: [{ uuid: "df2ace96-2fd0-3a48-ac66-2d0164353124", name: "Kořeny" }],
 });
