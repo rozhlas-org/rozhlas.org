@@ -577,12 +577,11 @@ button:active,
 }
 .player-bar[hidden] { display: none; }
 .player-bar__row { display: flex; align-items: center; gap: 12px; }
-/* Row 1: now-playing block grows full-width. */
+/* Row 1: now-playing block grows full-width; now-label + time share a header line. */
 .player-bar__row--meta { gap: 12px; }
 .player-bar__row--meta .player-bar__meta { flex: 1; min-width: 0; max-width: none; }
-/* Time on its own line above the controls, right-aligned. */
-.player-bar__row--time { justify-content: flex-end; gap: 0; }
-/* Row 2: transport centered (grid: spacer | transport | queue). */
+.player-bar__metahead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+/* Transport centered (grid: spacer | transport | queue). */
 .player-bar__row--controls { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; }
 .player-bar__transport { display: flex; align-items: center; gap: 12px; justify-self: center; }
 .player-bar__queue { justify-self: end; margin-right: 2px; } /* keep the badge off the edge */

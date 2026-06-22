@@ -135,15 +135,18 @@ const jsonLd = {
       <div class="player-bar__row player-bar__row--meta">
         <div id="player-art" class="player-bar__art player-bar__art--empty" aria-hidden="true"></div>
         <div class="player-bar__meta">
-          <div id="player-now" class="player-bar__now">Přehrávač</div>
+          <div class="player-bar__metahead">
+            <div id="player-now" class="player-bar__now">Přehrávač</div>
+            <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
+          </div>
           <a id="player-title" class="player-bar__title player-bar__title--idle">Nic nehraje</a>
         </div>
       </div>
-      <!-- Time/remaining on its own line, right-aligned, just above the controls. -->
-      <div class="player-bar__row player-bar__row--time">
-        <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
+      <!-- Row 2: full-width scrubber, directly under the title (above the controls). -->
+      <div class="player-bar__row player-bar__row--seek">
+        <input id="player-seek" class="player-bar__seek" type="range" min="0" max="1000" value="0" aria-label="Pozice ve stopě" disabled />
       </div>
-      <!-- Row 2: centered transport [prev −15 play +15 next], queue button at the right.
+      <!-- Row 3: centered transport [prev −15 play +15 next], queue button at the right.
            Disabled in static markup; player.ts enables once a track/queue is ready. -->
       <div class="player-bar__row player-bar__row--controls">
         <span class="player-bar__spacer" aria-hidden="true"></span>
@@ -166,10 +169,6 @@ const jsonLd = {
           aria-expanded="false"
           aria-controls="player-queue"
         >☰<span id="player-queue-badge" class="player-bar__badge" hidden>0</span></button>
-      </div>
-      <!-- Row 3: full-width scrubber. -->
-      <div class="player-bar__row player-bar__row--seek">
-        <input id="player-seek" class="player-bar__seek" type="range" min="0" max="1000" value="0" aria-label="Pozice ve stopě" disabled />
       </div>
       <audio id="player-audio" preload="none"></audio>
       <!-- Queue panel ("Fronta"), rendered by scripts/player.ts; lives in the shell so navigation can't destroy it. -->
