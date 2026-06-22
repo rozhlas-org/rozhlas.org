@@ -18,6 +18,9 @@ const concurrency: Partial<Record<QueueName, number>> = {
   // transcription doesn't oversubscribe the CPU and starve the other services.
   transcribe: 1,
   "embed-transcript": 2,
+  // Single self-pacing consumer — the audio-seconds/hour rate gate is the ceiling,
+  // not parallelism; concurrency 1 keeps the rate window race-free.
+  "groq-backfill": 1,
 };
 
 // Long-running jobs need a longer lock than BullMQ's 30s default, or a busy event

@@ -1,7 +1,7 @@
 import { config, createLogger } from "@rozhlas/core";
 import { getQueue } from "@rozhlas/jobs";
 import { listScrapers } from "@rozhlas/scrapers";
-import { transcriptionEnabled } from "@rozhlas/media";
+import { transcriptionEnabled, groqEnabled } from "@rozhlas/media";
 import { enqueuePendingArtworks, enqueuePendingTranscripts, upsertSource } from "./repo.ts";
 
 const log = createLogger("worker:scheduler");
@@ -33,5 +33,17 @@ export async function setupSchedules() {
   if (transcriptionEnabled() && config.TRANSCRIBE_BACKFILL) {
     const txPending = await enqueuePendingTranscripts();
     if (txPending) log.warn("TRANSCRIBE_BACKFILL on — queued full transcript backfill", { pending: txPending });
+  }
+
+  // Groq free-tier backfill: a self-paced repeatable tick (one file/min, newest-first).
+  // The tick itself no-ops if GROQ_BACKFILL_ENABLED is off, but only register the
+  // schedule when it's on so we don't churn an idle queue.
+  if (groqEnabled()) {
+    await getQueue("groq-backfill").upsertJobScheduler(
+      "groq-backfill",
+      { pattern: "* * * * *" }, // every minute; the rate gate paces actual submissions
+      { name: "groq-backfill", data: {}, opts: { removeOnComplete: true, removeOnFail: { count: 100 } } },
+    );
+    log.info("groq backfill scheduled (newest-first, self-paced)");
   }
 }
