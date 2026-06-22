@@ -22,6 +22,8 @@ import { setkaniSLiteraturouScraper } from "./setkani-s-literaturou/index.ts";
 import { nedelniVlnaPardubiceScraper } from "./nedelni-vlna-pardubice/index.ts";
 import { vyletyScraper } from "./vylety/index.ts";
 import { prahaJeNejScraper } from "./praha-je-nej/index.ts";
+import { momentyScraper } from "./momenty/index.ts";
+import { korenyScraper } from "./koreny/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -46,6 +48,8 @@ export const SCRAPERS: Record<string, Scraper> = {
   [nedelniVlnaPardubiceScraper.key]: nedelniVlnaPardubiceScraper, // Na nedělní vlně z Pardubic
   [vyletyScraper.key]: vyletyScraper, // Výlety
   [prahaJeNejScraper.key]: prahaJeNejScraper, // Praha je NEJ!
+  [momentyScraper.key]: momentyScraper, // Momenty (transcribe off)
+  [korenyScraper.key]: korenyScraper, // Kořeny (transcribe off)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
