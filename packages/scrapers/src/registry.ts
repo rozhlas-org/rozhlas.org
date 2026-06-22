@@ -33,11 +33,11 @@ export const SCRAPERS: Record<string, Scraper> = {
   [osudoveZenyScraper.key]: osudoveZenyScraper, // Osudové ženy
   [historieZlocinuScraper.key]: historieZlocinuScraper, // Historie českého zločinu
   [zednariScraper.key]: zednariScraper, // Zednáři
-  [jihoceskaVlastivedaScraper.key]: jihoceskaVlastivedaScraper, // Jihočeská vlastivěda (transcribe off)
-  [tadyToZnamScraper.key]: tadyToZnamScraper, // Tady to znám (transcribe off)
-  [toulkyPrvniRepublikouScraper.key]: toulkyPrvniRepublikouScraper, // Toulky první republikou (transcribe off)
-  [ziliByliScraper.key]: ziliByliScraper, // ŽiliByli (transcribe off)
-  [coVUcebnicichNebyloScraper.key]: coVUcebnicichNebyloScraper, // Co v učebnicích nebylo (transcribe off)
+  [jihoceskaVlastivedaScraper.key]: jihoceskaVlastivedaScraper, // Jihočeská vlastivěda
+  [tadyToZnamScraper.key]: tadyToZnamScraper, // Tady to znám
+  [toulkyPrvniRepublikouScraper.key]: toulkyPrvniRepublikouScraper, // Toulky první republikou
+  [ziliByliScraper.key]: ziliByliScraper, // ŽiliByli
+  [coVUcebnicichNebyloScraper.key]: coVUcebnicichNebyloScraper, // Co v učebnicích nebylo
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
