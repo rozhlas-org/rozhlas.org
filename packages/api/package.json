@@ -11,6 +11,8 @@
     "@rozhlas/core": "workspace:*",
     "@rozhlas/jobs": "workspace:*",
     "@rozhlas/embeddings": "workspace:*",
+    "@rozhlas/ipfs": "workspace:*",
+    "@rozhlas/media": "workspace:*",
     "hono": "^4.6.14"
   }
 }

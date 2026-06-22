@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "@rozhlas/core";
 
-export { makeThumbnail, type Thumbnail } from "./artwork.ts";
+export { makeThumbnail, thumbnailFromBuffer, type Thumbnail } from "./artwork.ts";
 export {
   transcribeAudio,
   transcriptionEnabled,
