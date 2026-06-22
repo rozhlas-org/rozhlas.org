@@ -130,23 +130,33 @@ const jsonLd = {
     <!-- Persistent player: lives in the shell (outside #app) so SPA navigation
          never stops playback. Filled/controlled by scripts/player.ts. -->
     <div id="player" class="player-bar" aria-label="Přehrávač">
-      <!-- Row 1: cover + now-playing label + title, full width. Always on screen;
-           player.ts shows a placeholder + dimmed transport when nothing's loaded. -->
+      <!-- Row 1: cover + (now-label + time on one line) / title. Time sits top-right,
+           above the title, without shifting it. Always on screen. -->
       <div class="player-bar__row player-bar__row--meta">
         <div id="player-art" class="player-bar__art player-bar__art--empty" aria-hidden="true"></div>
         <div class="player-bar__meta">
-          <div id="player-now" class="player-bar__now">Přehrávač</div>
+          <div class="player-bar__metahead">
+            <div id="player-now" class="player-bar__now">Přehrávač</div>
+            <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
+          </div>
           <a id="player-title" class="player-bar__title player-bar__title--idle">Nic nehraje</a>
         </div>
       </div>
-      <!-- Row 2: transport (prev/play/next) + seek + time + queue. Disabled in the
-           static markup; player.ts enables them once a track (or queue) is ready. -->
+      <!-- Row 2: centered transport [prev −15 play +15 next], queue button at the right.
+           Disabled in static markup; player.ts enables once a track/queue is ready. -->
       <div class="player-bar__row player-bar__row--controls">
-        <button id="player-prev" class="player-bar__btn player-bar__nav" type="button" aria-label="Předchozí" disabled>⏮</button>
-        <button id="player-toggle" class="player-bar__btn player-bar__toggle" type="button" aria-label="Přehrát" disabled>▶</button>
-        <button id="player-next" class="player-bar__btn player-bar__nav" type="button" aria-label="Další" disabled>⏭</button>
-        <input id="player-seek" class="player-bar__seek" type="range" min="0" max="1000" value="0" aria-label="Pozice ve stopě" disabled />
-        <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
+        <span class="player-bar__spacer" aria-hidden="true"></span>
+        <div class="player-bar__transport">
+          <button id="player-prev" class="player-bar__btn player-bar__nav" type="button" aria-label="Předchozí" disabled>⏮</button>
+          <button id="player-back15" class="player-bar__btn player-bar__nav player-bar__skip" type="button" aria-label="Zpět o 15 sekund" title="Zpět o 15 s" disabled>
+            <svg class="player-bar__skipicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/><text x="12.5" y="15.5" text-anchor="middle" font-size="8" font-weight="700" stroke="none" fill="currentColor" font-family="monospace">15</text></svg>
+          </button>
+          <button id="player-toggle" class="player-bar__btn player-bar__toggle" type="button" aria-label="Přehrát" disabled>▶</button>
+          <button id="player-fwd15" class="player-bar__btn player-bar__nav player-bar__skip" type="button" aria-label="Vpřed o 15 sekund" title="Vpřed o 15 s" disabled>
+            <svg class="player-bar__skipicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/><text x="11.5" y="15.5" text-anchor="middle" font-size="8" font-weight="700" stroke="none" fill="currentColor" font-family="monospace">15</text></svg>
+          </button>
+          <button id="player-next" class="player-bar__btn player-bar__nav" type="button" aria-label="Další" disabled>⏭</button>
+        </div>
         <button
           id="player-queue-toggle"
           class="player-bar__btn player-bar__queue"
@@ -155,6 +165,10 @@ const jsonLd = {
           aria-expanded="false"
           aria-controls="player-queue"
         >☰<span id="player-queue-badge" class="player-bar__badge" hidden>0</span></button>
+      </div>
+      <!-- Row 3: full-width scrubber. -->
+      <div class="player-bar__row player-bar__row--seek">
+        <input id="player-seek" class="player-bar__seek" type="range" min="0" max="1000" value="0" aria-label="Pozice ve stopě" disabled />
       </div>
       <audio id="player-audio" preload="none"></audio>
       <!-- Queue panel ("Fronta"), rendered by scripts/player.ts; lives in the shell so navigation can't destroy it. -->
