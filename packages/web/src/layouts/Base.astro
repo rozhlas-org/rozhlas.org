@@ -12,6 +12,20 @@ import "../styles/styles.css";
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>rozhlas.org</title>
     <meta name="description" content="Archiv pořadů Českého rozhlasu — zaměřeno na četbu a čtení. Audio přes IPFS." />
+    <meta name="theme-color" content="#ffffff" />
+    {/* Apply the saved theme + theme-color BEFORE paint to avoid a light flash. */}
+    <script is:inline>
+      (function () {
+        try {
+          var p = localStorage.getItem("rozhlas:theme");
+          var explicit = p === "dark" || p === "light";
+          if (explicit) document.documentElement.dataset.theme = p;
+          var dark = p === "dark" || (!explicit && matchMedia("(prefers-color-scheme: dark)").matches);
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute("content", dark ? "#161616" : "#ffffff");
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -22,6 +36,7 @@ import "../styles/styles.css";
   <body class="has-player">
     <header class="site-header">
       <a class="site-header__brand" href="/">rozhlas<span class="accent">.org</span></a>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Přepnout motiv" title="Motiv">◐</button>
       <div class="site-nav-wrap">
         <nav class="site-nav" id="site-nav">
           <a href="/">Pořady</a>

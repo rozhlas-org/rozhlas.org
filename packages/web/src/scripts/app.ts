@@ -21,6 +21,7 @@ import { clearHistory } from "./history.ts";
 import { clearFavourites, toggleFavourite } from "./favourites.ts";
 import { applyPartMarquees, initPlayer, syncNowPlaying } from "./player.ts";
 import { wireTranscript } from "./transcript.ts";
+import { initTheme } from "./theme.ts";
 
 const app = document.getElementById("app")!;
 
@@ -194,6 +195,8 @@ function initNav(): void {
   update();
 }
 initNav();
+// Theme switcher (System/Light/Dark) — pre-paint script in Base.astro already set the theme.
+initTheme();
 
 // Persist/restore per-díl playback progress (capture-phase, covers re-rendered audio).
 wireAudioProgress();
