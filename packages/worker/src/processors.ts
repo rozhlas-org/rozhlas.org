@@ -9,10 +9,15 @@ import {
   transcribeAudio,
   transcriptionEnabled,
   chunkSegments,
+  groqTranscribe,
+  groqEnabled,
+  GroqFileTooLargeError,
+  type Transcription,
 } from "@rozhlas/media";
 import { ipfs } from "@rozhlas/ipfs";
 import { getProvider, embedShows, embedTranscriptChunks } from "@rozhlas/embeddings";
 import * as repo from "./repo.ts";
+import { groqUsedSecondsLastHour, groqRecordUsage, groqHeartbeat } from "./groq-rate.ts";
 
 const log = createLogger("worker:pipeline");
 
@@ -250,6 +255,25 @@ async function reserved(name: QueueName) {
 const TRANSCRIBE_HARD_MS = 4 * 60 * 60_000;
 
 /** transcribe → pull pinned audio by CID, run whisper, store transcript + chunks. */
+/**
+ * Persist a Transcription (from local whisper OR Groq) → chunks + FTS (trigger)
+ * + queue the embed stage. Shared by both provider paths so they stay identical.
+ */
+function storeTranscription(audioFileId: number, showId: number, t: Transcription) {
+  const chunks = chunkSegments(t.segments, config.TRANSCRIPT_CHUNK_CHARS);
+  const transcriptId = repo.saveTranscript(audioFileId, showId, {
+    lang: t.lang,
+    model: t.model,
+    text: t.text,
+    segmentsJson: JSON.stringify(t.segments),
+    durationSec: t.durationSec,
+    chunks,
+  });
+  // FTS is trigger-maintained on insert → keyword search works now; embed adds vectors.
+  void enqueue("embed-transcript", { transcriptId }, { jobId: `emb-${transcriptId}`, removeOnComplete: true });
+  return { transcriptId, segments: t.segments.length, chunks: chunks.length };
+}
+
 async function transcribe(job: Job<JobData["transcribe"]>) {
   const { audioFileId } = job.data;
   if (!transcriptionEnabled()) return { skipped: "disabled" }; // WHISPER_PYTHON unset
@@ -261,24 +285,55 @@ async function transcribe(job: Job<JobData["transcribe"]>) {
   const watchdog = setTimeout(() => ac.abort(), TRANSCRIBE_HARD_MS);
   try {
     await job.updateProgress({ stage: "transcribe", percent: 0 });
-    const t = await transcribeAudio(ipfs.gatewayFor(audio.ipfsCid), `af${audioFileId}`, {
-      signal: ac.signal,
-    });
-    const chunks = chunkSegments(t.segments, config.TRANSCRIPT_CHUNK_CHARS);
-    const transcriptId = repo.saveTranscript(audioFileId, audio.showId, {
-      lang: t.lang,
-      model: t.model,
-      text: t.text,
-      segmentsJson: JSON.stringify(t.segments),
-      durationSec: t.durationSec,
-      chunks,
-    });
-    // FTS is trigger-maintained on insert → keyword transcript search works now;
-    // the embed stage adds semantic vectors (best-effort).
-    await enqueue("embed-transcript", { transcriptId }, { jobId: `emb-${transcriptId}`, removeOnComplete: true });
+    const t = await transcribeAudio(ipfs.gatewayFor(audio.ipfsCid), `af${audioFileId}`, { signal: ac.signal });
+    const r = storeTranscription(audioFileId, audio.showId, t);
     await job.updateProgress({ stage: "done", percent: 100 });
-    log.info("transcribed", { audioFileId, transcriptId, segments: t.segments.length, chunks: chunks.length });
-    return { transcriptId, segments: t.segments.length, chunks: chunks.length };
+    log.info("transcribed", { audioFileId, ...r });
+    return r;
+  } finally {
+    clearTimeout(watchdog);
+  }
+}
+
+// Groq free-tier backfill: one file per tick, newest broadcast first, self-paced
+// under the audio-seconds/hour limit. Files too large after transcode are skipped
+// in-session so the cursor advances (persistent skip is a follow-up).
+const GROQ_TICK_HARD_MS = 12 * 60_000;
+const groqSkip = new Set<number>(); // oversized/failed this session — don't re-pick
+
+async function groqBackfillTick(_job: Job<JobData["groq-backfill"]>) {
+  if (!groqEnabled()) return { skipped: "disabled" };
+  await groqHeartbeat(); // dead-man's-switch reads this
+  const used = await groqUsedSecondsLastHour();
+  if (used >= config.GROQ_AUDIO_SECONDS_PER_HOUR) return { skipped: "rate" };
+
+  const next = await repo.nextUntranscribedByDate([...groqSkip]);
+  if (!next?.cid) return { skipped: "drained" };
+  // Don't blow the hourly budget with this one file.
+  if (used + (next.durationSec ?? 0) > config.GROQ_AUDIO_SECONDS_PER_HOUR) return { skipped: "rate-file" };
+  if (await repo.transcriptExists(next.id)) return { skipped: "race" };
+
+  const ac = new AbortController();
+  const watchdog = setTimeout(() => ac.abort(), GROQ_TICK_HARD_MS);
+  try {
+    const t = await groqTranscribe(ipfs.gatewayFor(next.cid), `af${next.id}`, { signal: ac.signal });
+    const r = storeTranscription(next.id, next.showId, t);
+    await groqRecordUsage(t.durationSec || next.durationSec || 0);
+    log.info("groq backfilled", { audioFileId: next.id, ...r });
+    return { audioFileId: next.id, ...r };
+  } catch (err) {
+    if (err instanceof GroqFileTooLargeError) {
+      groqSkip.add(next.id); // multi-hour outlier — defer
+      log.warn("groq skip (too large)", { audioFileId: next.id, err: err.message });
+      return { skipped: "too-large", audioFileId: next.id };
+    }
+    if ((err as { status?: number }).status === 429) {
+      log.warn("groq 429 — backing off", { audioFileId: next.id });
+      return { skipped: "429" }; // rate gate will catch up; don't fail/retry-storm
+    }
+    groqSkip.add(next.id); // transient/odd failure — skip this session so the cursor advances
+    log.error("groq backfill failed", { audioFileId: next.id, err: String(err).slice(0, 200) });
+    return { skipped: "error", audioFileId: next.id };
   } finally {
     clearTimeout(watchdog);
   }
@@ -303,6 +358,7 @@ export async function buildProcessors(): Promise<
     "ipfs-verify": ipfsVerify,
     index,
     transcribe,
+    "groq-backfill": groqBackfillTick,
     "embed-transcript": embedTranscript,
     "fetch-metadata": await reserved("fetch-metadata"),
     "extract-tags": await reserved("extract-tags"),
