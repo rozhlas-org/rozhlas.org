@@ -73,6 +73,17 @@ const EnvSchema = z.object({
   WHISPER_THREADS: z.coerce.number().int().positive().default(4),
   // Target characters per embedded/indexed transcript chunk (~350-400 tokens).
   TRANSCRIPT_CHUNK_CHARS: z.coerce.number().int().positive().default(1500),
+
+  // --- Groq free-tier backfill (newest-first; see docs/plans/groq-free-backfill.md) ---
+  GROQ_API_KEY: z.string().optional(),
+  GROQ_BASE_URL: z.string().url().default("https://api.groq.com/openai/v1"),
+  GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
+  // Master switch for the paced backfill consumer.
+  GROQ_BACKFILL_ENABLED: z.coerce.boolean().default(false),
+  // Self-pacing ceiling, kept under Groq free's 7,200 audio-sec/hour.
+  GROQ_AUDIO_SECONDS_PER_HOUR: z.coerce.number().int().positive().default(7000),
+  // Transcode each file to 16 kHz mono and skip if still above this (free upload cap is 25 MB).
+  GROQ_MAX_UPLOAD_MB: z.coerce.number().positive().default(24),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

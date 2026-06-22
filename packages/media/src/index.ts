@@ -12,6 +12,7 @@ export {
   type TranscriptSegment,
   type TranscriptChunk,
 } from "./transcribe.ts";
+export { groqTranscribe, groqEnabled, GroqFileTooLargeError } from "./groq.ts";
 
 const log = createLogger("media");
 

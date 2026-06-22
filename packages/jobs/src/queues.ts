@@ -16,6 +16,7 @@ export const QUEUE_NAMES = [
   "index",
   "transcribe",
   "embed-transcript",
+  "groq-backfill",
 ] as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[number];
@@ -45,6 +46,8 @@ export interface JobData {
   transcribe: { audioFileId: number };
   // Embed a transcript's chunks (Voyage) into the chunk vector store.
   "embed-transcript": { transcriptId: number };
+  // Repeatable self-paced tick: transcribe one newest-first file via Groq (no payload).
+  "groq-backfill": Record<string, never>;
 }
 
 /** Sensible defaults: retry with backoff, keep history bounded for the dashboard. */
