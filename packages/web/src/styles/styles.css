@@ -20,6 +20,13 @@
   --muted: #6b6b66;
   --hatch-a: #ecebe6;
   --hatch-b: #e1e0da;
+  --line: #e1e0da; /* hairline borders (tables, rows) */
+  --shadow: var(--key); /* neutral hard offset shadow — stays dark in dark mode */
+
+  /* On-accent text is theme-independent: each accent keeps its own legible ink. */
+  --on-cyan: #111111;
+  --on-yellow: #111111;
+  --on-magenta: #ffffff;
 
   --fg: var(--key);
   --bg: var(--paper);
@@ -31,6 +38,39 @@
   --font-display: "Saira Condensed", system-ui, sans-serif;
   --font-body: "Saira", system-ui, sans-serif;
   --font-mono: "Space Mono", ui-monospace, monospace;
+}
+
+/* ===== Dark theme — override neutral tokens; CMYK accents stay. ===== */
+/* Explicit choice wins; absence = follow the OS (system default). */
+:root[data-theme="dark"] {
+  --paper: #161616;
+  --key: #f4f3ef;
+  --muted: #9b9b95;
+  --hatch-a: #222222;
+  --hatch-b: #2c2c2c;
+  --line: #363636;
+  --shadow: #000000;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #161616;
+    --key: #f4f3ef;
+    --muted: #9b9b95;
+    --hatch-a: #222222;
+    --hatch-b: #2c2c2c;
+    --line: #363636;
+    --shadow: #000000;
+  }
+}
+/* The player bar + queue panel are a dark surface in BOTH themes: pin their local
+   tokens so their children (which use --key/--paper) render light-on-dark always. */
+.player-bar,
+.queue-panel {
+  --key: #1c1c1c;
+  --paper: #f4f3ef;
+  --muted: #9b9b95;
+  --line: #3a3a3a;
+  --shadow: #000000;
 }
 
 * { box-sizing: border-box; }
@@ -124,6 +164,27 @@ button:active,
 }
 .site-header__brand .accent { color: var(--cyan); }
 
+/* theme switcher — desktop: rightmost on the menu level; mobile: right of the logo */
+.theme-toggle {
+  order: 1; /* after the nav (DOM order is brand, toggle, nav) */
+  margin-left: auto; /* pushes it to the right edge */
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  background: var(--paper);
+  color: var(--key);
+  border: var(--border-thin);
+  box-shadow: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.theme-toggle:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--accent); }
+.theme-toggle:focus-visible { outline: 3px solid var(--key); outline-offset: 2px; }
+
 .site-nav-wrap { position: relative; min-width: 0; }
 .site-nav {
   display: flex;
@@ -157,6 +218,8 @@ button:active,
 /* hidden when not scrollable, or once scrolled to the end (JS toggles these) */
 .site-nav-wrap--scroll.site-nav-wrap--end::after { opacity: 0; }
 @media (max-width: 640px) {
+  /* toggle stays in DOM order (right of the logo on row 1; nav drops to row 2) */
+  .theme-toggle { order: 0; }
   /* Full-bleed: pull the nav out into the header's 20px side padding so the whole
      width (margins included) is a scroll/swipe area, without enlarging the menu. */
   .site-nav-wrap { flex: 1 1 100%; margin-left: -20px; margin-right: -20px; }
@@ -214,7 +277,7 @@ button:active,
 .show-card {
   border: var(--border);
   background: var(--paper);
-  box-shadow: 7px 7px 0 var(--key);
+  box-shadow: 7px 7px 0 var(--shadow);
   display: flex;
   flex-direction: column;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
@@ -246,7 +309,7 @@ button:active,
   width: 42px;
   height: 42px;
   background: var(--cyan);
-  color: var(--key);
+  color: var(--on-cyan);
   border: var(--border-thin);
   display: grid;
   place-items: center;
@@ -256,7 +319,7 @@ button:active,
   z-index: 2; /* above the card link so the badge takes the click */
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-.show-card__badge:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--key); }
+.show-card__badge:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--shadow); }
 .show-card__badge:focus-visible { outline: 3px solid var(--key); outline-offset: 2px; }
 .show-card__title {
   font-size: 22px;
@@ -288,7 +351,7 @@ button:active,
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.show-card__snippet mark { background: var(--cyan); color: var(--key); padding: 0 2px; }
+.show-card__snippet mark { background: var(--cyan); color: var(--on-cyan); padding: 0 2px; }
 
 /* ===== pagination ===== */
 .pagination {
@@ -307,7 +370,7 @@ button:active,
   padding: 10px 18px;
   border: var(--border);
   background: var(--paper);
-  box-shadow: 4px 4px 0 var(--key);
+  box-shadow: 4px 4px 0 var(--shadow);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 .pagination a:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--cyan); }
@@ -318,8 +381,8 @@ button:active,
   letter-spacing: 1px;
   font-size: 15px;
   padding: 10px 18px;
-  border: 3px solid #bcbcb8;
-  color: #bcbcb8;
+  border: 3px solid var(--line);
+  color: var(--muted);
 }
 
 /* ===== programme list ===== */
@@ -466,7 +529,7 @@ button:active,
   padding: 0;
   box-shadow: none;
   background: var(--cyan);
-  color: var(--key);
+  color: var(--on-cyan);
   border: var(--border-thin);
   font-family: var(--font-display);
   font-weight: 800;
@@ -476,13 +539,13 @@ button:active,
   place-items: center;
   cursor: pointer;
 }
-.part__play:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--key); }
+.part__play:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--shadow); }
 /* whole row is clickable to play */
 .part--playable { cursor: pointer; }
 .part--playable:hover { box-shadow: 4px 4px 0 var(--cyan); }
 .part--playable:hover .part__title { color: var(--cyan); }
 .part--playing { border-color: var(--magenta); box-shadow: 4px 4px 0 var(--magenta); }
-.part--playing .part__play { background: var(--magenta); color: var(--paper); }
+.part--playing .part__play { background: var(--magenta); color: var(--on-magenta); }
 .part--single {
   display: flex;
   align-items: center;
@@ -666,7 +729,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   margin-bottom: 6px;
 }
 .queue__list { list-style: none; margin: 0; padding: 0; }
-.qrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #333; }
+.qrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
 .qrow--now { border-top: none; }
 /* díl number, pinned in a fixed-width left column so titles align */
 .qrow__idx {
@@ -766,7 +829,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   place-items: center;
 }
 .queue-add:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--cyan); }
-.queue-add--done { background: var(--cyan); color: var(--key); }
+.queue-add--done { background: var(--cyan); color: var(--on-cyan); }
 .show-card__add { position: absolute; top: 8px; right: 8px; z-index: 2; width: 42px; height: 42px; font-size: 22px; }
 /* Multi-part shows show a text pill ("Vše do fronty (N)") instead of the icon. */
 .show-card__add--multi {
@@ -808,7 +871,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   place-items: center;
   line-height: 1; /* match .queue-add so the detail pill is the same height */
 }
-.fav-toggle[aria-pressed="true"] { background: var(--yellow); color: var(--key); }
+.fav-toggle[aria-pressed="true"] { background: var(--yellow); color: var(--on-yellow); }
 .fav-toggle--detail {
   width: auto;
   height: auto;
@@ -819,7 +882,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   text-transform: uppercase;
   letter-spacing: 1px;
   white-space: nowrap;
-  box-shadow: 3px 3px 0 var(--key);
+  box-shadow: 3px 3px 0 var(--shadow);
 }
 .fav-toggle--detail:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--yellow); }
 /* grouped action row on the detail page: queue pill + favourite */
@@ -842,7 +905,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   font-size: 20px;
   line-height: 1;
 }
-.show-card__fav:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--key); }
+.show-card__fav:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--shadow); }
 /* a selection díl card → magenta "N. díl" tag on the artwork (bottom-left) */
 .show-card__dil {
   position: absolute;
@@ -855,7 +918,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   letter-spacing: .5px;
   padding: 3px 8px;
   background: var(--magenta);
-  color: var(--paper);
+  color: var(--on-magenta);
   border: var(--border-thin);
 }
 
@@ -884,7 +947,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   scroll-snap-align: start;
   border: var(--border);
   background: var(--paper);
-  box-shadow: 7px 7px 0 var(--key);
+  box-shadow: 7px 7px 0 var(--shadow);
   display: flex;
   flex-direction: column;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
@@ -1169,7 +1232,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   color: var(--muted);
 }
 .tx-hit__snip { flex: 1; min-width: 0; line-height: 1.4; }
-.tx-hit mark { background: var(--cyan); color: var(--key); padding: 0 2px; }
+.tx-hit mark { background: var(--cyan); color: var(--on-cyan); padding: 0 2px; }
 /* Transcript hit shown inside a universal-search result card. */
 .show-card .tx-hit--card {
   margin: 8px 16px 0;
@@ -1232,7 +1295,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   align-items: center;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px solid var(--line, #e3e3e3);
+  border-bottom: 1px solid var(--line);
 }
 .hist__time { flex: none; width: 46px; font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
 .hist__type {
@@ -1245,7 +1308,7 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
   font-size: 13px;
   line-height: 1;
 }
-.hist__type--listen { background: var(--cyan); color: var(--key); }
+.hist__type--listen { background: var(--cyan); color: var(--on-cyan); }
 .hist__type--view { background: var(--paper); color: var(--muted); }
 .hist__link { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .hist__title {
