@@ -577,12 +577,22 @@ button:active,
 }
 .player-bar[hidden] { display: none; }
 .player-bar__row { display: flex; align-items: center; gap: 12px; }
-/* Row 1: now-playing block grows full-width. */
+/* Row 1: now-playing block grows full-width; now-label + time share a header line. */
 .player-bar__row--meta { gap: 12px; }
 .player-bar__row--meta .player-bar__meta { flex: 1; min-width: 0; max-width: none; }
-/* Row 2: keep prev/play/next as a tight transport group. */
-.player-bar__row--controls .player-bar__nav,
-.player-bar__row--controls .player-bar__toggle { flex: none; }
+.player-bar__metahead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+/* Row 2: transport centered (grid: spacer | transport | queue). */
+.player-bar__row--controls { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; }
+.player-bar__transport { display: flex; align-items: center; gap: 12px; justify-self: center; }
+.player-bar__queue { justify-self: end; margin-right: 2px; } /* keep the badge off the edge */
+.player-bar__spacer { display: block; }
+/* Smaller nav + skip buttons; play stays the larger primary. */
+.player-bar__nav,
+.player-bar__skip { width: 40px; height: 40px; font-size: 13px; }
+.player-bar__toggle { width: 48px; height: 48px; }
+.player-bar__skipicon { width: 22px; height: 22px; display: block; }
+/* Row 3: full-width scrubber. */
+.player-bar__row--seek { display: block; }
 .player-bar__btn {
   flex: none;
   width: 44px;
@@ -608,6 +618,11 @@ button:active,
 .player-bar__seek:disabled { opacity: 0.4; cursor: default; }
 .player-bar__meta { flex: none; min-width: 150px; max-width: 30vw; overflow: hidden; }
 .player-bar__now {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 1.5px;
@@ -641,9 +656,10 @@ button:active,
 .player-bar__art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .player-bar__art--empty { display: grid; place-items: center; }
 .player-bar__art--empty::after { content: "♪"; color: var(--cyan); font-size: 18px; line-height: 1; }
-.player-bar__seek { flex: 1; min-width: 80px; height: 6px; cursor: pointer; accent-color: var(--cyan); }
+.player-bar__seek { flex: 1; width: 100%; min-width: 80px; height: 6px; cursor: pointer; accent-color: var(--cyan); }
 .player-bar__time { flex: none; font-family: var(--font-mono); font-size: 13px; color: var(--paper); white-space: nowrap; }
-body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
+/* JS measures the (variable-height) bar into --player-h; fallback covers first paint. */
+body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 
 /* ===== queue ("Fronta") ===== */
 .player-bar__queue { position: relative; font-size: 18px; }
@@ -1045,19 +1061,9 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
 
 @media (max-width: 640px) {
   .player-bar { padding: 10px 14px; }
-  /* The controls row wraps so the seek bar can own a full-width line above the
-     transport buttons — a real touch target — with prev/play/next/time/queue
-     below it. prev/next stay visible (they're the only manual cross-show move). */
-  .player-bar__row--controls { flex-wrap: wrap; gap: 8px 10px; }
-  .player-bar__seek {
-    order: -1; /* render above the button row */
-    flex: 1 0 100%;
-    width: 100%;
-    min-width: 0;
-    height: 22px; /* taller = easier to drag with a thumb */
-  }
-  .player-bar__time { flex: 1; font-size: 12px; } /* fill the gap between transport and queue */
-  body.has-player { padding-bottom: 150px; } /* two rows + wrapped seek line */
+  /* Seek is its own row already; just give it a taller (thumb-friendly) target. */
+  .player-bar__seek { height: 22px; }
+  /* body padding-bottom is driven by --player-h (JS-measured), so no override needed. */
 }
 
 /* ===== omnisearch ===== */
