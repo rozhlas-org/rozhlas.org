@@ -16,6 +16,8 @@ import { zednariScraper } from "./zednari/index.ts";
 import { jihoceskaVlastivedaScraper } from "./jihoceska-vlastiveda/index.ts";
 import { tadyToZnamScraper } from "./tady-to-znam/index.ts";
 import { toulkyPrvniRepublikouScraper } from "./toulky-prvni-republikou/index.ts";
+import { ziliByliScraper } from "./zili-byli/index.ts";
+import { coVUcebnicichNebyloScraper } from "./co-v-ucebnicich-nebylo/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -34,6 +36,8 @@ export const SCRAPERS: Record<string, Scraper> = {
   [jihoceskaVlastivedaScraper.key]: jihoceskaVlastivedaScraper, // Jihočeská vlastivěda (transcribe off)
   [tadyToZnamScraper.key]: tadyToZnamScraper, // Tady to znám (transcribe off)
   [toulkyPrvniRepublikouScraper.key]: toulkyPrvniRepublikouScraper, // Toulky první republikou (transcribe off)
+  [ziliByliScraper.key]: ziliByliScraper, // ŽiliByli (transcribe off)
+  [coVUcebnicichNebyloScraper.key]: coVUcebnicichNebyloScraper, // Co v učebnicích nebylo (transcribe off)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
