@@ -44,8 +44,8 @@ export const SCRAPERS: Record<string, Scraper> = {
   [coVUcebnicichNebyloScraper.key]: coVUcebnicichNebyloScraper, // Co v učebnicích nebylo
   [setkaniSLiteraturouScraper.key]: setkaniSLiteraturouScraper, // Setkání s literaturou
   [nedelniVlnaPardubiceScraper.key]: nedelniVlnaPardubiceScraper, // Na nedělní vlně z Pardubic
-  [vyletyScraper.key]: vyletyScraper, // Výlety (transcribe off)
-  [prahaJeNejScraper.key]: prahaJeNejScraper, // Praha je NEJ! (transcribe off)
+  [vyletyScraper.key]: vyletyScraper, // Výlety
+  [prahaJeNejScraper.key]: prahaJeNejScraper, // Praha je NEJ!
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
