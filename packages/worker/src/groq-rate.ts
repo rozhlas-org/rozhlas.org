@@ -22,6 +22,18 @@ export async function groqRecordUsage(seconds: number): Promise<void> {
   await connection.zadd(WINDOW, now, member);
 }
 
+const COOLDOWN = "groq:cooldown"; // pause-until after a 429 (auto-expiring key)
+
+/** After a 429, pause the whole backfill for `ms` (instead of retrying every tick). */
+export async function groqSetCooldown(ms: number): Promise<void> {
+  await connection.set(COOLDOWN, String(Date.now() + ms), "PX", ms);
+}
+
+/** True while a post-429 cooldown is active. */
+export async function groqInCooldown(): Promise<boolean> {
+  return (await connection.exists(COOLDOWN)) === 1;
+}
+
 /** Heartbeat each tick so a stall is detectable (read by the dead-man's-switch). */
 export async function groqHeartbeat(): Promise<void> {
   await connection.set(HEARTBEAT, String(Date.now()));
