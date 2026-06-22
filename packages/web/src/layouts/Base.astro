@@ -135,12 +135,13 @@ const jsonLd = {
       <div class="player-bar__row player-bar__row--meta">
         <div id="player-art" class="player-bar__art player-bar__art--empty" aria-hidden="true"></div>
         <div class="player-bar__meta">
-          <div class="player-bar__metahead">
-            <div id="player-now" class="player-bar__now">Přehrávač</div>
-            <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
-          </div>
+          <div id="player-now" class="player-bar__now">Přehrávač</div>
           <a id="player-title" class="player-bar__title player-bar__title--idle">Nic nehraje</a>
         </div>
+      </div>
+      <!-- Time/remaining on its own line, right-aligned, just above the controls. -->
+      <div class="player-bar__row player-bar__row--time">
+        <div id="player-time" class="player-bar__time">0:00 / 0:00</div>
       </div>
       <!-- Row 2: centered transport [prev −15 play +15 next], queue button at the right.
            Disabled in static markup; player.ts enables once a track/queue is ready. -->
