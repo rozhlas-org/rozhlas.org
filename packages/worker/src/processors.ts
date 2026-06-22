@@ -17,7 +17,13 @@ import {
 import { ipfs } from "@rozhlas/ipfs";
 import { getProvider, embedShows, embedTranscriptChunks } from "@rozhlas/embeddings";
 import * as repo from "./repo.ts";
-import { groqUsedSecondsLastHour, groqRecordUsage, groqHeartbeat } from "./groq-rate.ts";
+import {
+  groqUsedSecondsLastHour,
+  groqRecordUsage,
+  groqHeartbeat,
+  groqInCooldown,
+  groqSetCooldown,
+} from "./groq-rate.ts";
 
 const log = createLogger("worker:pipeline");
 
@@ -311,6 +317,7 @@ const groqSkip = new Set<number>(); // oversized/failed this session — don't r
 async function groqBackfillTick(_job: Job<JobData["groq-backfill"]>) {
   if (!groqEnabled()) return { skipped: "disabled" };
   await groqHeartbeat(); // dead-man's-switch reads this
+  if (await groqInCooldown()) return { skipped: "cooldown" }; // backing off after a 429
   const used = await groqUsedSecondsLastHour();
   if (used >= config.GROQ_AUDIO_SECONDS_PER_HOUR) return { skipped: "rate" };
 
@@ -336,8 +343,11 @@ async function groqBackfillTick(_job: Job<JobData["groq-backfill"]>) {
       return { skipped: "too-large", audioFileId: next.id };
     }
     if ((err as { status?: number }).status === 429) {
-      log.warn("groq 429 — backing off", { audioFileId: next.id });
-      return { skipped: "429" }; // rate gate will catch up; don't fail/retry-storm
+      // Pause the whole backfill — don't retry the same file every tick (which
+      // burns requests against the 2,000/day cap). Resumes after the cooldown.
+      await groqSetCooldown(config.GROQ_COOLDOWN_MS);
+      log.warn("groq 429 — cooling down", { audioFileId: next.id, ms: config.GROQ_COOLDOWN_MS });
+      return { skipped: "429" };
     }
     groqSkip.add(next.id); // transient/odd failure — skip this session so the cursor advances
     log.error("groq backfill failed", { audioFileId: next.id, err: String(err).slice(0, 200) });

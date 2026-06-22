@@ -80,8 +80,11 @@ const EnvSchema = z.object({
   GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
   // Master switch for the paced backfill consumer.
   GROQ_BACKFILL_ENABLED: z.coerce.boolean().default(false),
-  // Self-pacing ceiling, kept under Groq free's 7,200 audio-sec/hour.
-  GROQ_AUDIO_SECONDS_PER_HOUR: z.coerce.number().int().positive().default(7000),
+  // Self-pacing ceiling, under Groq free's 7,200 audio-sec/hour. Headroom (6,000)
+  // absorbs the edge mismatch between our window and Groq's accounting → fewer 429s.
+  GROQ_AUDIO_SECONDS_PER_HOUR: z.coerce.number().int().positive().default(6000),
+  // After a 429, pause the whole backfill this long (ms) instead of retrying each tick.
+  GROQ_COOLDOWN_MS: z.coerce.number().int().positive().default(300_000),
   // Transcode each file to 16 kHz mono and skip if still above this (free upload cap is 25 MB).
   GROQ_MAX_UPLOAD_MB: z.coerce.number().positive().default(24),
 });
