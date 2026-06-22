@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="10" fill="#111111"/>
+  <!-- broadcast waves -->
+  <g fill="none" stroke="#00aeef" stroke-width="4" stroke-linecap="round">
+    <path d="M20 38 a14 14 0 0 1 24 0"/>
+    <path d="M14 42 a22 22 0 0 1 36 0"/>
+  </g>
+  <circle cx="32" cy="44" r="5" fill="#ec008c"/>
+</svg>

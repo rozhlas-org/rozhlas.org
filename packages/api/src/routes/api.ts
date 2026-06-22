@@ -11,6 +11,7 @@ import {
   similarShows,
   listPublishedSelections,
   getPublishedSelection,
+  sitemapUrls,
   type SortKey,
 } from "../queries.ts";
 import { omnisearch } from "../omnisearch.ts";
@@ -103,6 +104,8 @@ apiRoutes.get("/search", async (c) => {
 
 apiRoutes.get("/programmes", async (c) => c.json(await listProgrammes()));
 apiRoutes.get("/sources", async (c) => c.json(await listSources()));
+// Bulk URL list consumed by the static sitemap build (web/src/pages/sitemap.xml.ts).
+apiRoutes.get("/sitemap-urls", async (c) => c.json(await sitemapUrls()));
 
 // Editorial selections ("Výběry") — published only. Tiles on the main page + a
 // dedicated page per selection. `no-cache` so an operator's admin edit/delete/publish

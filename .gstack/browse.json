@@ -1,0 +1,9 @@
+{
+  "pid": 3244604,
+  "port": 21608,
+  "token": "8e6a08a1-1afd-4b33-b577-c210d41d5a5e",
+  "startedAt": "2026-06-22T06:56:09.875Z",
+  "serverPath": "/root/.claude/skills/gstack/browse/src/server.ts",
+  "mode": "launched",
+  "configHash": "303a7eeccc03078b"
+}
