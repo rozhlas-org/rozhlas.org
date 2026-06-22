@@ -25,6 +25,7 @@ import { prahaJeNejScraper } from "./praha-je-nej/index.ts";
 import { momentyScraper } from "./momenty/index.ts";
 import { korenyScraper } from "./koreny/index.ts";
 import { osobnostPlusScraper } from "./osobnost-plus/index.ts";
+import { serialRadiozurnaluScraper } from "./serial-radiozurnalu/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -52,6 +53,7 @@ export const SCRAPERS: Record<string, Scraper> = {
   [momentyScraper.key]: momentyScraper, // Momenty (transcribe off)
   [korenyScraper.key]: korenyScraper, // Kořeny (transcribe off)
   [osobnostPlusScraper.key]: osobnostPlusScraper, // Osobnost Plus (transcribe off)
+  [serialRadiozurnaluScraper.key]: serialRadiozurnaluScraper, // Seriál Radiožurnálu (transcribe off)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
