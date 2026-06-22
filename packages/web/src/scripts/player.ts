@@ -105,6 +105,8 @@ let audio: HTMLAudioElement;
 let toggleBtn: HTMLButtonElement;
 let prevBtn: HTMLButtonElement;
 let nextBtn: HTMLButtonElement;
+let back15: HTMLButtonElement;
+let fwd15: HTMLButtonElement;
 let titleLink: HTMLAnchorElement;
 let artEl: HTMLElement;
 let nowEl: HTMLElement;
@@ -119,6 +121,19 @@ let listenLogged = false; // Historie: whether the current track's listen is rec
 function showBar(): void {
   bar.hidden = false;
   document.body.classList.add("has-player");
+  syncBarHeight();
+}
+
+/** Keep body padding clear of the fixed bar (its height varies: 3 rows, mobile wrap). */
+function syncBarHeight(): void {
+  if (bar && !bar.hidden) document.documentElement.style.setProperty("--player-h", `${bar.offsetHeight}px`);
+}
+
+/** Skip ±15s within the current track (in-track seek, not a track/díl change). */
+function skip(delta: number): void {
+  if (!q || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  // Clamp below the very end so +15 can't trip `ended` → an accidental advanceQueue.
+  audio.currentTime = Math.max(0, Math.min(audio.currentTime + delta, audio.duration - 0.5));
 }
 
 const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -171,6 +186,8 @@ function idleControls(): void {
   toggleBtn.disabled = !hasQueue; // play can still start a waiting queue
   nextBtn.disabled = !hasQueue;
   prevBtn.disabled = true;
+  back15.disabled = true; // in-track skip is meaningless with no track loaded
+  fwd15.disabled = true;
   seek.disabled = true;
 }
 
@@ -314,6 +331,8 @@ function load(autoplay: boolean): void {
   toggleBtn.disabled = false;
   seek.disabled = false;
   prevBtn.disabled = false; // prev always at least restarts the díl
+  back15.disabled = false;
+  fwd15.disabled = false;
   nextBtn.disabled = q.index >= q.parts.length - 1 && getQueue().length === 0; // true dead-end only
   rememberNow(); // survive a reload
   const dur = t.durationSec ?? 0;
@@ -555,6 +574,8 @@ export function initPlayer(): void {
   toggleBtn = document.getElementById("player-toggle") as HTMLButtonElement;
   prevBtn = document.getElementById("player-prev") as HTMLButtonElement;
   nextBtn = document.getElementById("player-next") as HTMLButtonElement;
+  back15 = document.getElementById("player-back15") as HTMLButtonElement;
+  fwd15 = document.getElementById("player-fwd15") as HTMLButtonElement;
   titleLink = document.getElementById("player-title") as HTMLAnchorElement;
   artEl = document.getElementById("player-art")!;
   nowEl = document.getElementById("player-now")!;
@@ -566,6 +587,8 @@ export function initPlayer(): void {
   if (!bar || !audio) return;
 
   toggleBtn.addEventListener("click", toggle);
+  back15.addEventListener("click", () => skip(-15));
+  fwd15.addEventListener("click", () => skip(15));
   prevBtn.addEventListener("click", prev);
   nextBtn.addEventListener("click", next);
 
@@ -696,6 +719,7 @@ export function initPlayer(): void {
     resizeT = setTimeout(() => {
       if (q) setScrollingTitle(titleLink, q.parts[q.index]!.title);
       if (queuePanelOpen()) renderQueuePanel();
+      syncBarHeight(); // bar height changes when controls wrap on narrow widths
     }, 200);
   });
 
@@ -796,5 +820,6 @@ export function initPlayer(): void {
   bar.hidden = false;
   document.body.classList.add("has-player");
   setIdle();
+  syncBarHeight(); // measure the (now visible) bar so content clears it
   void restoreNowPlaying(); // reopen the bar where we left off before a reload
 }
