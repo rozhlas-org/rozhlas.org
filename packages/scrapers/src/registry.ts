@@ -13,6 +13,9 @@ import { pribehy20StoletiScraper } from "./pribehy-20-stoleti/index.ts";
 import { osudoveZenyScraper } from "./osudove-zeny/index.ts";
 import { historieZlocinuScraper } from "./historie-zlocinu/index.ts";
 import { zednariScraper } from "./zednari/index.ts";
+import { jihoceskaVlastivedaScraper } from "./jihoceska-vlastiveda/index.ts";
+import { tadyToZnamScraper } from "./tady-to-znam/index.ts";
+import { toulkyPrvniRepublikouScraper } from "./toulky-prvni-republikou/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -28,6 +31,9 @@ export const SCRAPERS: Record<string, Scraper> = {
   [osudoveZenyScraper.key]: osudoveZenyScraper, // Osudové ženy
   [historieZlocinuScraper.key]: historieZlocinuScraper, // Historie českého zločinu
   [zednariScraper.key]: zednariScraper, // Zednáři
+  [jihoceskaVlastivedaScraper.key]: jihoceskaVlastivedaScraper, // Jihočeská vlastivěda (transcribe off)
+  [tadyToZnamScraper.key]: tadyToZnamScraper, // Tady to znám (transcribe off)
+  [toulkyPrvniRepublikouScraper.key]: toulkyPrvniRepublikouScraper, // Toulky první republikou (transcribe off)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
