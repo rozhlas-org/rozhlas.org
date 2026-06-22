@@ -343,10 +343,12 @@ async function groqBackfillTick(_job: Job<JobData["groq-backfill"]>) {
       return { skipped: "too-large", audioFileId: next.id };
     }
     if ((err as { status?: number }).status === 429) {
-      // Pause the whole backfill — don't retry the same file every tick (which
-      // burns requests against the 2,000/day cap). Resumes after the cooldown.
-      await groqSetCooldown(config.GROQ_COOLDOWN_MS);
-      log.warn("groq 429 — cooling down", { audioFileId: next.id, ms: config.GROQ_COOLDOWN_MS });
+      // Groq's token bucket refills ~7,200 audio-sec/hour; a drained bucket needs
+      // time to refill this file's worth. Use Groq's own retry-after (exact) so we
+      // wait just long enough — no early-retry 429s burning the 2,000/day request cap.
+      const ms = (err as { retryAfterMs?: number }).retryAfterMs ?? config.GROQ_COOLDOWN_MS;
+      await groqSetCooldown(ms);
+      log.warn("groq 429 — cooling down", { audioFileId: next.id, ms });
       return { skipped: "429" };
     }
     groqSkip.add(next.id); // transient/odd failure — skip this session so the cursor advances

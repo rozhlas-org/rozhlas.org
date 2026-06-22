@@ -113,7 +113,13 @@ export async function groqTranscribe(
     if (!r.ok) {
       const body = await r.text();
       const err = new Error(`groq ${r.status}: ${body.slice(0, 200)}`);
-      (err as { status?: number }).status = r.status; // 429 → caller backs off
+      const e = err as { status?: number; retryAfterMs?: number };
+      e.status = r.status; // 429 → caller backs off
+      // Groq's token bucket tells us exactly when there's room — prefer it over a guess.
+      const ra = r.headers.get("retry-after");
+      const reset = r.headers.get("x-ratelimit-reset-audio-seconds");
+      const secs = Number(ra) || Number(String(reset).replace(/s$/, "")) || 0;
+      if (secs > 0) e.retryAfterMs = Math.ceil(secs * 1000) + 2000; // + small buffer
       throw err;
     }
     const json = (await r.json()) as Parameters<typeof fromVerboseJson>[0];
