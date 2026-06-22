@@ -1,4 +1,4 @@
-import { and, eq, isNull, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNull, isNotNull, notInArray } from "drizzle-orm";
 import { db, schema, showSlug, slugify } from "@rozhlas/core";
 import { enqueue } from "@rozhlas/jobs";
 import type { ScrapedShow, ScrapedPart } from "@rozhlas/scrapers";
@@ -390,4 +390,34 @@ export async function enqueuePendingTranscripts(): Promise<number> {
     await enqueue("transcribe", { audioFileId: r.id }, { jobId: `tx-${r.id}`, removeOnComplete: true });
   }
   return rows.length;
+}
+
+/**
+ * The single newest-broadcast untranscribed pinned audio (for the Groq backfill
+ * cursor). Order MATCHES the main page's "Nejnovější" — publishedAt DESC, then
+ * createdAt, then id. `exclude` skips in-session deferrals (oversized/failed).
+ */
+export async function nextUntranscribedByDate(exclude: number[] = []) {
+  const conds = [
+    isNotNull(audioFiles.ipfsCid),
+    eq(audioFiles.streamable, true),
+    isNull(transcripts.id),
+    eq(sources.transcribe, true),
+  ];
+  if (exclude.length) conds.push(notInArray(audioFiles.id, exclude));
+  const [row] = await db
+    .select({
+      id: audioFiles.id,
+      showId: audioFiles.showId,
+      cid: audioFiles.ipfsCid,
+      durationSec: audioFiles.durationSec,
+    })
+    .from(audioFiles)
+    .leftJoin(transcripts, eq(transcripts.audioFileId, audioFiles.id))
+    .innerJoin(shows, eq(shows.id, audioFiles.showId))
+    .innerJoin(sources, eq(sources.key, shows.sourceKey))
+    .where(and(...conds))
+    .orderBy(desc(shows.publishedAt), desc(shows.createdAt), desc(audioFiles.id))
+    .limit(1);
+  return row ?? null;
 }
