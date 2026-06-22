@@ -2,7 +2,7 @@
 // Each exported view is async: it fetches from the API and returns an HTML string
 // (plus the document <title>). The router in app.ts swaps the result into #app.
 
-import { api, type ListResult, type Selection, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
+import { api, type CategoryGroup, type ListResult, type Selection, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
 import { getHistory, logView, type HistoryEntry } from "./history.ts";
@@ -341,8 +341,30 @@ export async function programmeView(name: string): Promise<ViewResult> {
   };
 }
 
+/** Category-group tiles (a wrapping grid) — the curated top of the Kategorie page. */
+function categoryTiles(groups: CategoryGroup[]): string {
+  if (!groups.length) return "";
+  const tiles = groups
+    .map(
+      (g) => `
+      <a class="vyber-tile vyber-tile--kat" href="/kategorie/${encodeURIComponent(g.slug)}">
+        <div class="vyber-tile__art">${
+          g.thumbnailUrl
+            ? `<img src="${attr(g.thumbnailUrl)}" alt="" loading="lazy" />`
+            : `<div class="vyber-tile__ph" aria-hidden="true"></div>`
+        }</div>
+        <h3 class="vyber-tile__title">${esc(g.title)}</h3>
+        ${g.description ? `<p class="vyber-tile__desc">${esc(g.description)}</p>` : ""}
+        <span class="vyber-tile__count">${g.showCount} pořadů</span>
+      </a>`,
+    )
+    .join("");
+  return `<div class="kat-grid">${tiles}</div>`;
+}
+
 export async function programmesView(): Promise<ViewResult> {
-  const programmes = await api.programmes();
+  const [programmes, groups] = await Promise.all([api.programmes(), api.categoryGroups().catch(() => [])]);
+  const tiles = categoryTiles(groups);
   const items = programmes
     .map(
       (p) => `
@@ -354,7 +376,36 @@ export async function programmesView(): Promise<ViewResult> {
     .join("");
   return {
     title: "Kategorie",
-    html: `<section><h1>Kategorie</h1><ul class="programme-list">${items}</ul></section>`,
+    html:
+      `<section><h1>Kategorie</h1>` +
+      tiles +
+      (tiles ? `<h2 class="kat-subhead">Všechny pořady</h2>` : "") +
+      `<ul class="programme-list">${items}</ul></section>`,
+  };
+}
+
+/** Dedicated page for one category group — its shows across the grouped programmes. */
+export async function categoryGroupView(slug: string, params: URLSearchParams): Promise<ViewResult> {
+  const page = params.get("page") ? Number(params.get("page")) : 1;
+  const grp = await api.categoryGroup(slug, page).catch(() => null);
+  if (!grp) {
+    return { title: "Nenalezeno", html: `<section><h1>Kategorie nenalezena</h1><p><a href="/programmes">← Kategorie</a></p></section>` };
+  }
+  const chips = grp.programmes
+    .map((p) => `<a class="hist-chip" href="/programme/${encodeURIComponent(p)}">${esc(p)}</a>`)
+    .join("");
+  const base = `/kategorie/${encodeURIComponent(slug)}?`;
+  return {
+    title: grp.title,
+    html:
+      `<section class="selection">` +
+      `<p class="selection__back"><a href="/programmes">← Kategorie</a></p>` +
+      `<h1>${esc(grp.title)}</h1>` +
+      (grp.description ? `<p class="selection__desc">${esc(stripHtml(grp.description))}</p>` : "") +
+      (chips ? `<div class="kat-chips">${chips}</div>` : "") +
+      showGrid(grp.items) +
+      pagination(grp.page, grp.pageSize, grp.total, base) +
+      `</section>`,
   };
 }
 

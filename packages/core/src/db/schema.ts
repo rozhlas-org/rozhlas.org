@@ -56,6 +56,7 @@ export const shows = sqliteTable(
     sourceUnique: uniqueIndex("shows_source_unique").on(t.sourceKey, t.sourceId),
     publishedAtIdx: index("shows_published_at_idx").on(t.publishedAt),
     sourceKeyIdx: index("shows_source_key_idx").on(t.sourceKey),
+    showNameIdx: index("shows_show_name_idx").on(t.showName), // category-group IN/GROUP BY filter
     createdAtIdx: index("shows_created_at_idx").on(t.createdAt),
     playsIdx: index("shows_plays_idx").on(t.plays),
   }),
@@ -310,6 +311,47 @@ export const selectionItems = sqliteTable(
 
 export type Selection = typeof selections.$inferSelect;
 export type SelectionItem = typeof selectionItems.$inferSelect;
+
+/**
+ * Category groups (frontend "Kategorie" tiles) — operator-curated groups that wrap
+ * several programmes (shows.show_name) into one browse tile, e.g. "Pohádky".
+ */
+export const categoryGroups = sqliteTable(
+  "category_groups",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    slug: text("slug").notNull().unique(), // -> /kategorie/:slug
+    title: text("title").notNull(),
+    description: text("description"),
+    thumbnailCid: text("thumbnail_cid"),
+    thumbnailUrl: text("thumbnail_url"),
+    published: integer("published", { mode: "boolean" }).notNull().default(false),
+    position: integer("position").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => ({ publishedPosIdx: index("category_groups_published_pos_idx").on(t.published, t.position) }),
+);
+
+/** A programme (shows.show_name) that belongs to a category group. */
+export const categoryGroupProgrammes = sqliteTable(
+  "category_group_programmes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => categoryGroups.id, { onDelete: "cascade" }),
+    programme: text("programme").notNull(), // == shows.show_name (no stable category table)
+    position: integer("position").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => ({
+    progUnique: uniqueIndex("category_group_programmes_unique").on(t.groupId, t.programme),
+    groupPosIdx: index("category_group_programmes_group_pos_idx").on(t.groupId, t.position),
+  }),
+);
+
+export type CategoryGroup = typeof categoryGroups.$inferSelect;
+export type CategoryGroupProgramme = typeof categoryGroupProgrammes.$inferSelect;
 
 export type Show = typeof shows.$inferSelect;
 export type NewShow = typeof shows.$inferInsert;
