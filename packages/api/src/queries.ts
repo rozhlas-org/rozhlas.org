@@ -71,7 +71,7 @@ function orderForSort(sort: SortKey) {
   }
 }
 
-function streamUrl(cid: string | null): string | null {
+export function streamUrl(cid: string | null): string | null {
   return cid ? `${config.IPFS_GATEWAY_URL}/ipfs/${cid}` : null;
 }
 
@@ -474,7 +474,6 @@ async function uniqueSelectionSlug(title: string): Promise<string> {
 export interface SelectionInput {
   title: string;
   description: string | null;
-  thumbnailUrl: string | null;
   published: boolean;
 }
 
@@ -483,7 +482,7 @@ export async function adminCreateSelection(data: SelectionInput): Promise<number
   const [m] = await db.select({ max: sql<number>`coalesce(max(${selections.position}), 0)` }).from(selections);
   const [r] = await db
     .insert(selections)
-    .values({ slug, title: data.title, description: data.description, thumbnailUrl: data.thumbnailUrl, published: data.published, position: (m?.max ?? 0) + 1 })
+    .values({ slug, title: data.title, description: data.description, published: data.published, position: (m?.max ?? 0) + 1 })
     .returning({ id: selections.id });
   return r!.id;
 }
@@ -491,7 +490,19 @@ export async function adminCreateSelection(data: SelectionInput): Promise<number
 export async function adminUpdateSelection(id: number, data: SelectionInput): Promise<void> {
   await db
     .update(selections)
-    .set({ title: data.title, description: data.description, thumbnailUrl: data.thumbnailUrl, published: data.published })
+    .set({ title: data.title, description: data.description, published: data.published })
+    .where(eq(selections.id, id));
+}
+
+/** Set a selection's thumbnail. The two fields are mutually exclusive: a pinned
+ *  upload (cid) or an external url. The public resolver prefers cid → url → cover. */
+export async function adminSetSelectionThumbnail(
+  id: number,
+  t: { cid: string | null; url: string | null },
+): Promise<void> {
+  await db
+    .update(selections)
+    .set({ thumbnailCid: t.cid, thumbnailUrl: t.url })
     .where(eq(selections.id, id));
 }
 
