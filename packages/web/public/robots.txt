@@ -1,0 +1,5 @@
+# rozhlas.org — public archive of Czech Radio spoken-word programmes
+User-agent: *
+Allow: /
+
+Sitemap: https://rozhlas.org/sitemap.xml

@@ -267,6 +267,9 @@ button:active,
   color: var(--muted);
   text-transform: uppercase;
 }
+.site-footer__links { margin-top: 10px; display: flex; gap: 10px; }
+.site-footer__links a { color: var(--cyan); text-decoration: none; }
+.site-footer__links a:hover { text-decoration: underline; }
 
 /* ===== show grid + cards ===== */
 .show-grid {

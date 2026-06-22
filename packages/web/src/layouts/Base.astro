@@ -2,7 +2,51 @@
 // Static app shell. Header/footer are server-rendered into the static HTML;
 // the <main id="app"> is filled by the client router (scripts/app.ts).
 // index/search/omnisearch/programmes and 404.html all render this same shell.
+// Social scrapers don't run JS, so the SEO/OG meta below is the static baseline
+// for every shared link (app.ts refreshes title/canonical/og:url client-side per
+// view; per-show OG cards would need pre-rendering — a future step).
 import "../styles/styles.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+  path?: string;
+}
+const SITE = "https://rozhlas.org";
+const DEFAULT_DESC =
+  "Prohledávejte a poslouchejte archiv mluveného slova Českého rozhlasu — četba na pokračování, povídky, rozhlasové hry, pohádky a dokumenty. Univerzální vyhledávání i v přepisech namluvených pořadů.";
+const { title, description, path = "/" } = Astro.props;
+const fullTitle = title
+  ? `${title} — rozhlas.org`
+  : "rozhlas.org — archiv četby a mluveného slova Českého rozhlasu";
+const desc = description ?? DEFAULT_DESC;
+const canonical = SITE + path;
+const ogImage = `${SITE}/og.png`;
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${SITE}/#website`,
+      url: `${SITE}/`,
+      name: "rozhlas.org",
+      description: DEFAULT_DESC,
+      inLanguage: "cs",
+      potentialAction: {
+        "@type": "SearchAction",
+        target: { "@type": "EntryPoint", urlTemplate: `${SITE}/omnisearch?q={search_term_string}` },
+        "query-input": "required name=search_term_string",
+      },
+    },
+    {
+      "@type": "Organization",
+      "@id": `${SITE}/#org`,
+      name: "rozhlas.org",
+      url: `${SITE}/`,
+      logo: ogImage,
+    },
+  ],
+};
 ---
 
 <!doctype html>
@@ -10,8 +54,9 @@ import "../styles/styles.css";
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>rozhlas.org</title>
-    <meta name="description" content="Archiv pořadů Českého rozhlasu — zaměřeno na četbu a čtení. Audio přes IPFS." />
+    <title>{fullTitle}</title>
+    <meta name="description" content={desc} />
+    <link rel="canonical" href={canonical} />
     <meta name="theme-color" content="#ffffff" />
     {/* Apply the saved theme + theme-color BEFORE paint to avoid a light flash. */}
     <script is:inline>
@@ -26,12 +71,34 @@ import "../styles/styles.css";
         } catch (e) {}
       })();
     </script>
+    <meta name="robots" content="index, follow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="rozhlas.org" />
+    <meta property="og:locale" content="cs_CZ" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={desc} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={desc} />
+    <meta name="twitter:image" content={ogImage} />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700;800;900&family=Saira:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
   </head>
   <body class="has-player">
     <header class="site-header">
@@ -53,6 +120,11 @@ import "../styles/styles.css";
     </main>
     <footer class="site-footer">
       <p>Archiv pořadů Českého rozhlasu · audio přes IPFS · zaměřeno na četbu a čtení.</p>
+      <p class="site-footer__links">
+        <a href="https://github.com/rozhlas-org/rozhlas.org" rel="noopener me" target="_blank">GitHub</a>
+        <span aria-hidden="true">·</span>
+        <a href="https://www.mujrozhlas.cz/" rel="noopener" target="_blank">mujRozhlas</a>
+      </p>
     </footer>
 
     <!-- Persistent player: lives in the shell (outside #app) so SPA navigation

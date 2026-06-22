@@ -62,6 +62,18 @@ function syncSearchInput() {
   if (input) input.value = new URLSearchParams(location.search).get("q") ?? "";
 }
 
+// Keep canonical + Open Graph URL/title aligned with the current SPA view, so a
+// JS-rendering crawler (or a re-share from a rendered page) sees the right metadata.
+function updateMeta(viewTitle: string): void {
+  const t = `${viewTitle} — rozhlas.org`;
+  const set = (sel: string, attr: string, val: string) =>
+    document.querySelector(sel)?.setAttribute(attr, val);
+  set('link[rel="canonical"]', "href", location.origin + location.pathname);
+  set('meta[property="og:url"]', "content", location.origin + location.pathname + location.search);
+  set('meta[property="og:title"]', "content", t);
+  set('meta[name="twitter:title"]', "content", t);
+}
+
 let token = 0;
 async function render() {
   const mine = ++token;
@@ -71,6 +83,7 @@ async function render() {
     const view = await resolve();
     if (mine !== token) return; // a newer navigation superseded this one
     document.title = `${view.title} — rozhlas.org`;
+    updateMeta(view.title); // keep canonical/og:url/title in step with the SPA view
     app.innerHTML = view.html;
     syncNowPlaying(); // re-mark the now-playing díl in the freshly rendered view
     applyPartMarquees(); // scroll long díl titles right-to-left (like the player bar)

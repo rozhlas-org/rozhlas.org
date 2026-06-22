@@ -4,6 +4,27 @@ import { config, db, schema, toFtsQuery, getEmbedding, knnShows } from "@rozhlas
 const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts, selections, selectionItems } =
   schema;
 
+export interface SitemapUrls {
+  shows: { slug: string; lastmod: string | null }[];
+  programmes: string[];
+}
+
+/** All indexable URLs for the sitemap: shows with playable audio + programmes. */
+export async function sitemapUrls(): Promise<SitemapUrls> {
+  const showRows = await db
+    .selectDistinct({ slug: shows.slug, updatedAt: shows.updatedAt })
+    .from(shows)
+    .innerJoin(audioFiles, and(eq(audioFiles.showId, shows.id), eq(audioFiles.streamable, true)));
+  const progRows = await db
+    .selectDistinct({ name: shows.showName })
+    .from(shows)
+    .where(isNotNull(shows.showName));
+  return {
+    shows: showRows.map((r) => ({ slug: r.slug, lastmod: r.updatedAt ? r.updatedAt.toISOString() : null })),
+    programmes: progRows.map((r) => r.name).filter((n): n is string => !!n),
+  };
+}
+
 export type SortKey = "added" | "plays" | "alpha";
 
 export interface ListFilters {
