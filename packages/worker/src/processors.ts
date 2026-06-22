@@ -286,6 +286,13 @@ async function transcribe(job: Job<JobData["transcribe"]>) {
   try {
     await job.updateProgress({ stage: "transcribe", percent: 0 });
     const t = await transcribeAudio(ipfs.gatewayFor(audio.ipfsCid), `af${audioFileId}`, { signal: ac.signal });
+    // Re-check: a ~30-min local transcribe gives the Groq backfill (newest-first,
+    // fast) ample time to finish the same file. Skip the store instead of colliding
+    // on the unique audioFileId. (transcriptExists at job start covers the queued case.)
+    if (await repo.transcriptExists(audioFileId)) {
+      log.info("transcribe: raced by Groq, discarding result", { audioFileId });
+      return { skipped: "raced" };
+    }
     const r = storeTranscription(audioFileId, audio.showId, t);
     await job.updateProgress({ stage: "done", percent: 100 });
     log.info("transcribed", { audioFileId, ...r });
@@ -317,6 +324,7 @@ async function groqBackfillTick(_job: Job<JobData["groq-backfill"]>) {
   const watchdog = setTimeout(() => ac.abort(), GROQ_TICK_HARD_MS);
   try {
     const t = await groqTranscribe(ipfs.gatewayFor(next.cid), `af${next.id}`, { signal: ac.signal });
+    if (await repo.transcriptExists(next.id)) return { skipped: "raced", audioFileId: next.id }; // local won
     const r = storeTranscription(next.id, next.showId, t);
     await groqRecordUsage(t.durationSec || next.durationSec || 0);
     log.info("groq backfilled", { audioFileId: next.id, ...r });
