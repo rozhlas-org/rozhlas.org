@@ -53,20 +53,29 @@ export async function makeThumbnail(url: string, idHint: string, opts: Thumbnail
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength > MAX_BYTES) throw new Error(`artwork too large: ${buf.byteLength} bytes`);
 
-    await mkdir(STAGING_DIR, { recursive: true });
-    const safe = idHint.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
-    const path = join(STAGING_DIR, `${safe}.webp`);
-    // `failOn: "none"` tolerates slightly malformed source JPEGs; `.rotate()`
-    // honors EXIF orientation; cover-crop to a centered square.
-    const info = await sharp(buf, { failOn: "none" })
-      .rotate()
-      .resize(EDGE, EDGE, { fit: "cover", position: "centre" })
-      .webp({ quality: QUALITY })
-      .toFile(path);
-    log.debug("thumbnail", { url, sourceBytes: buf.byteLength, outBytes: info.size });
-    return { path, width: info.width, height: info.height, sizeBytes: info.size };
+    return thumbnailFromBuffer(buf, idHint);
   } finally {
     clearTimeout(timer);
     opts.signal?.removeEventListener("abort", onAbort);
   }
+}
+
+/**
+ * Resize an in-memory image (an admin upload, etc.) to the same `EDGE`×`EDGE` WebP
+ * and write it into staging. Caller pins it, then deletes via `discardTemp`.
+ */
+export async function thumbnailFromBuffer(buf: Buffer, idHint: string): Promise<Thumbnail> {
+  if (buf.byteLength > MAX_BYTES) throw new Error(`image too large: ${buf.byteLength} bytes`);
+  await mkdir(STAGING_DIR, { recursive: true });
+  const safe = idHint.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "thumb";
+  const path = join(STAGING_DIR, `${safe}.webp`);
+  // `failOn: "none"` tolerates slightly malformed source JPEGs; `.rotate()`
+  // honors EXIF orientation; cover-crop to a centered square.
+  const info = await sharp(buf, { failOn: "none" })
+    .rotate()
+    .resize(EDGE, EDGE, { fit: "cover", position: "centre" })
+    .webp({ quality: QUALITY })
+    .toFile(path);
+  log.debug("thumbnail", { sourceBytes: buf.byteLength, outBytes: info.size });
+  return { path, width: info.width, height: info.height, sizeBytes: info.size };
 }

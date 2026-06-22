@@ -12,7 +12,14 @@ import {
   adminReorderItem,
   adminSearchShows,
   adminShowParts,
+  adminSetSelectionThumbnail,
+  streamUrl,
 } from "../queries.ts";
+import { ipfs } from "@rozhlas/ipfs";
+import { thumbnailFromBuffer, discardTemp } from "@rozhlas/media";
+import { createLogger } from "@rozhlas/core";
+
+const log = createLogger("admin:selections");
 
 // Admin CRUD for editorial selections ("Výběry"). Server-rendered (Hono JSX), behind
 // the /admin session guard, mounted at /admin/selections. Mutations are POST → redirect
@@ -201,17 +208,25 @@ function EditPage({
       {flash ? <p class="flash">{flash}</p> : null}
 
       <div class="card">
-        <form method="post" action={action}>
+        <form method="post" action={action} enctype="multipart/form-data">
           <label>Název</label>
           <input type="text" name="title" value={sel?.title ?? ""} required maxlength={120} />
           <label>Popis</label>
           <textarea name="description">{sel?.description ?? ""}</textarea>
-          <label>Náhledový obrázek (URL)</label>
+          <label>Náhledový obrázek — nahrát (uloží se do IPFS)</label>
+          <input type="file" name="thumbnailFile" accept="image/*" />
+          <div class="hint">Nahraný obrázek se zmenší na čtverec a připne do IPFS. Má přednost před URL.</div>
+          <label style="margin-top:14px">…nebo veřejná URL</label>
           <input type="url" name="thumbnailUrl" value={sel?.thumbnailUrl ?? ""} placeholder="https://… (jinak se použije obálka prvního pořadu)" />
           {!isNew && thumb ? (
             <div style="margin-top:10px">
               <img class="thumb" src={thumb} alt="" />
-              <div class="hint">{sel?.thumbnailUrl ? "z URL" : sel?.thumbnailCid ? "nahraný" : "automaticky z prvního pořadu"}</div>
+              <div class="hint">{sel?.thumbnailCid ? "nahraný (IPFS)" : sel?.thumbnailUrl ? "z URL" : "automaticky z prvního pořadu"}</div>
+              {sel?.thumbnailCid || sel?.thumbnailUrl ? (
+                <label class="check" style="margin-top:6px">
+                  <input type="checkbox" name="removeThumbnail" value="1" /> Odebrat náhled
+                </label>
+              ) : null}
             </div>
           ) : null}
           <div class="check">
@@ -426,9 +441,52 @@ function islandJs(selId: number): string {
 function parseSel(body: Record<string, unknown>) {
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const description = typeof body.description === "string" && body.description.trim() ? body.description.trim() : null;
-  const thumbnailUrl = typeof body.thumbnailUrl === "string" && body.thumbnailUrl.trim() ? body.thumbnailUrl.trim() : null;
   const published = body.published === "1" || body.published === "on";
-  return { title, description, thumbnailUrl, published };
+  return { title, description, published };
+}
+
+const MAX_THUMB_BYTES = 8 * 1024 * 1024; // refuse oversized admin uploads
+
+/**
+ * Apply the thumbnail choice from a submitted form to a selection. Precedence
+ * (most explicit wins): "remove" → uploaded file (resize + pin to IPFS) → external
+ * URL → unchanged. cid and url are mutually exclusive so the chosen source shows.
+ */
+async function applyThumbnail(
+  id: number,
+  body: Record<string, unknown>,
+  current: { thumbnailUrl: string | null; thumbnailCid: string | null },
+): Promise<string | null> {
+  if (body.removeThumbnail === "1" || body.removeThumbnail === "on") {
+    await adminSetSelectionThumbnail(id, { cid: null, url: null });
+    return null;
+  }
+  const file = body.thumbnailFile;
+  if (file instanceof File && file.size > 0) {
+    if (file.size > MAX_THUMB_BYTES) return "Obrázek je příliš velký (max 8 MB).";
+    try {
+      const buf = Buffer.from(await file.arrayBuffer());
+      const thumb = await thumbnailFromBuffer(buf, `sel-${id}`);
+      try {
+        const { cid } = await ipfs.addFile(thumb.path);
+        await adminSetSelectionThumbnail(id, { cid, url: null }); // pinned upload wins
+      } finally {
+        await discardTemp(thumb.path);
+      }
+    } catch (err) {
+      log.error("thumbnail upload failed", { id, err: String(err) });
+      return "Nahrání náhledu selhalo.";
+    }
+    return null;
+  }
+  // No file/remove: treat the URL field. Only write when it changed, and clear any
+  // pinned cid so the URL actually takes effect (cid would otherwise win).
+  const url =
+    typeof body.thumbnailUrl === "string" && body.thumbnailUrl.trim() ? body.thumbnailUrl.trim() : null;
+  if (url !== current.thumbnailUrl || (url && current.thumbnailCid)) {
+    await adminSetSelectionThumbnail(id, { cid: null, url });
+  }
+  return null;
 }
 
 export const adminSelections = new Hono();
@@ -461,10 +519,12 @@ adminSelections.get("/new", (c) =>
 );
 
 adminSelections.post("/", async (c) => {
-  const data = parseSel(await c.req.parseBody());
+  const body = await c.req.parseBody();
+  const data = parseSel(body);
   if (!data.title) return back(c, "/admin/selections/new");
   const id = await adminCreateSelection({ ...data, published: false }); // can't publish an empty selection
-  return back(c, `/admin/selections/${id}`);
+  const err = await applyThumbnail(id, body, { thumbnailUrl: null, thumbnailCid: null });
+  return back(c, err ? `/admin/selections/${id}?flash=${encodeURIComponent(err)}` : `/admin/selections/${id}`);
 });
 
 // JSON: live show search for the picker island.
@@ -479,8 +539,8 @@ async function renderEdit(c: Context, id: number, flash?: string) {
   const sel = await adminGetSelection(id);
   if (!sel) return c.redirect("/admin/selections", 302);
   const items = await adminGetSelectionItems(id);
-  // resolve a preview thumbnail (own url/cid, else first item's artwork) — reuse the public detail
-  const thumb = sel.thumbnailUrl ?? null;
+  // resolve a preview thumbnail: pinned upload (cid via gateway) → own url → none
+  const thumb = streamUrl(sel.thumbnailCid) ?? sel.thumbnailUrl ?? null;
   const q = c.req.query("q");
   const showIdParam = c.req.query("showId");
   let results: Awaited<ReturnType<typeof adminSearchShows>> | undefined;
@@ -506,19 +566,23 @@ adminSelections.get("/:id/preview", async (c) => {
   const sel = await adminGetSelection(id);
   if (!sel) return back(c, "/admin/selections");
   const items = await adminGetSelectionItems(id);
-  return c.html(doc(<PreviewPage sel={sel} items={items} thumb={sel.thumbnailUrl ?? null} />));
+  return c.html(doc(<PreviewPage sel={sel} items={items} thumb={streamUrl(sel.thumbnailCid) ?? sel.thumbnailUrl ?? null} />));
 });
 
 adminSelections.post("/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  const data = parseSel(await c.req.parseBody());
+  const body = await c.req.parseBody();
+  const data = parseSel(body);
   if (!data.title) return back(c, `/admin/selections/${id}`);
+  const sel = await adminGetSelection(id);
+  if (!sel) return back(c, "/admin/selections");
   const items = await adminGetSelectionItems(id);
   if (data.published && items.length === 0) {
     return back(c, `/admin/selections/${id}?flash=${encodeURIComponent("Přidej alespoň jeden pořad, než výběr publikuješ.")}`);
   }
   await adminUpdateSelection(id, data);
-  return back(c, `/admin/selections/${id}`);
+  const err = await applyThumbnail(id, body, { thumbnailUrl: sel.thumbnailUrl, thumbnailCid: sel.thumbnailCid });
+  return back(c, err ? `/admin/selections/${id}?flash=${encodeURIComponent(err)}` : `/admin/selections/${id}`);
 });
 
 adminSelections.post("/:id/delete", async (c) => {
