@@ -11,6 +11,8 @@ import {
   similarShows,
   listPublishedSelections,
   getPublishedSelection,
+  listPublishedCategoryGroups,
+  getPublishedCategoryGroup,
   sitemapUrls,
   type SortKey,
 } from "../queries.ts";
@@ -120,4 +122,19 @@ apiRoutes.get("/selections/:slug", async (c) => {
   if (!sel) return c.json({ error: "not found" }, 404);
   c.header("Cache-Control", "no-cache");
   return c.json(sel);
+});
+
+// Category groups ("Kategorie" tiles) — published only; tiles on the /programmes
+// landing + a paginated page per group. `no-cache` (operator edits reflect immediately).
+apiRoutes.get("/category-groups", async (c) => {
+  c.header("Cache-Control", "no-cache");
+  return c.json(await listPublishedCategoryGroups());
+});
+
+apiRoutes.get("/category-groups/:slug", async (c) => {
+  const page = c.req.query("page");
+  const grp = await getPublishedCategoryGroup(c.req.param("slug"), page ? Number(page) : undefined);
+  if (!grp) return c.json({ error: "not found" }, 404);
+  c.header("Cache-Control", "no-cache");
+  return c.json(grp);
 });

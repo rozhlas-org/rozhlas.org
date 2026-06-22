@@ -985,6 +985,15 @@ body.has-player { padding-bottom: 124px; } /* bar is two rows tall */
 }
 @media (max-width: 640px) { .vyber-tile { flex-basis: 78vw; } }
 
+/* Category-group tiles — a wrapping grid (the /programmes "Kategorie" landing). Reuse
+   .vyber-tile but with a cyan hover (vs Výběry's magenta) to read as "browse". */
+.kat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--gap); margin: 0 0 8px; }
+.kat-grid .vyber-tile { flex-basis: auto; }
+.vyber-tile--kat:hover { box-shadow: 10px 10px 0 var(--cyan); }
+.vyber-tile--kat .vyber-tile__title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.kat-subhead { font-family: var(--font-display); font-weight: 800; font-size: clamp(20px, 3vw, 26px); text-transform: uppercase; border-bottom: 2px solid var(--key); padding-bottom: 6px; margin: 34px 0 16px; }
+.kat-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+
 /* selection page */
 .selection__back { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 8px; }
 .selection__back a { color: var(--muted); }
