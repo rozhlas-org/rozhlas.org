@@ -11,6 +11,7 @@ import {
   omnisearchView,
   programmeView,
   programmesView,
+  categoryGroupView,
   selectionView,
   showView,
   transcriptSearchView,
@@ -53,6 +54,9 @@ async function resolve(): Promise<ViewResult> {
 
   const vyber = path.match(/^\/vyber\/(.+)$/);
   if (vyber) return selectionView(decodeSeg(vyber[1]));
+
+  const kat = path.match(/^\/kategorie\/(.+)$/);
+  if (kat) return categoryGroupView(decodeSeg(kat[1]), params);
 
   return { title: "Nenalezeno", html: `<section><h1>Stránka nenalezena</h1></section>` };
 }

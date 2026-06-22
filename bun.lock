@@ -18,7 +18,9 @@
       "dependencies": {
         "@rozhlas/core": "workspace:*",
         "@rozhlas/embeddings": "workspace:*",
+        "@rozhlas/ipfs": "workspace:*",
         "@rozhlas/jobs": "workspace:*",
+        "@rozhlas/media": "workspace:*",
         "hono": "^4.6.14",
       },
     },

@@ -43,6 +43,21 @@ export interface SelectionDetail {
   items: ShowListItem[];
 }
 
+export interface CategoryGroup {
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  showCount: number;
+}
+export interface CategoryGroupDetail extends ListResult {
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  programmes: string[];
+}
+
 export interface ListResult {
   items: ShowListItem[];
   total: number;
@@ -157,6 +172,9 @@ export const api = {
   programmes: () => getJSON<Programme[]>("/api/programmes"),
   selections: () => getJSON<Selection[]>("/api/selections"),
   selection: (slug: string) => getJSON<SelectionDetail>(`/api/selections/${encodeURIComponent(slug)}`),
+  categoryGroups: () => getJSON<CategoryGroup[]>("/api/category-groups"),
+  categoryGroup: (slug: string, page?: number) =>
+    getJSON<CategoryGroupDetail>(`/api/category-groups/${encodeURIComponent(slug)}`, { page }),
   recordPlay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/play`),
   recordDisplay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/display`),
 };

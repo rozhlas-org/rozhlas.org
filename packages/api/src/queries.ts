@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, count } from "drizzle-orm";
 import { config, db, schema, toFtsQuery, getEmbedding, knnShows } from "@rozhlas/core";
 
-const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts, selections, selectionItems } =
+const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts, selections, selectionItems, categoryGroups, categoryGroupProgrammes } =
   schema;
 
 export interface SitemapUrls {
@@ -29,7 +29,8 @@ export type SortKey = "added" | "plays" | "alpha";
 
 export interface ListFilters {
   q?: string;
-  programme?: string; // shows.showName
+  programme?: string; // shows.showName (single)
+  programmes?: string[]; // shows.showName IN (...) — used by category groups
   source?: string; // shows.sourceKey
   sort?: SortKey; // default "added" (newest by broadcast date first)
   page?: number;
@@ -79,6 +80,7 @@ function buildConditions(f: ListFilters) {
   const conds = [];
   if (f.source) conds.push(eq(shows.sourceKey, f.source));
   if (f.programme) conds.push(eq(shows.showName, f.programme));
+  if (f.programmes?.length) conds.push(inArray(shows.showName, f.programmes));
   if (f.q?.trim()) {
     const fts = toFtsQuery(f.q);
     if (fts) {
@@ -583,6 +585,178 @@ export async function adminShowParts(showId: number) {
     .from(showParts)
     .where(eq(showParts.showId, showId))
     .orderBy(asc(showParts.idx));
+}
+
+// ===================== Category groups (Kategorie tiles) =====================
+
+export type CategoryGroupRow = typeof categoryGroups.$inferSelect;
+
+export interface CategoryGroupListItem {
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  showCount: number;
+}
+
+const cgThumb = (g: { thumbnailCid: string | null; thumbnailUrl: string | null }): string | null =>
+  (g.thumbnailCid ? streamUrl(g.thumbnailCid) : null) ?? g.thumbnailUrl ?? null;
+
+/** showCount per group: JOIN programmes → shows on programme = show_name, GROUP BY group. */
+async function groupShowCounts(ids: number[]): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (!ids.length) return map;
+  const rows = await db
+    .select({ gid: categoryGroupProgrammes.groupId, c: count() })
+    .from(categoryGroupProgrammes)
+    .innerJoin(shows, eq(shows.showName, categoryGroupProgrammes.programme))
+    .where(inArray(categoryGroupProgrammes.groupId, ids))
+    .groupBy(categoryGroupProgrammes.groupId);
+  for (const r of rows) map.set(r.gid, r.c);
+  return map;
+}
+
+async function groupProgrammes(groupId: number): Promise<string[]> {
+  const rows = await db
+    .select({ p: categoryGroupProgrammes.programme })
+    .from(categoryGroupProgrammes)
+    .where(eq(categoryGroupProgrammes.groupId, groupId))
+    .orderBy(asc(categoryGroupProgrammes.position), asc(categoryGroupProgrammes.id));
+  return rows.map((r) => r.p);
+}
+
+/** Public: published category groups, ordered, with showCount + thumbnail. Skips empties. */
+export async function listPublishedCategoryGroups(): Promise<CategoryGroupListItem[]> {
+  const rows = await db
+    .select()
+    .from(categoryGroups)
+    .where(eq(categoryGroups.published, true))
+    .orderBy(asc(categoryGroups.position), asc(categoryGroups.id));
+  if (!rows.length) return [];
+  const counts = await groupShowCounts(rows.map((r) => r.id));
+  const out: CategoryGroupListItem[] = [];
+  for (const g of rows) {
+    const n = counts.get(g.id) ?? 0;
+    if (n === 0) continue; // never surface an empty group
+    out.push({ slug: g.slug, title: g.title, description: g.description, thumbnailUrl: cgThumb(g), showCount: n });
+  }
+  return out;
+}
+
+export interface CategoryGroupDetail {
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  programmes: string[];
+  items: ShowListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Public: a published group's meta + a paginated grid of its shows. null if missing/unpublished. */
+export async function getPublishedCategoryGroup(slug: string, page?: number): Promise<CategoryGroupDetail | null> {
+  const [g] = await db
+    .select()
+    .from(categoryGroups)
+    .where(and(eq(categoryGroups.slug, slug), eq(categoryGroups.published, true)))
+    .limit(1);
+  if (!g) return null;
+  const programmes = await groupProgrammes(g.id);
+  const list = programmes.length
+    ? await listShows({ programmes, page })
+    : { items: [], total: 0, page: page ?? 1, pageSize: 24 };
+  return { slug: g.slug, title: g.title, description: g.description, thumbnailUrl: cgThumb(g), programmes, ...list };
+}
+
+// ---- admin ----
+
+export async function adminListCategoryGroups() {
+  const rows = await db.select().from(categoryGroups).orderBy(asc(categoryGroups.position), asc(categoryGroups.id));
+  const counts = await groupShowCounts(rows.map((r) => r.id));
+  // programmeCount per group (incl. empties) for the admin list
+  const progCounts = new Map<number, number>();
+  if (rows.length) {
+    const pr = await db
+      .select({ gid: categoryGroupProgrammes.groupId, c: count() })
+      .from(categoryGroupProgrammes)
+      .where(inArray(categoryGroupProgrammes.groupId, rows.map((r) => r.id)))
+      .groupBy(categoryGroupProgrammes.groupId);
+    for (const r of pr) progCounts.set(r.gid, r.c);
+  }
+  return rows.map((g) => ({ ...g, showCount: counts.get(g.id) ?? 0, programmeCount: progCounts.get(g.id) ?? 0 }));
+}
+
+export async function adminGetCategoryGroup(id: number): Promise<CategoryGroupRow | null> {
+  const [g] = await db.select().from(categoryGroups).where(eq(categoryGroups.id, id)).limit(1);
+  return g ?? null;
+}
+
+export async function adminGetGroupProgrammes(groupId: number): Promise<string[]> {
+  return groupProgrammes(groupId);
+}
+
+async function uniqueCategoryGroupSlug(title: string): Promise<string> {
+  const base = slugifyTitle(title);
+  let slug = base;
+  let n = 2;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const [hit] = await db.select({ id: categoryGroups.id }).from(categoryGroups).where(eq(categoryGroups.slug, slug)).limit(1);
+    if (!hit) return slug;
+    slug = `${base}-${n++}`;
+  }
+}
+
+export interface CategoryGroupInput {
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  published: boolean;
+}
+
+export async function adminCreateCategoryGroup(data: CategoryGroupInput): Promise<number> {
+  const slug = await uniqueCategoryGroupSlug(data.title);
+  const [m] = await db.select({ max: sql<number>`coalesce(max(${categoryGroups.position}), 0)` }).from(categoryGroups);
+  const [r] = await db
+    .insert(categoryGroups)
+    .values({ slug, title: data.title, description: data.description, thumbnailUrl: data.thumbnailUrl, published: data.published, position: (m?.max ?? 0) + 1 })
+    .returning({ id: categoryGroups.id });
+  return r!.id;
+}
+
+export async function adminUpdateCategoryGroup(id: number, data: CategoryGroupInput): Promise<void> {
+  await db
+    .update(categoryGroups)
+    .set({ title: data.title, description: data.description, thumbnailUrl: data.thumbnailUrl, published: data.published })
+    .where(eq(categoryGroups.id, id));
+}
+
+/** Persist thumbnail fields independently (used by the upload handler). */
+export async function adminSetCategoryGroupThumbnail(id: number, fields: { thumbnailCid?: string | null; thumbnailUrl?: string | null }): Promise<void> {
+  await db.update(categoryGroups).set(fields).where(eq(categoryGroups.id, id));
+}
+
+export async function adminDeleteCategoryGroup(id: number): Promise<void> {
+  await db.delete(categoryGroups).where(eq(categoryGroups.id, id)); // cascades programmes
+}
+
+export async function adminReorderCategoryGroup(id: number, dir: -1 | 1): Promise<void> {
+  const rows = await db.select({ id: categoryGroups.id, position: categoryGroups.position }).from(categoryGroups).orderBy(asc(categoryGroups.position), asc(categoryGroups.id));
+  const i = rows.findIndex((r) => r.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= rows.length) return;
+  await db.update(categoryGroups).set({ position: rows[j]!.position }).where(eq(categoryGroups.id, rows[i]!.id));
+  await db.update(categoryGroups).set({ position: rows[i]!.position }).where(eq(categoryGroups.id, rows[j]!.id));
+}
+
+/** Replace a group's programme set (checkbox form posts the full selection). */
+export async function adminSetGroupProgrammes(groupId: number, programmes: string[]): Promise<void> {
+  const uniq = [...new Set(programmes.map((p) => p.trim()).filter(Boolean))];
+  await db.delete(categoryGroupProgrammes).where(eq(categoryGroupProgrammes.groupId, groupId));
+  if (!uniq.length) return;
+  await db.insert(categoryGroupProgrammes).values(uniq.map((programme, i) => ({ groupId, programme, position: i })));
 }
 
 // Drop neighbours looser than this L2 distance (vec0 default; Voyage vectors are
