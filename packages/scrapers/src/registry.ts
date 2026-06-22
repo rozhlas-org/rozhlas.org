@@ -50,10 +50,10 @@ export const SCRAPERS: Record<string, Scraper> = {
   [nedelniVlnaPardubiceScraper.key]: nedelniVlnaPardubiceScraper, // Na nedělní vlně z Pardubic
   [vyletyScraper.key]: vyletyScraper, // Výlety
   [prahaJeNejScraper.key]: prahaJeNejScraper, // Praha je NEJ!
-  [momentyScraper.key]: momentyScraper, // Momenty (transcribe off)
-  [korenyScraper.key]: korenyScraper, // Kořeny (transcribe off)
-  [osobnostPlusScraper.key]: osobnostPlusScraper, // Osobnost Plus (transcribe off)
-  [serialRadiozurnaluScraper.key]: serialRadiozurnaluScraper, // Seriál Radiožurnálu (transcribe off)
+  [momentyScraper.key]: momentyScraper, // Momenty
+  [korenyScraper.key]: korenyScraper, // Kořeny
+  [osobnostPlusScraper.key]: osobnostPlusScraper, // Osobnost Plus
+  [serialRadiozurnaluScraper.key]: serialRadiozurnaluScraper, // Seriál Radiožurnálu
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };

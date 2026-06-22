@@ -5,13 +5,12 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
  * the mujRozhlas JSON:API. Single umbrella show pinned by UUID.
  *   • Osobnost Plus — ad21758a-b517-328e-9bb0-2a2e2819f0b5
  *
- * `transcribe: false` for the one-time bulk load (large ~1.9k-episode back-catalogue);
- * flipped on later.
+ * Transcription on (default): the one-time bulk back-catalogue was loaded with it
+ * off; future episodes transcribe normally (already-loaded files stay un-transcribed).
  */
 export const osobnostPlusScraper = makeApiScraper({
   key: "osobnost-plus",
   title: "Český rozhlas Plus — Osobnost Plus",
   schedule: "30 8 * * *", // nightly; :30 offset (the hourly slots are taken)
-  transcribe: false,
   shows: [{ uuid: "ad21758a-b517-328e-9bb0-2a2e2819f0b5", name: "Osobnost Plus" }],
 });
