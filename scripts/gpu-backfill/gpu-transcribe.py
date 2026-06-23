@@ -60,6 +60,31 @@ def load_pending(worklist, outdir):
     return items
 
 
+def fetch_one(gw, it, path, attempts=5):
+    """Download cid → path, with bounded retry+backoff. The gateway is a single
+    shared node; a transient 5xx/timeout under load must NOT permanently skip a
+    file (that silently drops it from the run). Returns True on success."""
+    last = None
+    for a in range(attempts):
+        try:
+            r = requests.get(f"{gw}/ipfs/{it['cid']}", timeout=180, stream=True)
+            r.raise_for_status()
+            with open(path, "wb") as fh:
+                for chunk in r.iter_content(1 << 20):
+                    fh.write(chunk)
+            return True
+        except Exception as e:
+            last = e
+            try:
+                os.remove(path)  # don't leave a half-file behind between tries
+            except OSError:
+                pass
+            if a < attempts - 1:
+                time.sleep(min(2 ** a, 30))  # 1,2,4,8,16s — ride out a busy gateway
+    print(f"  fetch FAIL af{it['audioFileId']} after {attempts}x: {last}", file=sys.stderr, flush=True)
+    return False
+
+
 def fetch_worker(gw, in_q, out_q, tmpdir):
     """Download cid → temp file; hand (item, path) to the GPU. Bounded by pool size."""
     while True:
@@ -69,19 +94,10 @@ def fetch_worker(gw, in_q, out_q, tmpdir):
             in_q.task_done()
             return
         path = os.path.join(tmpdir, f"a{it['audioFileId']}")
-        try:
-            t0 = time.time()
-            r = requests.get(f"{gw}/ipfs/{it['cid']}", timeout=180, stream=True)
-            r.raise_for_status()
-            with open(path, "wb") as fh:
-                for chunk in r.iter_content(1 << 20):
-                    fh.write(chunk)
-            out_q.put((it, path, time.time() - t0))
-        except Exception as e:
-            print(f"  fetch FAIL af{it['audioFileId']}: {e}", file=sys.stderr, flush=True)
-            out_q.put((it, None, 0.0))
-        finally:
-            in_q.task_done()
+        t0 = time.time()
+        ok = fetch_one(gw, it, path)
+        out_q.put((it, path if ok else None, time.time() - t0))
+        in_q.task_done()
 
 
 def write_atomic(outdir, audio_file_id, obj):
@@ -123,7 +139,7 @@ def main():
 
     threading.Thread(target=feeder, daemon=True).start()
 
-    done, fetch_wait, gpu_time, t_start = 0, 0.0, 0.0, time.time()
+    done, failed, fetch_wait, gpu_time, t_start = 0, 0, 0.0, 0.0, time.time()
     finished_workers = 0
     while finished_workers < len(pool):
         item = out_q.get()
@@ -133,6 +149,7 @@ def main():
         it, path, dl = item
         fetch_wait += dl
         if not path:
+            failed += 1  # fetch gave up after retries — surfaced in progress below
             continue
         try:
             g0 = time.time()
@@ -160,8 +177,9 @@ def main():
                 el = time.time() - t_start
                 aud = sum((p.get("durationSec") or 0) for p in pending[:done])  # rough
                 print(
-                    f"  {done}/{len(pending)} | wall {round(el)}s | gpu {round(gpu_time)}s "
-                    f"| fetch {round(fetch_wait)}s | RTF~{round(gpu_time and aud/gpu_time,1)}x",
+                    f"  {done}/{len(pending)} | fetch-fail {failed} | wall {round(el)}s "
+                    f"| gpu {round(gpu_time)}s | fetch {round(fetch_wait)}s "
+                    f"| RTF~{round(gpu_time and aud/gpu_time,1)}x",
                     flush=True,
                 )
         except Exception as e:
@@ -174,7 +192,8 @@ def main():
 
     el = time.time() - t_start
     print(
-        f"\nDONE {done}/{len(pending)} in {round(el)}s | gpu {round(gpu_time)}s | fetch {round(fetch_wait)}s"
+        f"\nDONE {done}/{len(pending)} (fetch-fail {failed}) in {round(el)}s "
+        f"| gpu {round(gpu_time)}s | fetch {round(fetch_wait)}s"
         f"\n→ {'FETCH-BOUND (RTF is I/O-limited)' if fetch_wait > gpu_time else 'compute-bound (good)'}",
         flush=True,
     )
