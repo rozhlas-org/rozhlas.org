@@ -84,7 +84,12 @@ services:
       # Transcription (faster-whisper). Steady-state only: new shows are
       # transcribed as they arrive; the ~13k backlog stays parked unless
       # TRANSCRIBE_BACKFILL=true (that's the off-box GPU/Groq job).
-      WHISPER_PYTHON: /opt/whisper-venv/bin/python
+      # Local CPU whisper DISABLED: large-v3 on this 4-core box pegs ~4 cores per
+      # file, starving the worker event loop so BullMQ can't renew job locks
+      # (cascading "Missing lock"/stalled failures across all queues). Transcription
+      # is handled off-box: Groq steady-state (newest arrivals) + GPU backfill.
+      # Re-enable only with a hard concurrency cap if ever needed.
+      # WHISPER_PYTHON: /opt/whisper-venv/bin/python
       WHISPER_MODEL: large-v3
       WHISPER_THREADS: "4"
       # large-v3 (~3GB) caches here on first use — a bind on the big /home volume.
