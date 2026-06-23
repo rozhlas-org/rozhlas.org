@@ -75,6 +75,13 @@ const jsonLd = {
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
+    <!-- Installable PWA (no install prompt; the browser offers it natively). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="rozhlas.org" />
+
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="rozhlas.org" />
@@ -124,6 +131,8 @@ const jsonLd = {
         <a href="https://github.com/rozhlas-org/rozhlas.org" rel="noopener me" target="_blank">GitHub</a>
         <span aria-hidden="true">·</span>
         <a href="https://www.mujrozhlas.cz/" rel="noopener" target="_blank">mujRozhlas</a>
+        <!-- Revealed by pwa.ts only when the browser offers installation. -->
+        <button id="install-app" class="site-footer__install" type="button" hidden>⤓ Instalovat aplikaci</button>
       </p>
     </footer>
 

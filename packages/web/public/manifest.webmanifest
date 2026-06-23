@@ -1,0 +1,19 @@
+{
+  "name": "rozhlas.org — archiv četby a mluveného slova",
+  "short_name": "rozhlas.org",
+  "description": "Prohledávejte a poslouchejte archiv mluveného slova Českého rozhlasu — četba, povídky, rozhlasové hry, pohádky a dokumenty.",
+  "lang": "cs",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#111111",
+  "categories": ["music", "entertainment", "books"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

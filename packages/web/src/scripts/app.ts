@@ -23,6 +23,7 @@ import { clearFavourites, toggleFavourite } from "./favourites.ts";
 import { applyPartMarquees, initPlayer, syncNowPlaying } from "./player.ts";
 import { wireTranscript } from "./transcript.ts";
 import { initTheme } from "./theme.ts";
+import { initPwa } from "./pwa.ts";
 
 const app = document.getElementById("app")!;
 
@@ -221,5 +222,7 @@ wireAudioProgress();
 initPlayer();
 // Lazy "Přepis" disclosure on show detail pages.
 wireTranscript();
+// PWA: register the app-shell service worker + opt-in install link.
+initPwa();
 
 render();
