@@ -267,9 +267,24 @@ button:active,
   color: var(--muted);
   text-transform: uppercase;
 }
-.site-footer__links { margin-top: 10px; display: flex; gap: 10px; }
+.site-footer__links { margin-top: 10px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .site-footer__links a { color: var(--cyan); text-decoration: none; }
 .site-footer__links a:hover { text-decoration: underline; }
+/* opt-in install link — reset the global button to read like the other footer links */
+.site-footer__install {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  cursor: pointer;
+}
+.site-footer__install:hover { text-decoration: underline; transform: none; box-shadow: none; }
+.site-footer__install[hidden] { display: none; }
 
 /* ===== show grid + cards ===== */
 .show-grid {
