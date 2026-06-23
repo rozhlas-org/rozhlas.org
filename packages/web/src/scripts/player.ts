@@ -307,6 +307,49 @@ async function restoreNowPlaying(): Promise<void> {
   load(false); // no autoplay — just show where we left off (bar is always visible)
 }
 
+/** Reflect the current track on the OS lock screen / media notification. */
+function setMediaMetadata(title: string): void {
+  if (!("mediaSession" in navigator) || !q) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title,
+      artist: q.programme ?? "Český rozhlas",
+      album: q.showTitle,
+      artwork: q.artwork ? [{ src: q.artwork, sizes: "400x400", type: "image/webp" }] : [],
+    });
+  } catch {
+    /* MediaMetadata unsupported */
+  }
+}
+
+/** Wire hardware/lock-screen media keys to the player (once, at startup). */
+function initMediaSession(): void {
+  if (!("mediaSession" in navigator)) return;
+  const ms = navigator.mediaSession;
+  const set = (a: MediaSessionAction, h: MediaSessionActionHandler) => {
+    try {
+      ms.setActionHandler(a, h);
+    } catch {
+      /* this action is unsupported by the browser */
+    }
+  };
+  set("play", () => void audio.play().catch(() => {}));
+  set("pause", () => audio.pause());
+  set("previoustrack", () => prev());
+  set("nexttrack", () => next());
+  set("seekbackward", () => skip(-15));
+  set("seekforward", () => skip(15));
+  set("seekto", (d) => {
+    if (d.seekTime != null) {
+      try {
+        audio.currentTime = d.seekTime;
+      } catch {
+        /* not seekable yet */
+      }
+    }
+  });
+}
+
 function load(autoplay: boolean): void {
   if (!q) return;
   const t = q.parts[q.index]!;
@@ -333,6 +376,7 @@ function load(autoplay: boolean): void {
   }
   nowEl.textContent = q.parts.length > 1 ? `Nyní hraje · díl ${q.index + 1}/${q.parts.length}` : "Nyní hraje";
   setBarArt(q.artwork);
+  setMediaMetadata(t.title); // OS lock-screen / media controls
   setScrollingTitle(titleLink, t.title);
   titleLink.classList.remove("player-bar__title--idle");
   titleLink.href = `/show/${encodeURIComponent(q.slug)}`;
@@ -655,6 +699,8 @@ export function initPlayer(): void {
     if (slug && part != null) void playFromSlug(slug, part, Number.isFinite(seek) ? seek : undefined);
   });
 
+  initMediaSession(); // OS lock-screen / media-key controls
+
   // ---- live transcript panel ("Přepis") ----
   initPlayerTranscript({
     audio,
@@ -812,6 +858,17 @@ export function initPlayer(): void {
     if (!seeking && audio.duration) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
     timeEl.textContent = `${clock(audio.currentTime)} / ${clock(audio.duration)}`;
     transcriptOnTime(audio.currentTime); // highlight + follow the speaking line
+    if ("mediaSession" in navigator && audio.duration && Number.isFinite(audio.duration)) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: audio.duration,
+          position: Math.min(audio.currentTime, audio.duration),
+          playbackRate: audio.playbackRate || 1,
+        });
+      } catch {
+        /* setPositionState unsupported */
+      }
+    }
     // Historie: count a listen once the track has actually played ~6s (skips
     // scrubs/skips; restored-but-not-played tracks never reach this).
     if (q && !listenLogged && audio.currentTime > 6) {
@@ -823,11 +880,13 @@ export function initPlayer(): void {
   audio.addEventListener("play", () => {
     toggleBtn.textContent = "❚❚";
     toggleBtn.setAttribute("aria-label", "Pozastavit");
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
     syncNowPlaying();
   });
   audio.addEventListener("pause", () => {
     toggleBtn.textContent = "▶";
     toggleBtn.setAttribute("aria-label", "Přehrát");
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
     syncNowPlaying();
   });
   // Auto-advance to the next díl; also mark the finished one done in the live DOM.
