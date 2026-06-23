@@ -8,23 +8,41 @@ import { attr, esc, formatDuration } from "./format.ts";
 
 const cache = new Map<string, ShowTranscriptPart[]>();
 
-function renderTranscript(slug: string, parts: ShowTranscriptPart[]): string {
-  if (!parts.length) return `<p class="empty">Přepis není k dispozici.</p>`;
-  return parts
-    .map((p) => {
-      const part = p.partIdx == null ? "single" : String(p.partIdx);
-      const heading =
-        p.partIdx == null ? "" : `<h4 class="transcript-part__dil">${esc(String(p.partIdx))}. díl</h4>`;
-      const source = p.segments.length ? p.segments : [{ start: 0, end: 0, text: p.text }];
-      const segs = source
-        .map((s) => {
-          const at = Math.floor(s.start);
-          return `<span class="tx-seg" role="button" tabindex="0" data-slug="${attr(slug)}" data-part="${attr(part)}" data-seek="${at}" title="Přehrát od ${esc(formatDuration(at))}">${esc(s.text)} </span>`;
-        })
-        .join("");
-      return `<div class="transcript-part">${heading}<p class="transcript-text">${segs}</p></div>`;
+/** Clickable, timestamped segments for one part's transcript text. */
+function renderSegments(slug: string, p: ShowTranscriptPart): string {
+  const part = p.partIdx == null ? "single" : String(p.partIdx);
+  const source = p.segments.length ? p.segments : [{ start: 0, end: 0, text: p.text }];
+  const segs = source
+    .map((s) => {
+      const at = Math.floor(s.start);
+      return `<span class="tx-seg" role="button" tabindex="0" data-slug="${attr(slug)}" data-part="${attr(part)}" data-seek="${at}" title="Přehrát od ${esc(formatDuration(at))}">${esc(s.text)} </span>`;
     })
     .join("");
+  return `<p class="transcript-text">${segs}</p>`;
+}
+
+function renderTranscript(slug: string, parts: ShowTranscriptPart[]): string {
+  if (!parts.length) return `<p class="empty">Přepis není k dispozici.</p>`;
+  // Single audio (or only one díl transcribed) → just the text, no submenu.
+  if (parts.length === 1) {
+    return `<div class="transcript-part">${renderSegments(slug, parts[0]!)}</div>`;
+  }
+  // Multi-part: a díl submenu; only the selected díl's transcript is shown, so the
+  // page isn't a single huge wall of every part merged together.
+  const label = (p: ShowTranscriptPart) => (p.partIdx == null ? "Díl" : `${p.partIdx}. díl`);
+  const nav = parts
+    .map(
+      (p, i) =>
+        `<button class="transcript-nav__item${i === 0 ? " is-active" : ""}" type="button" role="tab" aria-selected="${i === 0}" data-panel="${i}">${esc(label(p))}</button>`,
+    )
+    .join("");
+  const panels = parts
+    .map(
+      (p, i) =>
+        `<div class="transcript-panel" data-panel="${i}"${i === 0 ? "" : " hidden"}>${renderSegments(slug, p)}</div>`,
+    )
+    .join("");
+  return `<div class="transcript-nav" role="tablist" aria-label="Díly přepisu">${nav}</div><div class="transcript-panels">${panels}</div>`;
 }
 
 /** Install the delegated handlers once at startup. */
@@ -65,6 +83,24 @@ export function wireTranscript(): void {
     } finally {
       btn.disabled = false;
     }
+  });
+
+  // Díl submenu: show only the picked part's transcript (multi-part shows).
+  document.addEventListener("click", (e) => {
+    const item = (e.target as HTMLElement).closest<HTMLElement>(".transcript-nav__item");
+    if (!item) return;
+    const nav = item.closest(".transcript-nav");
+    const panels = nav?.parentElement?.querySelector(".transcript-panels");
+    const idx = item.dataset.panel;
+    if (!nav || !panels || idx == null) return;
+    nav.querySelectorAll<HTMLElement>(".transcript-nav__item").forEach((b) => {
+      const on = b === item;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-selected", String(on));
+    });
+    panels.querySelectorAll<HTMLElement>(".transcript-panel").forEach((p) => {
+      p.hidden = p.dataset.panel !== idx;
+    });
   });
 
   // Keyboard: Enter/Space on a focused segment seeks (it's role="button").

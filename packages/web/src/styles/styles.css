@@ -1386,18 +1386,33 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
   padding: 16px 18px;
   border: var(--border-thin);
   background: var(--paper);
-  max-height: 60vh;
-  overflow-y: auto;
 }
 .transcript-body[hidden] { display: none; }
-.transcript-part + .transcript-part { margin-top: 1.25rem; padding-top: 1rem; border-top: var(--border-thin); }
-.transcript-part__dil {
+/* the scrollable transcript area (a single part, or each díl panel) */
+.transcript-part,
+.transcript-panel { max-height: 56vh; overflow-y: auto; }
+.transcript-panel[hidden] { display: none; }
+/* díl submenu (multi-part transcripts) — pick one díl to read at a time */
+.transcript-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: var(--border-thin);
+}
+.transcript-nav__item {
   font-family: var(--font-mono);
   font-size: 12px;
-  letter-spacing: 1px;
-  color: var(--magenta);
-  margin: 0 0 8px;
+  letter-spacing: 0.5px;
+  padding: 5px 10px;
+  background: var(--paper);
+  color: var(--key);
+  border: var(--border-thin);
+  box-shadow: none;
 }
+.transcript-nav__item:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--magenta); }
+.transcript-nav__item.is-active { background: var(--key); color: var(--paper); }
 .transcript-text { margin: 0; line-height: 1.7; }
 /* each whisper segment — click/Enter seeks the player to that second */
 .tx-seg { cursor: pointer; border-radius: 2px; transition: background 0.08s ease; }
