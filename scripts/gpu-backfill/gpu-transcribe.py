@@ -103,7 +103,10 @@ def main():
     model = WhisperModel(a.model, device=a.device, compute_type=a.compute)
     batched = BatchedInferencePipeline(model=model)
 
-    in_q, out_q = queue.Queue(maxsize=a.fetch_concurrency * 2), queue.Queue()
+    # Both queues are bounded so the fetchers can't prefetch the whole worklist
+    # to disk ahead of the (slower) GPU — out_q backpressure caps files-on-disk,
+    # otherwise a long run fills the box and every fetch dies with Errno 28.
+    in_q, out_q = queue.Queue(maxsize=a.fetch_concurrency * 2), queue.Queue(maxsize=a.fetch_concurrency * 2)
     tmpdir = tempfile.mkdtemp(prefix="gpu-tx-")
     pool = [
         threading.Thread(target=fetch_worker, args=(a.gateway, in_q, out_q, tmpdir), daemon=True)
