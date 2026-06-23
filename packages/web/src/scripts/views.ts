@@ -7,6 +7,7 @@ import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
 import { getHistory, logView, type HistoryEntry } from "./history.ts";
 import { getFavourites, isFavourite, refreshFavourite, type FavItem } from "./favourites.ts";
+import { getSavedShow, savedToDetail, listSavedShows, fmtBytes, type SavedShow } from "./offline.ts";
 
 export interface ViewResult {
   title: string;
@@ -544,7 +545,12 @@ export async function omnisearchView(params: URLSearchParams): Promise<ViewResul
 }
 
 export async function showView(slug: string): Promise<ViewResult> {
-  const show = await api.show(slug).catch(() => null);
+  let show = await api.show(slug).catch(() => null);
+  if (!show) {
+    // Offline: if the API is unreachable but the show is downloaded, render from it.
+    const saved = await getSavedShow(slug).catch(() => null);
+    if (saved) show = savedToDetail(saved);
+  }
   if (!show) {
     return { title: "Nenalezeno", html: `<section><h1>Pořad nenalezen</h1></section>` };
   }
@@ -672,6 +678,7 @@ export async function showView(slug: string): Promise<ViewResult> {
             });
           })()}
           ${favBtn(favData, { cls: "fav-toggle--detail", variant: "detail" })}
+          ${favData.streamable ? `<div class="offline" data-slug="${attr(show.slug)}"></div>` : ""}
           </div>
           ${desc}
           ${people}
@@ -758,4 +765,42 @@ export async function loadSimilar(): Promise<void> {
   if (!grid) return;
   grid.innerHTML = items.map((s) => showCard(s)).join("");
   live.hidden = false;
+}
+
+/** One downloaded show on the Stažené page (links to its detail, plays offline). */
+function savedCard(s: SavedShow): string {
+  const art = s.artworkUrl
+    ? `<img src="${attr(s.artworkUrl)}" alt="" loading="lazy" />`
+    : `<div class="show-card__art--placeholder" aria-hidden="true"></div>`;
+  const programme = s.showName
+    ? `<a class="show-card__programme" href="/programme/${encodeURIComponent(s.showName)}">${esc(s.showName)}</a>`
+    : "";
+  const n = s.parts.length;
+  return `
+    <article class="show-card saved-card">
+      <button class="offline-toggle offline-toggle--ghost saved-card__remove" type="button" data-act="remove" data-slug="${attr(s.slug)}" aria-label="Odebrat ze stažených" title="Odebrat ze stažených">✕</button>
+      <a class="show-card__link" href="/show/${encodeURIComponent(s.slug)}">
+        <div class="show-card__art">${art}<span class="show-card__badge">▶</span></div>
+        <h3 class="show-card__title">${esc(s.title)}</h3>
+      </a>
+      ${programme}
+      <p class="show-card__meta">${n > 1 ? `${n} dílů · ` : ""}${esc(fmtBytes(s.totalBytes))} · offline</p>
+    </article>`;
+}
+
+/** "Stažené" — shows downloaded to this device, playable with no network. */
+export async function savedShowsView(): Promise<ViewResult> {
+  const shows = await listSavedShows();
+  const total = shows.reduce((sum, s) => sum + s.totalBytes, 0);
+  const body = shows.length
+    ? `<div class="show-grid">${shows.map(savedCard).join("")}</div>`
+    : `<p class="empty">Zatím nemáte žádné stažené pořady.<br /><span class="queue__hint">Na stránce pořadu zvolte „Uložit offline“ — pak je přehrajete i bez připojení.</span></p>`;
+  return {
+    title: "Stažené",
+    html: `<section>
+      <h1>Stažené</h1>
+      <p class="result-count">${shows.length ? `${shows.length} pořadů · ${esc(fmtBytes(total))} · k poslechu offline` : "k poslechu offline"}</p>
+      ${body}
+    </section>`,
+  };
 }

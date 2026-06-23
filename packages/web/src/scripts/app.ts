@@ -13,10 +13,12 @@ import {
   programmesView,
   categoryGroupView,
   selectionView,
+  savedShowsView,
   showView,
   transcriptSearchView,
   type ViewResult,
 } from "./views.ts";
+import { initOffline, mountOffline } from "./offline-ui.ts";
 import { wireAudioProgress } from "./progress.ts";
 import { clearHistory } from "./history.ts";
 import { clearFavourites, toggleFavourite } from "./favourites.ts";
@@ -46,6 +48,7 @@ async function resolve(): Promise<ViewResult> {
   if (path === "/programmes") return programmesView();
   if (path === "/historie") return historyView(params);
   if (path === "/oblibene") return favouritesView();
+  if (path === "/stazene") return savedShowsView();
 
   const show = path.match(/^\/show\/(.+)$/);
   if (show) return showView(decodeSeg(show[1]));
@@ -94,6 +97,7 @@ async function render() {
     applyPartMarquees(); // scroll long díl titles right-to-left (like the player bar)
     window.scrollTo(0, 0);
     void loadSimilar(); // lazily fill "Podobné pořady" if this view has the mount
+    void mountOffline(); // lazily fill the detail page's "Uložit offline" control
   } catch (err) {
     if (mine !== token) return;
     app.innerHTML = `<section><h1>Chyba</h1><p class="notice">Nepodařilo se načíst data. Zkuste to prosím znovu.</p></section>`;
@@ -224,5 +228,7 @@ initPlayer();
 wireTranscript();
 // PWA: register the app-shell service worker + opt-in install link.
 initPwa();
+// Offline downloads: detail-page "Uložit offline" control + Stažené removals.
+initOffline();
 
 render();

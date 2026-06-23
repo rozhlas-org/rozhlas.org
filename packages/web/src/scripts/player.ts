@@ -10,6 +10,7 @@
 import { api } from "./api.ts";
 import { attr, esc, formatDuration } from "./format.ts";
 import { getProgress } from "./progress.ts";
+import { getSavedShow, savedToDetail } from "./offline.ts";
 import {
   initPlayerTranscript,
   closeTranscript,
@@ -217,6 +218,15 @@ function pkey(slug: string, idx: string | number): string {
   return `${slug}#${idx}`;
 }
 
+/** Fetch a show, falling back to the offline-saved copy when the API is unreachable
+ *  (so a downloaded show plays with no network). */
+async function resolveShow(slug: string): Promise<Awaited<ReturnType<typeof api.show>> | null> {
+  const live = await api.show(slug).catch(() => null);
+  if (live) return live;
+  const saved = await getSavedShow(slug);
+  return saved ? savedToDetail(saved) : null;
+}
+
 /** Build a play queue from a show and start at the given díl id. */
 // Set by a deep-link (e.g. a transcript hit) so load() seeks once metadata loads.
 let pendingSeek: number | null = null;
@@ -241,7 +251,7 @@ export async function playFromSlug(
     }
     return true;
   }
-  const show = await api.show(slug).catch(() => null);
+  const show = await resolveShow(slug);
   if (!show) return false;
 
   const parts = buildParts(show);
@@ -264,7 +274,7 @@ export async function playFromSlug(
  * the back-stack so ⏮ can step back through played díly.
  */
 async function playQueuePart(item: QueueItem): Promise<boolean> {
-  const show = await api.show(item.slug).catch(() => null);
+  const show = await resolveShow(item.slug);
   if (!show) return false;
   const track = buildParts(show).find((t) => String(t.idx) === String(item.idx));
   if (!track) return false;
@@ -297,7 +307,7 @@ async function restoreNowPlaying(): Promise<void> {
     saved = null;
   }
   if (!saved?.slug) return;
-  const show = await api.show(saved.slug).catch(() => null);
+  const show = await resolveShow(saved.slug);
   if (!show) return;
   const parts = buildParts(show);
   if (!parts.length) return;
@@ -601,7 +611,7 @@ async function addAllToQueue(
   btn.disabled = true;
   btn.setAttribute("aria-busy", "true");
   try {
-    const show = await api.show(slug).catch(() => null);
+    const show = await resolveShow(slug);
     const parts = show ? buildQueueParts(show) : [];
     if (!parts.length) {
       flashAdd(btn, "⚠"); // nothing streamable to queue (or fetch failed)
