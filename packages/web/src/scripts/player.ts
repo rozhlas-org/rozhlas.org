@@ -11,6 +11,13 @@ import { api } from "./api.ts";
 import { attr, esc, formatDuration } from "./format.ts";
 import { getProgress } from "./progress.ts";
 import {
+  initPlayerTranscript,
+  closeTranscript,
+  setTranscriptEnabled,
+  transcriptOnTrackChange,
+  transcriptOnTime,
+} from "./player-transcript.ts";
+import {
   clearQueue,
   enqueuePart,
   enqueueParts,
@@ -202,6 +209,7 @@ function setIdle(): void {
   toggleBtn.setAttribute("aria-label", "Přehrát");
   seek.value = "0";
   timeEl.textContent = "0:00 / 0:00";
+  setTranscriptEnabled(false); // nothing playing → no transcript (also closes it)
   idleControls();
 }
 
@@ -350,6 +358,8 @@ function load(autoplay: boolean): void {
   }
   syncNowPlaying();
   if (queuePanelOpen()) renderQueuePanel(); // refresh the "Nyní hraje" row
+  setTranscriptEnabled(true); // a track is loaded → the Přepis button is live
+  transcriptOnTrackChange(); // refresh the panel for this díl if it's open
 }
 
 function toggle(): void {
@@ -645,10 +655,30 @@ export function initPlayer(): void {
     if (slug && part != null) void playFromSlug(slug, part, Number.isFinite(seek) ? seek : undefined);
   });
 
+  // ---- live transcript panel ("Přepis") ----
+  initPlayerTranscript({
+    audio,
+    getCurrent: () => (q ? { slug: q.slug, partIdx: q.parts[q.index]!.idx } : null),
+    seekTo: (s) => {
+      try {
+        audio.currentTime = s;
+      } catch {
+        /* not seekable yet */
+      }
+    },
+    onBeforeOpen: () => closeQueuePanel(false), // transcript + queue are mutually exclusive
+  });
+
   // ---- queue ("Fronta") wiring ----
   // Once open, the panel stays open until the ✕ (or the ☰ toggle) — no auto-close
   // on outside clicks or Escape, so interacting elsewhere can't collapse it.
-  queueToggle.addEventListener("click", () => (queuePanelOpen() ? closeQueuePanel() : openQueuePanel()));
+  queueToggle.addEventListener("click", () => {
+    if (queuePanelOpen()) closeQueuePanel();
+    else {
+      closeTranscript(); // mutually exclusive with the transcript panel
+      openQueuePanel();
+    }
+  });
 
   // "Add to queue" buttons on cards / detail (inside #app — delegated on document).
   document.addEventListener("click", (e) => {
@@ -781,6 +811,7 @@ export function initPlayer(): void {
     clearStall(); // real progress → not stuck
     if (!seeking && audio.duration) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
     timeEl.textContent = `${clock(audio.currentTime)} / ${clock(audio.duration)}`;
+    transcriptOnTime(audio.currentTime); // highlight + follow the speaking line
     // Historie: count a listen once the track has actually played ~6s (skips
     // scrubs/skips; restored-but-not-played tracks never reach this).
     if (q && !listenLogged && audio.currentTime > 6) {
