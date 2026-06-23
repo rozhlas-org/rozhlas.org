@@ -26,6 +26,7 @@ export function createScrapeCtx(
     onProgress?: (info: { found: number; fetched: number }) => void;
     signal?: AbortSignal;
     maxFetches?: number;
+    since?: Date;
   } = {},
 ): ScrapeCtx {
   return {
@@ -36,5 +37,6 @@ export function createScrapeCtx(
     onProgress: opts.onProgress,
     signal: opts.signal,
     maxFetches: opts.maxFetches,
+    since: opts.since,
   };
 }

@@ -76,10 +76,15 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
 
       const processShow = async (show: ApiShowRef): Promise<void> => {
         try {
-          for await (const ep of iterateEpisodes(ctx, show.uuid, () => {
-            fetched++;
-            beat();
-          })) {
+          for await (const ep of iterateEpisodes(
+            ctx,
+            show.uuid,
+            () => {
+              fetched++;
+              beat();
+            },
+            ctx.since, // incremental: stop past the recent window (undefined = full crawl)
+          )) {
             const media = episodeMedia(ep);
             if (!media) continue;
             episodes++;

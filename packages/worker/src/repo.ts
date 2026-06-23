@@ -41,6 +41,12 @@ export async function touchSourceRun(key: string) {
   await db.update(sources).set({ lastRunAt: new Date() }).where(eq(sources.key, key));
 }
 
+/** When this source last completed a discover run (null = never → first run is full). */
+export async function getSourceLastRun(key: string): Promise<Date | null> {
+  const [row] = await db.select({ lastRunAt: sources.lastRunAt }).from(sources).where(eq(sources.key, key)).limit(1);
+  return row?.lastRunAt ?? null;
+}
+
 /** Open a scrape_runs audit row; returns its id to close later. */
 export async function startScrapeRun(sourceKey: string): Promise<number> {
   const [row] = await db
