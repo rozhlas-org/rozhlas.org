@@ -242,6 +242,7 @@ button:active,
   padding: 11px 13px;
   border: var(--border);
   background: var(--paper);
+  color: var(--key); /* inputs don't inherit color — set it so text shows in dark mode */
   min-width: 15rem;
 }
 .search input::placeholder { color: var(--muted); }
@@ -1209,6 +1210,7 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
   font: inherit;
   resize: vertical;
   background: var(--paper);
+  color: var(--key); /* textarea doesn't inherit color — set it so text shows in dark mode */
 }
 .omni__form textarea:focus { outline: none; box-shadow: 5px 5px 0 var(--cyan); }
 .omni__form button { box-shadow: 4px 4px 0 var(--magenta); }
@@ -1253,6 +1255,7 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
   max-width: 100%;
   border: var(--border-thin);
   background: var(--paper);
+  color: var(--key); /* inputs don't inherit color — set it so text shows in dark mode */
 }
 .filter__input::placeholder { color: var(--muted); text-transform: uppercase; }
 .filter__input:focus { outline: none; box-shadow: 3px 3px 0 var(--cyan); }
