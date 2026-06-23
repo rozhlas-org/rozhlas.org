@@ -1006,6 +1006,32 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 /* grouped action row on the detail page: queue pill + favourite */
 .show-detail__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 6px 0 4px; }
 .show-detail__actions .queue-add--detail { margin: 0; }
+
+/* ===== offline downloads ===== */
+.offline { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.offline-toggle { font-size: 14px; padding: 11px 16px; }
+.offline-toggle--ghost { background: var(--paper); color: var(--key); border: var(--border-thin); box-shadow: none; }
+.offline-toggle--ghost:hover { box-shadow: 2px 2px 0 var(--magenta); }
+.offline-size { font-weight: 400; opacity: 0.85; }
+.offline-badge { font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--cyan); }
+.offline-err { font-family: var(--font-mono); font-size: 11px; color: var(--magenta); }
+.offline-progress {
+  position: relative; width: 240px; max-width: 60vw; height: 34px;
+  border: var(--border-thin); background: var(--paper); overflow: hidden;
+}
+.offline-progress__bar { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--cyan); transition: width 0.2s ease; }
+.offline-progress__label {
+  position: relative; z-index: 1; display: grid; place-items: center; height: 100%;
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; color: var(--key);
+}
+/* Stažené card remove ✕ — top-right, mirrors the queue ＋ on browse cards */
+.saved-card { position: relative; }
+.saved-card__remove {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  width: 32px; height: 32px; padding: 0; font-size: 15px;
+  background: var(--paper); color: var(--key); border: var(--border-thin); box-shadow: none;
+}
+.saved-card__remove:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--magenta); }
 /* On mobile the two pills don't fit side by side, so stack them — keeps the favourite
    on its own line so toggling its label can't make it jump onto the queue's row. */
 @media (max-width: 640px) {
