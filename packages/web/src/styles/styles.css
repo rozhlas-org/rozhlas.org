@@ -1015,7 +1015,9 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 
 /* ===== offline downloads ===== */
 .offline { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.offline-toggle { font-size: 14px; padding: 11px 16px; }
+/* Match the row's queue/fav detail buttons exactly (height = 14px text + 9px×2
+   padding + 2px×2 border-thin), so all three line up. */
+.offline-toggle { font-size: 14px; padding: 9px 16px; line-height: 1; border: var(--border-thin); }
 .offline-toggle--ghost { background: var(--paper); color: var(--key); border: var(--border-thin); box-shadow: none; }
 .offline-toggle--ghost:hover { box-shadow: 2px 2px 0 var(--magenta); }
 .offline-size { font-weight: 400; opacity: 0.85; }
