@@ -27,6 +27,9 @@ export interface JobData {
     sourceKey: string;
     limit?: number;
     options?: Record<string, unknown>;
+    /** Incremental window in hours: a scheduled run fetches only items newer than
+     *  now−sinceHours (after the source's first full run). Omit for a full backfill. */
+    sinceHours?: number;
   };
   // Reserved for detail-page sources (mujRozhlas, Phase 3).
   "fetch-metadata": { sourceKey: string; sourceId: string; url?: string };
