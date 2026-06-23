@@ -734,7 +734,9 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
   margin-bottom: 6px;
   display: flex;
   flex-direction: column;
-  max-height: 80vh;
+  /* Fill the space above the player up to ~6px from the top, so a long transcript
+     leaves no unfilled gap. --player-h is measured by player.ts (fallback 168px). */
+  max-height: calc(100dvh - var(--player-h, 168px) - 12px);
   background: var(--key);
   color: var(--paper);
   border: var(--border);
@@ -798,6 +800,10 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
   border: var(--border-thin);
   box-shadow: 3px 3px 0 var(--key);
 }
+/* Keep the centering transform on hover/active — the global button:hover translate
+   would otherwise replace translateX(-50%) and make the pill jump sideways. */
+.transcript-pop__follow:hover { transform: translateX(-50%); box-shadow: 4px 4px 0 var(--key); }
+.transcript-pop__follow:active { transform: translateX(-50%) translateY(2px); box-shadow: 1px 1px 0 var(--key); }
 .transcript-pop__follow[hidden] { display: none; }
 .queue__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .queue__heading {
