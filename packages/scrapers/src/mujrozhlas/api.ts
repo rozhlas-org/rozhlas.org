@@ -34,18 +34,26 @@ function nextLink(json: any): string | null {
 }
 
 /**
- * Yield every episode of a show, page by page. Honors ctx.signal (stop promptly),
- * ctx.maxFetches (budget), and reports each page via onPage(fetched). Throws on a
+ * Yield a show's episodes, page by page. Honors ctx.signal (stop promptly),
+ * ctx.maxFetches (budget), reports each page via onPage(fetched), and throws on a
  * non-OK response so the caller can record the failure.
+ *
+ * When `stopBefore` is given, episodes are fetched **newest-first** (`sort=-since`)
+ * and iteration stops at the first episode older than the cutoff — so an incremental
+ * (nightly) run reads only the recent window instead of paginating the whole history.
+ * Episodes with no `since` are always yielded (can't be dated) and don't early-exit.
  */
 export async function* iterateEpisodes(
   ctx: ScrapeCtx,
   showUuid: string,
   onPage: () => void,
+  stopBefore?: Date,
 ): AsyncGenerator<ApiEpisode> {
-  let url: string | null = `${API}/shows/${showUuid}/episodes?page%5Blimit%5D=${PAGE}`;
+  const sort = stopBefore ? "&sort=-since" : "";
+  let url: string | null = `${API}/shows/${showUuid}/episodes?page%5Blimit%5D=${PAGE}${sort}`;
   let fetches = 0;
   const max = ctx.maxFetches ?? Infinity;
+  const cutoff = stopBefore?.getTime();
   while (url) {
     if (ctx.signal?.aborted || fetches >= max) return;
     const timeout = AbortSignal.timeout(PER_FETCH_MS);
@@ -60,7 +68,14 @@ export async function* iterateEpisodes(
       res.json(),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error("body read timeout")), PER_FETCH_MS)),
     ]);
-    for (const ep of (json.data ?? []) as ApiEpisode[]) yield ep;
+    for (const ep of (json.data ?? []) as ApiEpisode[]) {
+      if (cutoff != null && ep.attributes.since) {
+        const t = new Date(ep.attributes.since).getTime();
+        // Newest-first → the first too-old episode means all the rest are too. Stop.
+        if (Number.isFinite(t) && t < cutoff) return;
+      }
+      yield ep;
+    }
     url = nextLink(json);
   }
 }

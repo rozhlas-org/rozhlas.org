@@ -33,8 +33,14 @@ const DISCOVER_HARD_MS = 20 * 60_000; // explicit shows land first; give the hub
 
 /** discover → upsert shows + audio rows, enqueue acquire for anything not yet pinned. */
 async function discover(job: Job<JobData["discover"]>) {
-  const { sourceKey, limit, options } = job.data;
+  const { sourceKey, limit, options, sinceHours } = job.data;
   const scraper = getScraper(sourceKey);
+  // Incremental: once a source has had a full run, scheduled runs fetch only the
+  // recent window (now−sinceHours). First run (no lastRunAt) and manual backfills
+  // (no sinceHours) crawl in full. The window overlaps the cron interval so nothing
+  // is missed; saves are upsert-only so a partial run never drops history.
+  const lastRun = sinceHours ? await repo.getSourceLastRun(sourceKey) : null;
+  const since = sinceHours && lastRun ? new Date(Date.now() - sinceHours * 3_600_000) : undefined;
   // Watchdog: a hung crawl must never freeze the job forever. On timeout the
   // signal aborts and the crawler returns what it has so far (graceful partial).
   const ac = new AbortController();
@@ -44,9 +50,11 @@ async function discover(job: Job<JobData["discover"]>) {
     log: log.child(sourceKey),
     limit,
     options,
+    since,
     signal: ac.signal,
     onProgress: (p) => void job.updateProgress({ stage: "crawl", ...p }),
   });
+  log.info("discover start", { sourceKey, mode: since ? `incremental since ${since.toISOString()}` : "full" });
   const runId = await repo.startScrapeRun(sourceKey);
 
   try {
