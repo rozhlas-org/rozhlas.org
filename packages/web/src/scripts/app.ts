@@ -16,6 +16,7 @@ import {
   savedShowsView,
   showView,
   transcriptSearchView,
+  wireOmniMore,
   type ViewResult,
 } from "./views.ts";
 import { initOffline, mountOffline } from "./offline-ui.ts";
@@ -230,5 +231,7 @@ wireTranscript();
 initPwa();
 // Offline downloads: detail-page "Uložit offline" control + Stažené removals.
 initOffline();
+// "Načíst další" on omnisearch — append the next page of results in place.
+wireOmniMore();
 
 render();

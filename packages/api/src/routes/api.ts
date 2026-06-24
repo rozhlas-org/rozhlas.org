@@ -40,7 +40,8 @@ apiRoutes.get("/", (c) =>
 apiRoutes.get("/omnisearch", async (c) => {
   const q = c.req.query("q") ?? "";
   if (!q.trim()) return c.json({ error: "missing q" }, 400);
-  return c.json(await omnisearch(q));
+  const offset = Math.max(0, Number(c.req.query("offset")) || 0); // "load more" paging
+  return c.json(await omnisearch(q, { offset }));
 });
 
 // Search inside transcripts → shows + timestamped snippets (optional ?programme=).
