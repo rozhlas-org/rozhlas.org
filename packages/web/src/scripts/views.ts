@@ -8,6 +8,7 @@ import { getProgress } from "./progress.ts";
 import { getHistory, logView, type HistoryEntry } from "./history.ts";
 import { getFavourites, isFavourite, refreshFavourite, type FavItem } from "./favourites.ts";
 import { getSavedShow, savedToDetail, listSavedShows, fmtBytes, type SavedShow } from "./offline.ts";
+import { applyPartMarquees } from "./player.ts";
 
 export interface ViewResult {
   title: string;
@@ -535,13 +536,61 @@ export async function omnisearchView(params: URLSearchParams): Promise<ViewResul
   const result = q ? await api.omnisearch(q) : null;
   const resultHtml = result
     ? result.items.length
-      ? `<p class="result-count">${result.items.length} výsledků</p>${showGrid(result.items)}`
+      ? `<p class="result-count">${result.total} výsledků</p>${showGrid(result.items)}${
+          result.hasMore
+            ? `<div class="load-more"><button type="button" class="btn" data-omni-more` +
+              ` data-q="${attr(q)}" data-offset="${result.items.length}">Načíst další</button></div>`
+            : ""
+        }`
       : `<p class="result-count">Nic jsme nenašli pro „${esc(q)}".</p>`
     : "";
   return {
     title: q ? `Hledání: ${q}` : "Univerzální vyhledávání",
     html: searchBox(q, "h1") + (resultHtml ? `<section class="omni">${resultHtml}</section>` : ""),
   };
+}
+
+let omniMoreWired = false;
+/** "Load more" for omnisearch — append the next page of cards in place (the play/
+ * queue/favourite handlers are delegated, so appended cards work; only the díl-title
+ * marquees need re-wiring). Installed once at startup. */
+export function wireOmniMore(): void {
+  if (omniMoreWired) return;
+  omniMoreWired = true;
+  document.addEventListener("click", async (e) => {
+    const btn = (e.target as HTMLElement).closest("[data-omni-more]") as HTMLButtonElement | null;
+    if (!btn) return;
+    const q = btn.dataset.q ?? "";
+    const offset = Number(btn.dataset.offset) || 0;
+    const grid = btn.closest(".omni")?.querySelector(".show-grid");
+    if (!q || !grid) return;
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Načítám…";
+    try {
+      const res = await api.omnisearch(q, offset);
+      // Each page is a separate retrieval, so a boundary item can rarely repeat —
+      // dedup against what's already on screen so the user never sees a duplicate.
+      const shown = new Set(
+        Array.from(grid.querySelectorAll<HTMLAnchorElement>("a.show-card__link")).map((a) =>
+          a.getAttribute("href"),
+        ),
+      );
+      const fresh = res.items.filter((s) => !shown.has(`/show/${encodeURIComponent(s.slug)}`));
+      grid.insertAdjacentHTML("beforeend", fresh.map((s) => showCard(s)).join(""));
+      applyPartMarquees();
+      if (res.hasMore) {
+        btn.dataset.offset = String(offset + res.items.length);
+        btn.disabled = false;
+        btn.textContent = label;
+      } else {
+        btn.closest(".load-more")?.remove();
+      }
+    } catch {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
 }
 
 export async function showView(slug: string): Promise<ViewResult> {

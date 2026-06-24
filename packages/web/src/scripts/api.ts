@@ -122,6 +122,8 @@ export interface Intent {
 export interface OmniResult {
   intent: Intent;
   items: ShowListItem[];
+  total: number; // diversified result count across all pages
+  hasMore: boolean; // another page exists after this offset
   vectorHits: number;
   ftsHits: number;
 }
@@ -166,7 +168,8 @@ export const api = {
   showTranscript: (slug: string) =>
     getJSON<{ parts: ShowTranscriptPart[] }>(`/api/shows/${encodeURIComponent(slug)}/transcript`),
   similar: (slug: string) => getJSON<ShowListItem[]>(`/api/shows/${encodeURIComponent(slug)}/similar`),
-  omnisearch: (q: string) => getJSON<OmniResult>("/api/omnisearch", { q }),
+  omnisearch: (q: string, offset = 0) =>
+    getJSON<OmniResult>("/api/omnisearch", offset ? { q, offset } : { q }),
   transcriptSearch: (q: string, programme?: string) =>
     getJSON<TranscriptSearchResult>("/api/transcript-search", { q, programme }),
   programmes: () => getJSON<Programme[]>("/api/programmes"),
