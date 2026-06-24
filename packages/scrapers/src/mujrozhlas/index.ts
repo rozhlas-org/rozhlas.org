@@ -146,7 +146,32 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
         await processShow(show);
       }
       if (cfg.hub && !ctx.signal?.aborted) {
-        for (const show of await enumerateShows(ctx, cfg.hub)) {
+        // Hub shows are resolved by an expensive crawl (hundreds of show-page fetches).
+        // Cache that set and reuse it every run; re-enumerate only on first run (empty
+        // cache) or an explicit refresh. The cheap per-show episode fetch still runs each
+        // time. Without a cache (tests/non-worker) it's the original always-enumerate path.
+        let hubShows: ApiShowRef[];
+        if (ctx.hubCache) {
+          const cached = await ctx.hubCache.get();
+          const stale = ctx.refreshHub === true || cached.length === 0;
+          if (stale) {
+            const res = await enumerateShows(ctx, cfg.hub);
+            hubShows = res.shows;
+            // Only overwrite the cache with a COMPLETE crawl — a watchdog-abort or a
+            // fetch-cap truncation must not replace a good set with a partial one.
+            if (res.complete && res.shows.length > 0) await ctx.hubCache.save(res.shows);
+            else if (!res.complete)
+              ctx.log.warn("hub crawl incomplete — kept cached set", { fresh: res.shows.length, cached: cached.length });
+            // If incomplete but we had a cache, prefer the cache for this run.
+            if (!res.complete && cached.length > 0) hubShows = cached;
+          } else {
+            hubShows = cached;
+            ctx.log.info("hub cache hit", { shows: hubShows.length });
+          }
+        } else {
+          hubShows = (await enumerateShows(ctx, cfg.hub)).shows;
+        }
+        for (const show of hubShows) {
           if (ctx.signal?.aborted) break;
           if (seen.has(show.uuid)) continue;
           seen.add(show.uuid);

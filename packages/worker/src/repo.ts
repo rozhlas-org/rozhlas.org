@@ -16,7 +16,32 @@ const {
   scrapeRuns,
   transcripts,
   transcriptChunks,
+  hubShows,
 } = schema;
+
+export interface HubShowRef {
+  uuid: string;
+  name: string;
+}
+
+/** Cached hub-resolved show UUIDs for a source (empty if never enumerated). */
+export async function getHubShows(sourceKey: string): Promise<HubShowRef[]> {
+  return db
+    .select({ uuid: hubShows.uuid, name: hubShows.name })
+    .from(hubShows)
+    .where(eq(hubShows.sourceKey, sourceKey));
+}
+
+/** Replace a source's cached hub show set (delete-all + bulk insert) in one transaction. */
+export async function saveHubShows(sourceKey: string, refs: HubShowRef[]): Promise<void> {
+  const rows = refs.map((r) => ({ sourceKey, uuid: r.uuid, name: r.name }));
+  db.transaction((tx) => {
+    tx.delete(hubShows).where(eq(hubShows.sourceKey, sourceKey)).run();
+    for (let i = 0; i < rows.length; i += 500) {
+      tx.insert(hubShows).values(rows.slice(i, i + 500)).run(); // chunk: stay under SQLite's param cap
+    }
+  });
+}
 
 export async function upsertSource(key: string, title: string, schedule?: string, transcribe = true) {
   await db

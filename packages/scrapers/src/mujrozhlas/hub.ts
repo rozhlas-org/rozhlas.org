@@ -74,7 +74,14 @@ function topUuids(html: string, n: number): string[] {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([u]) => u);
 }
 
-export async function enumerateShows(ctx: ScrapeCtx, hub: HubConfig): Promise<ApiShowRef[]> {
+export interface HubEnumeration {
+  shows: ApiShowRef[];
+  /** False if the crawl was aborted (watchdog) or hit the fetch cap — i.e. partial, so the
+   *  caller must NOT overwrite a good cache with it. */
+  complete: boolean;
+}
+
+export async function enumerateShows(ctx: ScrapeCtx, hub: HubConfig): Promise<HubEnumeration> {
   const abs = (u: string) => (u.startsWith("http") ? u : hub.origin + u);
   const hostRe = hub.origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const linkRe = new RegExp(`href="((?:${hostRe})?\\/[a-z0-9-]+-\\d{5,})`, "g");
@@ -147,6 +154,7 @@ export async function enumerateShows(ctx: ScrapeCtx, hub: HubConfig): Promise<Ap
   };
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
-  ctx.log.info("hub enumerated", { shows: found.size, candidates: candidates.size, fetched: fetches });
-  return [...found.entries()].map(([uuid, name]) => ({ uuid, name }));
+  const complete = !ctx.signal?.aborted && fetches < maxFetches;
+  ctx.log.info("hub enumerated", { shows: found.size, candidates: candidates.size, fetched: fetches, complete });
+  return { shows: [...found.entries()].map(([uuid, name]) => ({ uuid, name })), complete };
 }
