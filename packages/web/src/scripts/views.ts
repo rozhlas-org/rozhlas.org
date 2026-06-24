@@ -234,7 +234,7 @@ function searchBox(q = "", heading: "h1" | "h2" = "h1"): string {
       <${heading} class="mood__title">Univerzální vyhledávání</${heading}>
       <p class="omni__hint">Hledejte podle názvu, autora, tématu i obsahu — stačí napsat, co hledáte, klidně celou větou.</p>
       <form class="omni__form" action="/omnisearch" method="get">
-        <textarea name="q" rows="2" placeholder="Co hledáte?">${esc(q)}</textarea>
+        <input type="search" name="q" placeholder="Co hledáte?" value="${attr(q)}" />
         <button type="submit">Hledat</button>
       </form>
     </section>`;
@@ -734,7 +734,7 @@ export async function transcriptSearchView(params: URLSearchParams): Promise<Vie
         <h1>Hledat v přepisech</h1>
         <p class="omni__hint">Prohledejte text namluvených pořadů — sémanticky i podle klíčových slov. Kliknutím na výsledek se přehraje přesně v daném místě.</p>
         <form class="omni__form" action="/transcripts" method="get">
-          <textarea name="q" rows="2" placeholder="Co hledáte v přepisu?">${esc(q)}</textarea>
+          <input type="search" name="q" placeholder="Co hledáte v přepisu?" value="${attr(q)}" />
           <button type="submit">Hledat</button>
         </form>
         ${body}
