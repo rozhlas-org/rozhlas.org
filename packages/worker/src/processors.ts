@@ -19,6 +19,7 @@ import { getProvider, embedShows, embedTranscriptChunks } from "@rozhlas/embeddi
 import * as repo from "./repo.ts";
 import {
   groqUsedSecondsLastHour,
+  groqUsedSecondsLastDay,
   groqRecordUsage,
   groqHeartbeat,
   groqInCooldown,
@@ -334,11 +335,16 @@ async function groqBackfillTick(_job: Job<JobData["groq-backfill"]>) {
   if (await groqInCooldown()) return { skipped: "cooldown" }; // backing off after a 429
   const used = await groqUsedSecondsLastHour();
   if (used >= config.GROQ_AUDIO_SECONDS_PER_HOUR) return { skipped: "rate" };
+  // Daily ceiling, kept under Groq's free-tier cap so a continuous backlog sweep
+  // stays in bounds (the per-hour gate alone burns to the daily limit then 429s).
+  const usedDay = await groqUsedSecondsLastDay();
+  if (usedDay >= config.GROQ_AUDIO_SECONDS_PER_DAY) return { skipped: "daily-cap" };
 
   const next = await repo.nextUntranscribedByDate([...groqSkip]);
   if (!next?.cid) return { skipped: "drained" };
-  // Don't blow the hourly budget with this one file.
+  // Don't blow the hourly or daily budget with this one file.
   if (used + (next.durationSec ?? 0) > config.GROQ_AUDIO_SECONDS_PER_HOUR) return { skipped: "rate-file" };
+  if (usedDay + (next.durationSec ?? 0) > config.GROQ_AUDIO_SECONDS_PER_DAY) return { skipped: "daily-cap-file" };
   if (await repo.transcriptExists(next.id)) return { skipped: "race" };
 
   const ac = new AbortController();
