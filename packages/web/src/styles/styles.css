@@ -740,9 +740,11 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
   margin-bottom: 6px;
   display: flex;
   flex-direction: column;
-  /* Fill the space above the player up to ~6px from the top, so a long transcript
-     leaves no unfilled gap. --player-h is measured by player.ts (fallback 168px). */
-  max-height: calc(100dvh - var(--player-h, 168px) - 12px);
+  /* Fill the whole space above the player, right up to the very top of the
+     viewport (only the 6px margin-bottom gap above the player is subtracted, so
+     a long transcript leaves no gap at the top). --player-h is measured by
+     player.ts (fallback 168px). */
+  max-height: calc(100dvh - var(--player-h, 168px) - 6px);
   background: var(--key);
   color: var(--paper);
   border: var(--border);
