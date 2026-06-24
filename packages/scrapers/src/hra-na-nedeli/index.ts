@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const hraNaNedeliScraper = makeApiScraper({
   key: "hra-na-nedeli",
   title: "Český rozhlas — Hra na neděli",
-  schedule: "0 12 * * *", // nightly, offset from the other API sources
+  schedule: "19 1,7,13,19 * * *", // every 6h, staggered
   shows: [{ uuid: "0e65e92d-3eb9-329a-8b35-86d9b7e1ce76", name: "Hra na neděli" }],
 });

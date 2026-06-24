@@ -12,6 +12,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const serialRadiozurnaluScraper = makeApiScraper({
   key: "serial-radiozurnalu",
   title: "Český rozhlas Radiožurnál — Seriál Radiožurnálu",
-  schedule: "30 9 * * *", // nightly; :30 offset (the hourly slots are taken)
+  schedule: "55 0,6,12,18 * * *", // every 6h, staggered
   shows: [{ uuid: "816732b1-04cc-3f40-972a-ba16bf5a6eb1", name: "Seriál Radiožurnálu" }],
 });

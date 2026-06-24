@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const tadyToZnamScraper = makeApiScraper({
   key: "tady-to-znam",
   title: "Český rozhlas — Tady to znám",
-  schedule: "0 18 * * *", // nightly, offset from the other API sources
+  schedule: "31 1,7,13,19 * * *", // every 6h, staggered
   shows: [{ uuid: "e4ced81f-0f6a-3594-9fe4-fc531bb2b28d", name: "Tady to znám" }],
 });

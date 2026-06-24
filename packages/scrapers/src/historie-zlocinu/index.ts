@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const historieZlocinuScraper = makeApiScraper({
   key: "historie-zlocinu",
   title: "Český rozhlas — Historie českého zločinu",
-  schedule: "0 15 * * *", // nightly, offset from the other API sources
+  schedule: "19 4,10,16,22 * * *", // every 6h, staggered
   shows: [{ uuid: "c9395a54-f2db-3013-8d5b-94bbc38617ce", name: "Historie českého zločinu" }],
 });

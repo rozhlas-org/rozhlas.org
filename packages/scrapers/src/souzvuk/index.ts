@@ -12,7 +12,7 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const souzvukScraper = makeApiScraper({
   key: "souzvuk",
   title: "Souzvuk",
-  schedule: "30 10 * * *", // nightly; :30 offset (the hourly slots are taken)
+  schedule: "55 1,7,13,19 * * *", // every 6h, staggered
   transcribe: true,
   shows: [{ uuid: "c21ff788-8857-31a1-92f1-f26f8db32188", name: "Souzvuk" }],
 });

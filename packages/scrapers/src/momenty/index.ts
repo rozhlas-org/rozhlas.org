@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const momentyScraper = makeApiScraper({
   key: "momenty",
   title: "Český rozhlas — Momenty",
-  schedule: "30 6 * * *", // nightly; :30 offset (the hourly slots are taken)
+  schedule: "43 3,9,15,21 * * *", // every 6h, staggered
   shows: [{ uuid: "60c3a92e-0efe-315e-93c7-3d2e0a2c4996", name: "Momenty" }],
 });

@@ -13,6 +13,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const pribehyKalendareScraper = makeApiScraper({
   key: "pribehy-kalendare",
   title: "Český rozhlas — Příběhy z kalendáře",
-  schedule: "0 10 * * *", // nightly, offset from the other API sources
+  schedule: "7 5,11,17,23 * * *", // every 6h, staggered
   shows: [{ uuid: "03f669b2-150c-31f0-bba2-9f08d46995da", name: "Příběhy z kalendáře" }],
 });

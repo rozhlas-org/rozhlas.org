@@ -12,6 +12,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const juniorPribehyScraper = makeApiScraper({
   key: "junior-pribehy",
   title: "Rádio Junior — příběhy a pohádky",
-  schedule: "0 7 * * *", // nightly, offset from cetba (04), wave (05), pohadka (06)
+  schedule: "7 2,8,14,20 * * *", // every 6h, staggered
   hub: { origin: "https://junior.rozhlas.cz", seeds: ["/pribehy"] },
 });

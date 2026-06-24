@@ -13,7 +13,7 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const jakToByloDoopravdyScraper = makeApiScraper({
   key: "jak-to-bylo-doopravdy",
   title: "Jak to bylo doopravdy",
-  schedule: "30 11 * * *", // nightly; :30 offset (the hourly slots are taken)
+  schedule: "55 2,8,14,20 * * *", // every 6h, staggered
   transcribe: true,
   shows: [{ uuid: "b742d96b-a56e-364b-9522-65dae3cf5352", name: "Jak to bylo doopravdy" }],
 });

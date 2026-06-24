@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const setkaniSLiteraturouScraper = makeApiScraper({
   key: "setkani-s-literaturou",
   title: "Český rozhlas — Setkání s literaturou",
-  schedule: "0 22 * * *", // nightly, offset from the other API sources
+  schedule: "31 5,11,17,23 * * *", // every 6h, staggered
   shows: [{ uuid: "9aec0249-3f85-3b42-8d7e-b8e8a3c76e39", name: "Setkání s literaturou" }],
 });
