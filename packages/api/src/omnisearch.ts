@@ -1,8 +1,9 @@
-import { createLogger, knnShows, sqlite, stripHtml, toFtsQuery, type KnnHit } from "@rozhlas/core";
+import { createLogger, knnShows, sqlite, toFtsQuery, type KnnHit } from "@rozhlas/core";
 import { getProvider } from "@rozhlas/embeddings";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
-import { transcriptLegs } from "./transcript-search.ts";
+import { transcriptLegs, refineStartSec } from "./transcript-search.ts";
 import { parseIntent, type Intent } from "./intent.ts";
+import { buildExcerpt, fold, queryTerms } from "./text.ts";
 
 const log = createLogger("api:omnisearch");
 
@@ -17,90 +18,6 @@ function ftsIds(text: string, limit = 100): number[] {
   } catch {
     return [];
   }
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-// Czech diacritic fold, ONE code point in → one out, so a folded string stays
-// index-aligned with the original (lets us match diacritic-insensitively but
-// highlight the original text). NFD-based stripping would change length.
-const FOLD: Record<string, string> = {
-  á: "a", č: "c", ď: "d", é: "e", ě: "e", í: "i", ň: "n", ó: "o", ř: "r",
-  š: "s", ť: "t", ú: "u", ů: "u", ý: "y", ž: "z", ä: "a", ö: "o", ü: "u",
-};
-function fold(s: string): string {
-  let out = "";
-  for (const ch of s) {
-    const lc = ch.toLowerCase();
-    out += lc.length === 1 ? (FOLD[lc] ?? lc) : ch; // keep 1:1 even if lowercase grows
-  }
-  return out;
-}
-
-/** Decode the few HTML entities that survive tag-stripping in descriptions. */
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&nbsp;/g, " ")
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
-}
-
-/** Significant query terms (folded, >2 chars) for boosting + snippet highlighting. */
-function queryTerms(q: string): string[] {
-  return fold(q)
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 2);
-}
-
-/**
- * Highlighted ~200-char excerpt of `rawText` around the first query-term match,
- * folded for diacritic-insensitive matching and wrapped in <mark> on the original
- * text. With `requireMatch`, returns null when no term is present (description
- * snippets — skip when the match was only in the title); without it, falls back to
- * a plain leading excerpt (transcript chunks, which may be semantic matches).
- */
-function buildExcerpt(rawText: string, terms: string[], requireMatch: boolean): string | null {
-  const text = decodeEntities(stripHtml(rawText)).replace(/\s+/g, " ").trim();
-  if (!text) return null;
-  const folded = fold(text); // index-aligned with `text`
-  const spans: [number, number][] = [];
-  let earliest = -1;
-  for (const t of terms) {
-    for (let i = folded.indexOf(t); i >= 0; i = folded.indexOf(t, i + t.length)) {
-      spans.push([i, i + t.length]);
-      if (earliest < 0 || i < earliest) earliest = i;
-    }
-  }
-  if (earliest < 0 && requireMatch) return null;
-  const start = earliest < 0 ? 0 : Math.max(0, earliest - 60);
-  const end = Math.min(text.length, start + 200);
-  const inWin = spans.filter(([s, e]) => e > start && s < end).sort((a, b) => a[0] - b[0]);
-  const merged: [number, number][] = [];
-  for (const sp of inWin) {
-    const last = merged[merged.length - 1];
-    if (last && sp[0] <= last[1]) last[1] = Math.max(last[1], sp[1]);
-    else merged.push([...sp]);
-  }
-  let html = "";
-  let cur = start;
-  for (const [s, e] of merged) {
-    const s2 = Math.max(s, start);
-    const e2 = Math.min(e, end);
-    html += escapeHtml(text.slice(cur, s2)) + "<mark>" + escapeHtml(text.slice(s2, e2)) + "</mark>";
-    cur = e2;
-  }
-  html += escapeHtml(text.slice(cur, end));
-  return (start > 0 ? "…" : "") + html + (end < text.length ? "…" : "");
 }
 
 /** Description snippets for shows whose description contains a query term. */
@@ -132,6 +49,7 @@ export interface OmniResult {
  * highlighted description snippet.
  */
 export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
+  query = query.trim().replace(/\s+/g, " "); // strip surrounding / collapse repeated whitespace
   const intent = await parseIntent(query);
   const provider = getProvider();
   // What to embed: an LLM-rewritten phrase when one ran (claude/ollama), else the
@@ -196,9 +114,13 @@ export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
       return {
         ...it,
         transcriptHit: {
-          startSec: hit.startSec,
+          // The chunk groups ~1500 chars (~2 min) and stores only its first
+          // segment's start; pin the timestamp to the segment that actually says
+          // the term so the deep-link lands on the mention, not up to a minute early.
+          startSec: refineStartSec(hit.transcriptId, hit.startSec, hit.endSec, terms),
           partIdx: hit.partIdx,
-          snippet: buildExcerpt(hit.text, terms, false) ?? "",
+          // Wider window than description snippets — more spoken context around the hit.
+          snippet: buildExcerpt(hit.text, terms, false, 140, 480) ?? "",
         },
       };
     }
