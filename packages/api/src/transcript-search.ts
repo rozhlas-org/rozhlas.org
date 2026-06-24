@@ -2,6 +2,7 @@ import { createLogger, db, knnChunks, schema, sqlite, toFtsQuery, type ChunkKnnH
 import { eq, inArray } from "drizzle-orm";
 import { getProvider, chunkVectorSearch } from "@rozhlas/embeddings";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
+import { buildExcerpt, fold, queryTerms } from "./text.ts";
 
 const log = createLogger("api:transcript-search");
 const { transcriptChunks, transcripts, audioFiles, showParts } = schema;
@@ -9,6 +10,8 @@ const { transcriptChunks, transcripts, audioFiles, showParts } = schema;
 /** The best transcript chunk for a show: where it is + the spoken text. */
 export interface TranscriptShowHit {
   startSec: number;
+  endSec: number;
+  transcriptId: number; // to refine startSec to the exact spoken segment
   partIdx: number | null; // which díl (null = single-audio show)
   text: string;
 }
@@ -55,6 +58,8 @@ export async function transcriptLegs(
       id: transcriptChunks.id,
       showId: transcriptChunks.showId,
       startSec: transcriptChunks.startSec,
+      endSec: transcriptChunks.endSec,
+      transcriptId: transcriptChunks.transcriptId,
       text: transcriptChunks.text,
       partIdx: showParts.idx, // null for single-audio shows
     })
@@ -81,7 +86,13 @@ export async function transcriptLegs(
   for (const cid of chunkOrder) {
     const ci = info.get(cid);
     if (!ci || best.has(ci.showId)) continue;
-    best.set(ci.showId, { startSec: ci.startSec, partIdx: ci.partIdx, text: ci.text });
+    best.set(ci.showId, {
+      startSec: ci.startSec,
+      endSec: ci.endSec,
+      transcriptId: ci.transcriptId,
+      partIdx: ci.partIdx,
+      text: ci.text,
+    });
   }
   return {
     vectorShowIds: dedupByShow(knn.map((h) => h.chunkId)),
@@ -102,6 +113,38 @@ export interface TranscriptSearchResult {
   items: { show: ShowListItem; hits: TranscriptHit[] }[];
   vectorHits: number;
   ftsHits: number;
+}
+
+/**
+ * Pin a chunk-level hit to the exact spoken segment. A chunk groups up to ~1500
+ * chars (~2 min) of speech and stores only its first segment's start, so a mention
+ * late in the chunk would deep-link up to a minute early. Scan the transcript's
+ * segments within [chunkStart, chunkEnd] for the first one containing a (folded)
+ * query term and return its start; fall back to the chunk start (e.g. a purely
+ * semantic hit with no literal term in the text).
+ */
+export function refineStartSec(
+  transcriptId: number,
+  chunkStart: number,
+  chunkEnd: number,
+  terms: string[],
+): number {
+  if (!terms.length) return chunkStart;
+  const row = sqlite
+    .prepare("SELECT segments_json AS s FROM transcripts WHERE id = ?")
+    .get(transcriptId) as { s?: string } | undefined;
+  if (!row?.s) return chunkStart;
+  try {
+    const segs = JSON.parse(row.s) as { start: number; text: string }[];
+    for (const sg of segs) {
+      if (sg.start < chunkStart - 2 || sg.start > chunkEnd + 2) continue;
+      const folded = fold(sg.text);
+      if (terms.some((t) => folded.includes(t))) return Math.floor(sg.start);
+    }
+  } catch {
+    /* malformed segments — fall back to the chunk start */
+  }
+  return chunkStart;
 }
 
 function ftsChunkIds(text: string, limit = 120): number[] {
@@ -126,8 +169,10 @@ export async function transcriptSearch(
   query: string,
   opts: { k?: number; programme?: string } = {},
 ): Promise<TranscriptSearchResult> {
+  query = query.trim().replace(/\s+/g, " "); // strip surrounding / collapse repeated whitespace
   const k = opts.k ?? 24;
   const provider = getProvider();
+  const terms = queryTerms(query);
 
   // Semantic leg is best-effort (Voyage 429 → keyword only), same as omnisearch.
   let knn: ChunkKnnHit[] = [];
@@ -154,6 +199,7 @@ export async function transcriptSearch(
       showId: transcriptChunks.showId,
       startSec: transcriptChunks.startSec,
       endSec: transcriptChunks.endSec,
+      transcriptId: transcriptChunks.transcriptId,
       text: transcriptChunks.text,
       partIdx: showParts.idx, // null for single-audio shows
     })
@@ -164,11 +210,11 @@ export async function transcriptSearch(
     .where(inArray(transcriptChunks.id, chunkIds));
 
   // Group chunk hits per show.
-  type Hit = { startSec: number; endSec: number; text: string; partIdx: number | null; score: number };
+  type Hit = { startSec: number; endSec: number; transcriptId: number; text: string; partIdx: number | null; score: number };
   const byShow = new Map<number, Hit[]>();
   for (const r of rows) {
     const arr = byShow.get(r.showId) ?? [];
-    arr.push({ startSec: r.startSec, endSec: r.endSec, text: r.text, partIdx: r.partIdx, score: scores.get(r.id) ?? 0 });
+    arr.push({ startSec: r.startSec, endSec: r.endSec, transcriptId: r.transcriptId, text: r.text, partIdx: r.partIdx, score: scores.get(r.id) ?? 0 });
     byShow.set(r.showId, arr);
   }
 
@@ -187,7 +233,12 @@ export async function transcriptSearch(
       .get(id)!
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
-      .map((h) => ({ startSec: h.startSec, endSec: h.endSec, snippet: h.text.slice(0, 220), partIdx: h.partIdx }));
+      .map((h) => ({
+        startSec: refineStartSec(h.transcriptId, h.startSec, h.endSec, terms), // exact segment, not chunk start
+        endSec: h.endSec,
+        snippet: buildExcerpt(h.text, terms, false, 140, 480) ?? h.text.slice(0, 280), // wider spoken context
+        partIdx: h.partIdx,
+      }));
     items.push({ show, hits });
     if (items.length >= k) break;
   }
