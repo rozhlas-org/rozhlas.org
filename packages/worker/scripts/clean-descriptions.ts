@@ -15,7 +15,7 @@ import { cleanDescription } from "@rozhlas/core";
 
 const apply = process.argv.includes("--apply");
 const dbPath = process.env.DB_PATH ?? "data/rozhlas.db";
-const db = new Database(dbPath, { readonly: !apply });
+const db = new Database(dbPath, apply ? { readwrite: true } : { readonly: true });
 db.exec("PRAGMA busy_timeout=10000");
 
 const rows = db
