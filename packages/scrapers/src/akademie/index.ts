@@ -5,14 +5,14 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
  * via the mujRozhlas JSON:API. Single umbrella show pinned by UUID.
  *   • Akademie — 093f7f41-a78e-32ef-bc3a-573edb7ef308
  *
- * Transcription OFF for now: the one-time bulk back-catalogue is loaded without it
- * (avoids grinding the whole archive through whisper). We flip `transcribe` on later;
- * future episodes then transcribe normally while the already-loaded files stay un-transcribed.
+ * Transcription on: the bulk back-catalogue was loaded with it off; now flipped on
+ * so future episodes transcribe normally (already-loaded files stay un-transcribed
+ * unless deliberately backfilled).
  */
 export const akademieScraper = makeApiScraper({
   key: "akademie",
   title: "Český rozhlas Vltava — Akademie",
   schedule: "13 1,7,13,19 * * *", // every 6h, staggered
-  transcribe: false,
+  transcribe: true,
   shows: [{ uuid: "093f7f41-a78e-32ef-bc3a-573edb7ef308", name: "Akademie" }],
 });
