@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const osudoveZenyScraper = makeApiScraper({
   key: "osudove-zeny",
   title: "Český rozhlas — Osudové ženy",
-  schedule: "0 14 * * *", // nightly, offset from the other API sources
+  schedule: "19 3,9,15,21 * * *", // every 6h, staggered
   shows: [{ uuid: "e69d38d3-5b96-3692-8bd9-cf42fa93a2a8", name: "Osudové ženy" }],
 });

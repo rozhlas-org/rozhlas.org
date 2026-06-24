@@ -40,7 +40,7 @@ function nextLink(json: any): string | null {
  *
  * When `stopBefore` is given, episodes are fetched **newest-first** (`sort=-since`)
  * and iteration stops at the first episode older than the cutoff — so an incremental
- * (nightly) run reads only the recent window instead of paginating the whole history.
+ * (scheduled) run reads only the recent window instead of paginating the whole history.
  * Episodes with no `since` are always yielded (can't be dated) and don't early-exit.
  */
 export async function* iterateEpisodes(

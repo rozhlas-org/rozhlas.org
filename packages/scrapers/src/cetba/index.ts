@@ -10,7 +10,7 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const cetbaScraper = makeApiScraper({
   key: "cetba",
   title: "Český rozhlas — četba a literatura",
-  schedule: "0 4 * * *", // nightly
+  schedule: "7 0,6,12,18 * * *", // every 6h, staggered
   hub: { origin: "https://vltava.rozhlas.cz", seeds: ["/hry-a-cetba"] },
   // Cross-station umbrella programmes the Vltava hub doesn't link — pinned by UUID.
   // "Četba na pokračování" exists under three show UUIDs: the 2020 archive, the

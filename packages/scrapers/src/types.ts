@@ -66,7 +66,7 @@ export interface ScrapeCtx {
   /** Hard cap on HTTP fetches per run, so runtime stays bounded. */
   maxFetches?: number;
   /** Incremental cutoff: only items published at/after this. API sources fetch
-   *  newest-first and stop once older — so a nightly run touches just the recent
+   *  newest-first and stop once older — so a scheduled run touches just the recent
    *  window, not the whole back-catalogue. Undefined = full crawl (first run / backfill). */
   since?: Date;
 }

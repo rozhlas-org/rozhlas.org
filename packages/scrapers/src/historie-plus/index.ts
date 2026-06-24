@@ -13,6 +13,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const historiePlusScraper = makeApiScraper({
   key: "historie-plus",
   title: "Český rozhlas Plus — Historie Plus",
-  schedule: "0 9 * * *", // nightly, offset from the other API sources
+  schedule: "7 4,10,16,22 * * *", // every 6h, staggered
   shows: [{ uuid: "6f1d6fd8-db19-3fc8-8cfc-4b8aed97ee53", name: "Historie Plus" }],
 });

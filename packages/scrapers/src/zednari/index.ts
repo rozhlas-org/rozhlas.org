@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const zednariScraper = makeApiScraper({
   key: "zednari",
   title: "Český rozhlas — Zednáři",
-  schedule: "0 16 * * *", // nightly, offset from the other API sources
+  schedule: "19 5,11,17,23 * * *", // every 6h, staggered
   shows: [{ uuid: "ba9611d0-c9c3-3d34-b684-525fccaa467c", name: "Zednáři" }],
 });

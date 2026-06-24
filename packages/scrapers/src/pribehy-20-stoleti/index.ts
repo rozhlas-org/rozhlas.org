@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const pribehy20StoletiScraper = makeApiScraper({
   key: "pribehy-20-stoleti",
   title: "Český rozhlas — Příběhy 20. století",
-  schedule: "0 13 * * *", // nightly, offset from the other API sources
+  schedule: "19 2,8,14,20 * * *", // every 6h, staggered
   shows: [{ uuid: "d200d0b5-78d5-3cca-9052-834f13135225", name: "Příběhy 20. století" }],
 });

@@ -12,6 +12,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const poctenickoScraper = makeApiScraper({
   key: "poctenicko",
   title: "Český rozhlas — Počteníčko",
-  schedule: "0 8 * * *", // nightly, offset from cetba(04) wave(05) pohadka(06) junior(07)
+  schedule: "7 3,9,15,21 * * *", // every 6h, staggered
   shows: [{ uuid: "3e006bb4-eb17-30ab-b2e7-3d75db4e9d0e", name: "Počteníčko" }],
 });

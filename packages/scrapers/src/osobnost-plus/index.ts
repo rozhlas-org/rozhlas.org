@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const osobnostPlusScraper = makeApiScraper({
   key: "osobnost-plus",
   title: "Český rozhlas Plus — Osobnost Plus",
-  schedule: "30 8 * * *", // nightly; :30 offset (the hourly slots are taken)
+  schedule: "43 5,11,17,23 * * *", // every 6h, staggered
   shows: [{ uuid: "ad21758a-b517-328e-9bb0-2a2e2819f0b5", name: "Osobnost Plus" }],
 });

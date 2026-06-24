@@ -18,8 +18,9 @@ export async function setupSchedules() {
       await discoverQ.upsertJobScheduler(
         `discover:${s.key}`,
         { pattern: s.schedule },
-        // Incremental nightly: after the first full run, fetch only the last 48h
-        // (the cron runs daily, so the window overlaps and can't miss items).
+        // Incremental: after the first full run, fetch only the last 48h. The cron
+        // runs every ~6h, so the 48h window overlaps generously — a missed/failed run
+        // is still covered by the next, and nothing is dropped.
         { name: "discover", data: { sourceKey: s.key, sinceHours: 48 } },
       );
       log.info("scheduled discover", { sourceKey: s.key, cron: s.schedule });

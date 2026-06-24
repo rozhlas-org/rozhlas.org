@@ -13,7 +13,7 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const pohadkaScraper = makeApiScraper({
   key: "pohadka",
   title: "Český rozhlas — pohádky",
-  schedule: "0 6 * * *", // nightly, offset from cetba (04:00) and wave (05:00)
+  schedule: "7 1,7,13,19 * * *", // every 6h, staggered
   shows: [
     { uuid: "061d0467-51d2-3cd9-b340-cd9fad2c6606", name: "Hajaja" },
     { uuid: "9704b880-3199-35c0-97ba-b130899b45ee", name: "Pohádka" },
