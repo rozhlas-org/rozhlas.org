@@ -33,7 +33,7 @@ const DISCOVER_HARD_MS = 20 * 60_000; // explicit shows land first; give the hub
 
 /** discover → upsert shows + audio rows, enqueue acquire for anything not yet pinned. */
 async function discover(job: Job<JobData["discover"]>) {
-  const { sourceKey, limit, options, sinceHours } = job.data;
+  const { sourceKey, limit, options, sinceHours, refreshHub } = job.data;
   const scraper = getScraper(sourceKey);
   // Incremental: once a source has had a full run, scheduled runs fetch only the
   // recent window (now−sinceHours). First run (no lastRunAt) and manual backfills
@@ -53,6 +53,12 @@ async function discover(job: Job<JobData["discover"]>) {
     since,
     signal: ac.signal,
     onProgress: (p) => void job.updateProgress({ stage: "crawl", ...p }),
+    // Hub sources: reuse the cached resolved-show set; re-enumerate only on demand.
+    hubCache: {
+      get: () => repo.getHubShows(sourceKey),
+      save: (shows) => repo.saveHubShows(sourceKey, shows),
+    },
+    refreshHub,
   });
   log.info("discover start", { sourceKey, mode: since ? `incremental since ${since.toISOString()}` : "full" });
   const runId = await repo.startScrapeRun(sourceKey);

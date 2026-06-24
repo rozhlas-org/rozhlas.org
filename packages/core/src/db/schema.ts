@@ -353,6 +353,26 @@ export const categoryGroupProgrammes = sqliteTable(
 export type CategoryGroup = typeof categoryGroups.$inferSelect;
 export type CategoryGroupProgramme = typeof categoryGroupProgrammes.$inferSelect;
 
+/**
+ * Cached result of a hub source's expensive show-UUID enumeration (e.g. cetba's
+ * Vltava hub crawl). Resolved once and reused every run; re-enumerated only on
+ * demand. The discover episode fetch (incremental) is cheap; this avoids re-crawling
+ * hundreds of show pages each run.
+ */
+export const hubShows = sqliteTable(
+  "hub_shows",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sourceKey: text("source_key").notNull(),
+    uuid: text("uuid").notNull(), // mujRozhlas show UUID
+    name: text("name").notNull(), // programme name (ScrapedShow.showName)
+    ...timestamps,
+  },
+  (t) => ({ sourceUuidUnique: uniqueIndex("hub_shows_source_uuid_unique").on(t.sourceKey, t.uuid) }),
+);
+
+export type HubShow = typeof hubShows.$inferSelect;
+
 export type Show = typeof shows.$inferSelect;
 export type NewShow = typeof shows.$inferInsert;
 export type AudioFile = typeof audioFiles.$inferSelect;
