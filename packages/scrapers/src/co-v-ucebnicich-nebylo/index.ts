@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const coVUcebnicichNebyloScraper = makeApiScraper({
   key: "co-v-ucebnicich-nebylo",
   title: "Český rozhlas — Co v učebnicích nebylo",
-  schedule: "0 21 * * *", // nightly, offset from the other API sources
+  schedule: "31 4,10,16,22 * * *", // every 6h, staggered
   shows: [{ uuid: "7007c8c1-bded-3710-ad67-d12c5b188bd1", name: "Co v učebnicích nebylo" }],
 });

@@ -9,6 +9,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const waveAudiobooksScraper = makeApiScraper({
   key: "wave-audiobooks",
   title: "Audioknihy Radia Wave",
-  schedule: "0 5 * * *", // nightly (offset from cetba)
+  schedule: "55 3,9,15,21 * * *", // every 6h, staggered
   shows: [{ uuid: "0226cb25-8ea1-3adc-b3e5-f7fc4fee5774", name: "Audioknihy Radia Wave" }],
 });

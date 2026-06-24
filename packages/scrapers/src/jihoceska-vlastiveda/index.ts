@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const jihoceskaVlastivedaScraper = makeApiScraper({
   key: "jihoceska-vlastiveda",
   title: "Český rozhlas — Jihočeská vlastivěda",
-  schedule: "0 17 * * *", // nightly, offset from the other API sources
+  schedule: "31 0,6,12,18 * * *", // every 6h, staggered
   shows: [{ uuid: "30f4aa0b-7dcc-3f8b-b532-37cea52c1831", name: "Jihočeská vlastivěda" }],
 });

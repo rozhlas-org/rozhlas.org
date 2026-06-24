@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const nedelniVlnaPardubiceScraper = makeApiScraper({
   key: "nedelni-vlna-pardubice",
   title: "Český rozhlas — Na nedělní vlně z Pardubic",
-  schedule: "0 23 * * *", // nightly, offset from the other API sources
+  schedule: "43 0,6,12,18 * * *", // every 6h, staggered
   shows: [{ uuid: "e610e384-02ba-3b35-99b9-bcc23d4ad1a9", name: "Na nedělní vlně z Pardubic" }],
 });

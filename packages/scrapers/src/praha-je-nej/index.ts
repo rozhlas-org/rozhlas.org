@@ -11,6 +11,6 @@ import { makeApiScraper } from "../mujrozhlas/index.ts";
 export const prahaJeNejScraper = makeApiScraper({
   key: "praha-je-nej",
   title: "Český rozhlas — Praha je NEJ!",
-  schedule: "30 5 * * *", // nightly; :30 offset (the hourly slots are taken)
+  schedule: "43 2,8,14,20 * * *", // every 6h, staggered
   shows: [{ uuid: "ddcbb7ac-5f52-3992-8d15-78e9389473bc", name: "Praha je NEJ!" }],
 });
