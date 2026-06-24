@@ -83,6 +83,10 @@ const EnvSchema = z.object({
   // Self-pacing ceiling, under Groq free's 7,200 audio-sec/hour. Headroom (6,000)
   // absorbs the edge mismatch between our window and Groq's accounting → fewer 429s.
   GROQ_AUDIO_SECONDS_PER_HOUR: z.coerce.number().int().positive().default(6000),
+  // Rolling-24h ceiling, kept well under Groq free's ~28,800 audio-sec/day (8 h) cap.
+  // ~70% leaves headroom so a continuous backlog sweep stays in bounds instead of
+  // maxing the daily limit every day (which is what gets a free account ToS-flagged).
+  GROQ_AUDIO_SECONDS_PER_DAY: z.coerce.number().int().positive().default(20000),
   // After a 429, pause the whole backfill this long (ms) instead of retrying each tick.
   GROQ_COOLDOWN_MS: z.coerce.number().int().positive().default(300_000),
   // Transcode each file to 16 kHz mono and skip if still above this (free upload cap is 25 MB).
