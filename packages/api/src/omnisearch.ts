@@ -34,9 +34,15 @@ function descriptionSnippets(ids: number[], terms: string[]): Map<number, string
   return out;
 }
 
+// Cap results from one programme/serial so a single show's many episodes (or the
+// díly of one serialized reading) can't flood the page — diversity over repetition.
+const MAX_PER_PROGRAMME = 2;
+
 export interface OmniResult {
   intent: Intent;
   items: ShowListItem[];
+  total: number; // diversified result count across all pages (for "load more")
+  hasMore: boolean; // another page exists after this offset+limit
   vectorHits: number;
   ftsHits: number;
 }
@@ -48,7 +54,12 @@ export interface OmniResult {
  * surfaced by spoken content carry a timestamped transcript hit; others get a
  * highlighted description snippet.
  */
-export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
+export async function omnisearch(
+  query: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<OmniResult> {
+  const limit = Math.min(Math.max(opts.limit ?? 24, 1), 48);
+  const offset = Math.max(opts.offset ?? 0, 0);
   query = query.trim().replace(/\s+/g, " "); // strip surrounding / collapse repeated whitespace
   const intent = await parseIntent(query);
   const provider = getProvider();
@@ -81,11 +92,12 @@ export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
   tx.vectorShowIds.forEach((id, i) => add(id, TX_WEIGHT / (RRF_K + i)));
   tx.ftsShowIds.forEach((id, i) => add(id, TX_WEIGHT / (RRF_K + i)));
 
-  // Fetch metadata for a generous candidate pool, then re-rank with light boosts
-  // (these only move near-ties; retrieval still dominates).
+  // Generous candidate pool so paging + the per-programme diversity cap below have
+  // depth (we rank/diversify the whole pool, then slice the requested page).
+  const POOL = Math.max(300, (offset + limit) * 6);
   const pool = [...rrf.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, k * 3)
+    .slice(0, POOL)
     .map(([id]) => id);
   const map = await showItemsByIds(pool);
   const terms = queryTerms(query);
@@ -100,12 +112,26 @@ export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
     return s;
   };
 
-  const ranked = pool
-    .filter((id) => map.has(id))
-    .sort((a, b) => score(b) - score(a))
-    .slice(0, k);
-  const snips = descriptionSnippets(ranked, terms);
-  const items = ranked.map((id) => {
+  // Full re-ranked order, then a per-programme diversity cap so one programme/serial
+  // (all the díly of one Osudy, a recurring show's episodes) can't flood the page.
+  // Keep the best-scoring MAX_PER_PROGRAMME from each; one-offs (no showName) are
+  // keyed by id so distinct shows are never collapsed together.
+  const reranked = pool.filter((id) => map.has(id)).sort((a, b) => score(b) - score(a));
+  const perProgramme = new Map<string, number>();
+  const diversified: number[] = [];
+  for (const id of reranked) {
+    const it = map.get(id)!;
+    const key = it.showName || `#${id}`;
+    const n = perProgramme.get(key) ?? 0;
+    if (n >= MAX_PER_PROGRAMME) continue;
+    perProgramme.set(key, n + 1);
+    diversified.push(id);
+  }
+
+  const total = diversified.length;
+  const pageIds = diversified.slice(offset, offset + limit);
+  const snips = descriptionSnippets(pageIds, terms);
+  const items = pageIds.map((id) => {
     const it = map.get(id)!;
     // Prefer the (actionable, timestamped) transcript hit when the show matched on
     // spoken content; otherwise fall back to the highlighted description snippet.
@@ -127,5 +153,5 @@ export async function omnisearch(query: string, k = 24): Promise<OmniResult> {
     const snip = snips.get(id);
     return snip ? { ...it, snippet: snip } : it;
   });
-  return { intent, items, vectorHits: knn.length, ftsHits: fIds.length };
+  return { intent, items, total, hasMore: offset + limit < total, vectorHits: knn.length, ftsHits: fIds.length };
 }
