@@ -232,7 +232,7 @@ function listSection(heading: string, sub: string, data: ListResult, base: strin
 function searchBox(q = "", heading: "h1" | "h2" = "h1"): string {
   return `
     <section class="mood">
-      <${heading} class="mood__title">Univerzální vyhledávání</${heading}>
+      <${heading} class="mood__title">Vyhledávání</${heading}>
       <p class="omni__hint">Hledejte podle názvu, autora, tématu i obsahu — stačí napsat, co hledáte, klidně celou větou.</p>
       <form class="omni__form" action="/omnisearch" method="get">
         <input type="search" name="q" placeholder="Co hledáte?" value="${attr(q)}" />
@@ -545,7 +545,7 @@ export async function omnisearchView(params: URLSearchParams): Promise<ViewResul
       : `<p class="result-count">Nic jsme nenašli pro „${esc(q)}".</p>`
     : "";
   return {
-    title: q ? `Hledání: ${q}` : "Univerzální vyhledávání",
+    title: q ? `Hledání: ${q}` : "Vyhledávání",
     html: searchBox(q, "h1") + (resultHtml ? `<section class="omni">${resultHtml}</section>` : ""),
   };
 }
