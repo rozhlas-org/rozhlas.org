@@ -28,6 +28,9 @@ import { osobnostPlusScraper } from "./osobnost-plus/index.ts";
 import { serialRadiozurnaluScraper } from "./serial-radiozurnalu/index.ts";
 import { souzvukScraper } from "./souzvuk/index.ts";
 import { jakToByloDoopravdyScraper } from "./jak-to-bylo-doopravdy/index.ts";
+import { hlasyPametiScraper } from "./hlasy-pameti/index.ts";
+import { akademieScraper } from "./akademie/index.ts";
+import { exLibrisScraper } from "./ex-libris/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -58,6 +61,9 @@ export const SCRAPERS: Record<string, Scraper> = {
   [serialRadiozurnaluScraper.key]: serialRadiozurnaluScraper, // Seriál Radiožurnálu
   [souzvukScraper.key]: souzvukScraper, // Souzvuk (backfill; transcription off)
   [jakToByloDoopravdyScraper.key]: jakToByloDoopravdyScraper, // Jak to bylo doopravdy (backfill; transcription off)
+  [hlasyPametiScraper.key]: hlasyPametiScraper, // Hlasy paměti (Plus; transcription off for now)
+  [akademieScraper.key]: akademieScraper, // Akademie (Vltava; transcription off for now)
+  [exLibrisScraper.key]: exLibrisScraper, // Ex libris (Plus; transcription off for now)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
