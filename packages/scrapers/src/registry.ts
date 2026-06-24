@@ -31,6 +31,10 @@ import { jakToByloDoopravdyScraper } from "./jak-to-bylo-doopravdy/index.ts";
 import { hlasyPametiScraper } from "./hlasy-pameti/index.ts";
 import { akademieScraper } from "./akademie/index.ts";
 import { exLibrisScraper } from "./ex-libris/index.ts";
+import { slavniSeverocesiScraper } from "./slavni-severocesi/index.ts";
+import { pribehyZVysocinyScraper } from "./pribehy-z-vysociny/index.ts";
+import { pribehySeveroceskychMestAObciScraper } from "./pribehy-severoceskych-mest-a-obci/index.ts";
+import { stredoceskePribehyScraper } from "./stredoceske-pribehy/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -64,6 +68,10 @@ export const SCRAPERS: Record<string, Scraper> = {
   [hlasyPametiScraper.key]: hlasyPametiScraper, // Hlasy paměti (Plus; transcription off for now)
   [akademieScraper.key]: akademieScraper, // Akademie (Vltava; transcription off for now)
   [exLibrisScraper.key]: exLibrisScraper, // Ex libris (Plus; transcription off for now)
+  [slavniSeverocesiScraper.key]: slavniSeverocesiScraper, // Slavní Severočeši (Sever)
+  [pribehyZVysocinyScraper.key]: pribehyZVysocinyScraper, // Příběhy z Vysočiny (Vysočina)
+  [pribehySeveroceskychMestAObciScraper.key]: pribehySeveroceskychMestAObciScraper, // Příběhy severočeských měst a obcí (Sever)
+  [stredoceskePribehyScraper.key]: stredoceskePribehyScraper, // Středočeské příběhy (Střední Čechy)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
