@@ -27,6 +27,8 @@ export function createScrapeCtx(
     signal?: AbortSignal;
     maxFetches?: number;
     since?: Date;
+    hubCache?: ScrapeCtx["hubCache"];
+    refreshHub?: boolean;
   } = {},
 ): ScrapeCtx {
   return {
@@ -38,5 +40,7 @@ export function createScrapeCtx(
     signal: opts.signal,
     maxFetches: opts.maxFetches,
     since: opts.since,
+    hubCache: opts.hubCache,
+    refreshHub: opts.refreshHub,
   };
 }

@@ -69,6 +69,14 @@ export interface ScrapeCtx {
    *  newest-first and stop once older — so a scheduled run touches just the recent
    *  window, not the whole back-catalogue. Undefined = full crawl (first run / backfill). */
   since?: Date;
+  /** Persistent cache of a hub source's resolved show UUIDs (worker-provided, bound to
+   *  the source). Lets the expensive hub crawl run once and be reused every run. */
+  hubCache?: {
+    get(): Promise<{ uuid: string; name: string }[]>;
+    save(shows: { uuid: string; name: string }[]): Promise<void>;
+  };
+  /** Operator-triggered: re-enumerate the hub this run (otherwise the cache is reused). */
+  refreshHub?: boolean;
 }
 
 /**

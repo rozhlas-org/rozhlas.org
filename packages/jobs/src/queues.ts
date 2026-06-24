@@ -30,6 +30,8 @@ export interface JobData {
     /** Incremental window in hours: a scheduled run fetches only items newer than
      *  now−sinceHours (after the source's first full run). Omit for a full backfill. */
     sinceHours?: number;
+    /** Re-enumerate a hub source's show set this run (otherwise the cached set is reused). */
+    refreshHub?: boolean;
   };
   // Reserved for detail-page sources (mujRozhlas, Phase 3).
   "fetch-metadata": { sourceKey: string; sourceId: string; url?: string };
