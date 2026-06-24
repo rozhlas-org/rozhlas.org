@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull, isNotNull, notInArray } from "drizzle-orm";
-import { db, schema, showSlug, slugify } from "@rozhlas/core";
+import { db, schema, showSlug, slugify, cleanDescription } from "@rozhlas/core";
 import { enqueue } from "@rozhlas/jobs";
 import type { ScrapedShow, ScrapedPart } from "@rozhlas/scrapers";
 
@@ -134,7 +134,7 @@ export async function upsertShow(
     sourceId: s.sourceId,
     slug,
     title: s.title,
-    description: s.description,
+    description: cleanDescription(s.description) || null,
     showName: s.showName,
     publishedAt: s.publishedAt,
     durationSec: s.durationSec,
