@@ -1203,16 +1203,16 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 /* ===== omnisearch ===== */
 .omni__hint { font-size: 13px; max-width: 60ch; }
 .omni__form { display: flex; gap: 0.8rem; margin: 1.5rem 0; }
-.omni__form textarea {
+.omni__form input {
   flex: 1;
+  min-width: 0; /* let the input shrink in the flex row instead of overflowing */
   padding: 14px;
   border: var(--border);
   font: inherit;
-  resize: vertical;
   background: var(--paper);
-  color: var(--key); /* textarea doesn't inherit color — set it so text shows in dark mode */
+  color: var(--key); /* input doesn't inherit color — set it so text shows in dark mode */
 }
-.omni__form textarea:focus { outline: none; box-shadow: 5px 5px 0 var(--cyan); }
+.omni__form input:focus { outline: none; box-shadow: 5px 5px 0 var(--cyan); }
 .omni__form button { box-shadow: 4px 4px 0 var(--magenta); }
 .omni__intent {
   font-family: var(--font-mono);
@@ -1234,7 +1234,7 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 .mood__title { font-size: clamp(32px, 5vw, 60px); margin: 0; }
 .mood .omni__hint { margin-top: 0.75rem; max-width: 64ch; }
 .mood .omni__form { margin: 1.75rem 0 0; }
-.mood .omni__form textarea { font-size: 18px; min-height: 72px; }
+.mood .omni__form input { font-size: 18px; }
 
 /* ===== browse head: heading + small, understated filter ===== */
 .browse__head {
