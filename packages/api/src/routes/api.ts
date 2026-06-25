@@ -11,6 +11,7 @@ import {
   similarShows,
   listPublishedSelections,
   getPublishedSelection,
+  listRecommendations,
   listPublishedCategoryGroups,
   getPublishedCategoryGroup,
   sitemapUrls,
@@ -123,6 +124,20 @@ apiRoutes.get("/selections/:slug", async (c) => {
   if (!sel) return c.json({ error: "not found" }, 404);
   c.header("Cache-Control", "no-cache");
   return c.json(sel);
+});
+
+// Recommendations ("Co k poslechu") — published only, newest-first. `?limit=5` → the home
+// page's top picks (+ total, to decide whether to show "all"); `?page=N` → the paginated
+// /co-k-poslechu page. `no-cache` so admin edits show immediately (mirrors selections).
+apiRoutes.get("/recommendations", async (c) => {
+  const limitQ = c.req.query("limit");
+  const pageQ = c.req.query("page");
+  const result = await listRecommendations({
+    limit: limitQ != null ? Number(limitQ) : undefined,
+    page: pageQ != null ? Number(pageQ) : undefined,
+  });
+  c.header("Cache-Control", "no-cache");
+  return c.json(result);
 });
 
 // Category groups ("Kategorie" tiles) — published only; tiles on the /programmes

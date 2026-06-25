@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, count } from "drizzle-orm";
 import { config, db, schema, toFtsQuery, getEmbedding, knnShows } from "@rozhlas/core";
 
-const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts, selections, selectionItems, categoryGroups, categoryGroupProgrammes } =
+const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts, selections, selectionItems, categoryGroups, categoryGroupProgrammes, recommendations } =
   schema;
 
 export interface SitemapUrls {
@@ -119,12 +119,31 @@ export async function listShows(f: ListFilters) {
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
+  const items = await hydrateShowItems(rows);
+  return { items, total: total ?? 0, page, pageSize };
+}
+
+/** A bare show row (as selected for a card) — the input to hydrateShowItems. */
+interface ShowCardRow {
+  id: number;
+  slug: string;
+  title: string;
+  showName: string | null;
+  source: string;
+  publishedAt: Date | null;
+  durationSec: number | null;
+  plays: number;
+  displays: number;
+}
+
+/** Batch-hydrate bare show rows into ShowListItem cards (audio/parts/artwork in 3 grouped
+ *  queries, no N+1). Shared by listShows and listRecommendations. */
+async function hydrateShowItems(rows: ShowCardRow[]): Promise<ShowListItem[]> {
   const ids = rows.map((r) => r.id);
   const audioByShow = await audioForShows(ids);
   const partsByShow = await streamablePartsForShows(ids);
   const artByShow = await artworkForShows(ids);
-
-  const items: ShowListItem[] = rows.map((r) => {
+  return rows.map((r) => {
     const a = audioByShow.get(r.id);
     return {
       slug: r.slug,
@@ -141,8 +160,6 @@ export async function listShows(f: ListFilters) {
       displays: r.displays,
     };
   });
-
-  return { items, total: total ?? 0, page, pageSize };
 }
 
 async function audioForShows(ids: number[]) {
@@ -585,6 +602,178 @@ export async function adminShowParts(showId: number) {
     .from(showParts)
     .where(eq(showParts.showId, showId))
     .orderBy(asc(showParts.idx));
+}
+
+// ===================== Recommendations (Co k poslechu) =====================
+
+/** A recommended show card: the normal show card + the editorial note and curation time. */
+export interface RecommendationItem extends ShowListItem {
+  /** recommendation row id (stable; distinct from the show). */
+  recId: number;
+  description: string | null;
+  createdAt: Date;
+}
+
+const REC_PAGE_SIZE = 30; // page-mode (all-page); homepage passes an explicit `limit`
+
+/** Public list of published recommendations, newest-first. `limit` → page 1 with that page
+ *  size (homepage, clamped to 24); else paginated at REC_PAGE_SIZE (the /co-k-poslechu page). */
+export async function listRecommendations(opts: { limit?: number; page?: number }): Promise<{
+  items: RecommendationItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const limit = opts.limit != null ? Math.min(24, Math.max(1, Math.trunc(Number(opts.limit)) || 1)) : null;
+  const pageSize = limit ?? REC_PAGE_SIZE;
+  const page = limit != null ? 1 : Math.max(1, Math.trunc(Number(opts.page)) || 1);
+
+  const [tot] = await db.select({ total: count() }).from(recommendations).where(eq(recommendations.published, true));
+  const total = tot?.total ?? 0;
+
+  const recRows = await db
+    .select({
+      recId: recommendations.id,
+      description: recommendations.description,
+      createdAt: recommendations.createdAt,
+      showId: recommendations.showId,
+    })
+    .from(recommendations)
+    .where(eq(recommendations.published, true))
+    .orderBy(desc(recommendations.createdAt), desc(recommendations.id))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+
+  if (!recRows.length) return { items: [], total, page, pageSize };
+
+  const showRows = await db
+    .select({
+      id: shows.id,
+      slug: shows.slug,
+      title: shows.title,
+      showName: shows.showName,
+      source: shows.sourceKey,
+      publishedAt: shows.publishedAt,
+      durationSec: shows.durationSec,
+      plays: shows.plays,
+      displays: shows.displays,
+    })
+    .from(shows)
+    .where(inArray(shows.id, recRows.map((r) => r.showId)));
+  const byId = new Map(showRows.map((s) => [s.id, s]));
+
+  // keep recommendation order; skip a recommendation whose show vanished mid-cascade
+  const ordered: ShowCardRow[] = [];
+  const meta: { recId: number; description: string | null; createdAt: Date }[] = [];
+  for (const rr of recRows) {
+    const s = byId.get(rr.showId);
+    if (!s) continue;
+    ordered.push(s);
+    meta.push({ recId: rr.recId, description: rr.description, createdAt: rr.createdAt });
+  }
+  const cards = await hydrateShowItems(ordered);
+  const items: RecommendationItem[] = cards.map((c, i) => ({
+    ...c,
+    recId: meta[i]!.recId,
+    description: meta[i]!.description,
+    createdAt: meta[i]!.createdAt,
+  }));
+  return { items, total, page, pageSize };
+}
+
+export type RecommendationAdminRow = {
+  id: number;
+  showId: number;
+  description: string | null;
+  published: boolean;
+  createdAt: Date;
+  slug: string;
+  title: string;
+  showName: string | null;
+  artworkUrl: string | null;
+  streamable: boolean;
+};
+
+/** All recommendations (incl. drafts) for the admin list, with show label + artwork. */
+export async function adminListRecommendations(): Promise<RecommendationAdminRow[]> {
+  const rows = await db
+    .select({
+      id: recommendations.id,
+      showId: recommendations.showId,
+      description: recommendations.description,
+      published: recommendations.published,
+      createdAt: recommendations.createdAt,
+      slug: shows.slug,
+      title: shows.title,
+      showName: shows.showName,
+    })
+    .from(recommendations)
+    .innerJoin(shows, eq(recommendations.showId, shows.id))
+    .orderBy(desc(recommendations.createdAt), desc(recommendations.id));
+  const ids = rows.map((r) => r.showId);
+  const artByShow = await artworkForShows(ids);
+  const audioByShow = await audioForShows(ids);
+  return rows.map((r) => ({
+    ...r,
+    artworkUrl: artByShow.get(r.showId) ?? null,
+    streamable: audioByShow.get(r.showId)?.streamable ?? false,
+  }));
+}
+
+/** One recommendation + its show label/streamability, for the admin edit page. */
+export async function adminGetRecommendation(id: number) {
+  const [row] = await db
+    .select({
+      id: recommendations.id,
+      showId: recommendations.showId,
+      description: recommendations.description,
+      published: recommendations.published,
+      createdAt: recommendations.createdAt,
+      slug: shows.slug,
+      title: shows.title,
+      showName: shows.showName,
+    })
+    .from(recommendations)
+    .innerJoin(shows, eq(recommendations.showId, shows.id))
+    .where(eq(recommendations.id, id))
+    .limit(1);
+  if (!row) return null;
+  const audio = await audioForShows([row.showId]);
+  return { ...row, streamable: audio.get(row.showId)?.streamable ?? false };
+}
+
+/** Create a recommendation. Returns the new id, or null if the show is already recommended
+ *  (unique(show_id)) — the caller surfaces a friendly message (mirrors adminAddItem). */
+export async function adminCreateRecommendation(
+  showId: number,
+  description: string | null,
+  published: boolean,
+): Promise<number | null> {
+  const [dup] = await db
+    .select({ id: recommendations.id })
+    .from(recommendations)
+    .where(eq(recommendations.showId, showId))
+    .limit(1);
+  if (dup) return null;
+  const [r] = await db
+    .insert(recommendations)
+    .values({ showId, description, published })
+    .returning({ id: recommendations.id });
+  return r!.id;
+}
+
+export async function adminUpdateRecommendation(
+  id: number,
+  data: { description: string | null; published: boolean },
+): Promise<void> {
+  await db
+    .update(recommendations)
+    .set({ description: data.description, published: data.published })
+    .where(eq(recommendations.id, id));
+}
+
+export async function adminDeleteRecommendation(id: number): Promise<void> {
+  await db.delete(recommendations).where(eq(recommendations.id, id));
 }
 
 // ===================== Category groups (Kategorie tiles) =====================

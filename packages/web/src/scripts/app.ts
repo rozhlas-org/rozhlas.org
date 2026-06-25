@@ -13,6 +13,7 @@ import {
   programmesView,
   categoryGroupView,
   selectionView,
+  recommendationsAllView,
   savedShowsView,
   showView,
   transcriptSearchView,
@@ -49,6 +50,7 @@ async function resolve(): Promise<ViewResult> {
   if (path === "/programmes") return programmesView();
   if (path === "/historie") return historyView(params);
   if (path === "/oblibene") return favouritesView();
+  if (path === "/co-k-poslechu") return recommendationsAllView(params);
   if (path === "/stazene") return savedShowsView();
 
   const show = path.match(/^\/show\/(.+)$/);
