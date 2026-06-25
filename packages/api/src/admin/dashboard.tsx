@@ -154,6 +154,7 @@ function Page({ data }: { data: DashboardData }) {
           <h1>rozhlas<span class="accent">.org</span> · operator</h1>
           <nav>
             <a href="/admin/selections">Výběry</a>
+            <a href="/admin/recommendations">Doporučení</a>
             <a href="/admin/category-groups">Kategorie</a>
             <a href="/admin/jobs">Fronty (Bull Board) →</a>
             <a href="/admin">↻ Obnovit</a>

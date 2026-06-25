@@ -313,6 +313,32 @@ export type Selection = typeof selections.$inferSelect;
 export type SelectionItem = typeof selectionItems.$inferSelect;
 
 /**
+ * Editorial "recommendations" (Co k poslechu) — operator picks an existing show with an
+ * optional "why listen" note. A time feed: ordered purely by createdAt (no manual position),
+ * newest 5 shown on the home page, all listed on /co-k-poslechu grouped by recency.
+ */
+export const recommendations = sqliteTable(
+  "recommendations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    showId: integer("show_id")
+      .notNull()
+      .references(() => shows.id, { onDelete: "cascade" }),
+    description: text("description"), // optional "why listen" note
+    published: integer("published", { mode: "boolean" }).notNull().default(true),
+    ...timestamps,
+  },
+  (t) => ({
+    // access path: WHERE published ORDER BY created_at DESC
+    publishedCreatedIdx: index("recommendations_published_created_idx").on(t.published, t.createdAt),
+    // a show is recommended at most once
+    showUnique: uniqueIndex("recommendations_show_unique").on(t.showId),
+  }),
+);
+
+export type Recommendation = typeof recommendations.$inferSelect;
+
+/**
  * Category groups (frontend "Kategorie" tiles) — operator-curated groups that wrap
  * several programmes (shows.show_name) into one browse tile, e.g. "Pohádky".
  */

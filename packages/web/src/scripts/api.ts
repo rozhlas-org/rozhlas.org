@@ -65,6 +65,19 @@ export interface ListResult {
   pageSize: number;
 }
 
+/** A recommended show card ("Co k poslechu"): the show card + editorial note + curation time. */
+export interface RecommendationItem extends ShowListItem {
+  recId: number;
+  description: string | null;
+  createdAt: string;
+}
+export interface RecommendationResult {
+  items: RecommendationItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface AudioFile {
   container: string | null;
   codec: string | null;
@@ -178,6 +191,8 @@ export const api = {
   categoryGroups: () => getJSON<CategoryGroup[]>("/api/category-groups"),
   categoryGroup: (slug: string, page?: number) =>
     getJSON<CategoryGroupDetail>(`/api/category-groups/${encodeURIComponent(slug)}`, { page }),
+  recommendations: (p: { limit?: number; page?: number }) =>
+    getJSON<RecommendationResult>("/api/recommendations", p),
   recordPlay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/play`),
   recordDisplay: (slug: string) => beacon(`/api/shows/${encodeURIComponent(slug)}/display`),
 };

@@ -1082,6 +1082,96 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
   border: var(--border-thin);
 }
 
+/* ===== Co k poslechu (recommendations) ===== */
+.recommendations { margin: 0 0 48px; }
+.recommendations__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  border-bottom: 2px solid var(--key);
+  padding-bottom: 8px;
+  margin: 0 0 8px;
+}
+.recommendations__title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(24px, 4vw, 34px);
+  text-transform: uppercase;
+  margin: 0;
+}
+.rec-all {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--key);
+  white-space: nowrap;
+  border-bottom: 2px solid var(--yellow);
+}
+.rec-all:hover { background: var(--yellow); color: var(--on-yellow); }
+.recommendations__list { display: flex; flex-direction: column; }
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--key);
+  text-decoration: none;
+}
+.rec-row:hover { background: var(--hatch-a); }
+.rec-row:focus-visible { outline: 3px solid var(--yellow); outline-offset: -2px; }
+.rec-row__art {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  border: 2px solid var(--key);
+  overflow: hidden;
+  background: var(--key);
+}
+.rec-row__art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rec-row__ph {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(45deg, var(--hatch-a), var(--hatch-a) 8px, var(--hatch-b) 8px, var(--hatch-b) 16px);
+}
+.rec-row__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.rec-row__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: -0.2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rec-row:hover .rec-row__title { color: var(--cyan); }
+.rec-row__meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rec-row__why {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--key);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.recommendations--all h1 { margin-bottom: 8px; }
+
 /* ===== Výběry (editorial selections) ===== */
 .vybery { margin: 0 0 48px; }
 .vybery__title {
