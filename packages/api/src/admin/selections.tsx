@@ -86,6 +86,7 @@ function Layout({ title, children }: { title: string; children: unknown }) {
             <a href="/admin">Přehled</a>
             <a href="/admin/jobs">Fronty</a>
             <a href="/admin/selections">Výběry</a>
+            <a href="/admin/recommendations">Doporučení</a>
             <a class="logout" href="/admin/logout">Odhlásit</a>
           </nav>
         </header>

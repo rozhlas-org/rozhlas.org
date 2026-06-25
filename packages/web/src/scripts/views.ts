@@ -2,7 +2,7 @@
 // Each exported view is async: it fetches from the API and returns an HTML string
 // (plus the document <title>). The router in app.ts swaps the result into #app.
 
-import { api, type CategoryGroup, type ListResult, type Selection, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
+import { api, type CategoryGroup, type ListResult, type RecommendationItem, type Selection, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
 import { getProgress } from "./progress.ts";
 import { getHistory, logView, type HistoryEntry } from "./history.ts";
@@ -250,9 +250,10 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
   const page = params.get("page") ? Number(params.get("page")) : 1;
   // Show the "Výběry" rail only on the bare main page (no filter/search/paging).
   const showRail = !q && !programme && !source && page === 1;
-  const [data, sels] = await Promise.all([
+  const [data, sels, recs] = await Promise.all([
     api.shows({ q, programme, source, sort, page }),
     showRail ? api.selections().catch(() => []) : Promise.resolve([]),
+    showRail ? api.recommendations({ limit: 5 }).catch(() => null) : Promise.resolve(null),
   ]);
 
   const qs = new URLSearchParams();
@@ -274,6 +275,7 @@ export async function browseView(params: URLSearchParams): Promise<ViewResult> {
     title: programme ?? "Pořady",
     html:
       searchBox("", "h2") +
+      recommendationsSection(recs?.items ?? [], recs?.total ?? 0) +
       selectionsRail(sels) +
       `<section>
         <div class="browse__head">
@@ -313,6 +315,82 @@ function selectionsRail(sels: Selection[]): string {
       <h2 class="vybery__title">Výběry</h2>
       <div class="vybery__rail">${tiles}</div>
     </section>`;
+}
+
+/** A compact recommendation row: small thumbnail + title + length, optional "why listen" note. */
+function recRow(it: RecommendationItem): string {
+  const len = formatDuration(it.durationSec);
+  const metaParts: string[] = [];
+  if (it.showName && it.showName !== it.title) metaParts.push(esc(it.showName));
+  if (len) metaParts.push(len);
+  const meta = metaParts.join(" · ");
+  const art = it.artworkUrl
+    ? `<img src="${attr(it.artworkUrl)}" alt="" loading="lazy" />`
+    : `<div class="rec-row__ph" aria-hidden="true"></div>`;
+  return `
+    <a class="rec-row" href="/show/${encodeURIComponent(it.slug)}">
+      <div class="rec-row__art">${art}</div>
+      <div class="rec-row__text">
+        <span class="rec-row__title">${esc(it.title)}</span>
+        ${meta ? `<span class="rec-row__meta">${meta}</span>` : ""}
+        ${it.description ? `<span class="rec-row__why">${esc(it.description)}</span>` : ""}
+      </div>
+    </a>`;
+}
+
+/** "Co k poslechu" home section — newest editorial picks. Hidden when there are none. */
+function recommendationsSection(items: RecommendationItem[], total: number): string {
+  if (!items.length) return "";
+  const all = total > items.length ? `<a class="rec-all" href="/co-k-poslechu">Všechna doporučení →</a>` : "";
+  return `
+    <section class="recommendations" aria-label="Co k poslechu">
+      <div class="recommendations__head">
+        <h2 class="recommendations__title">Co k poslechu</h2>
+        ${all}
+      </div>
+      <div class="recommendations__list">${items.map(recRow).join("")}</div>
+    </section>`;
+}
+
+/** Recency bucket for the all-page grouping (half-open ranges, newest-first). */
+function recBucket(createdAt: string): string {
+  const age = Date.now() - new Date(createdAt).getTime();
+  if (age < 7 * DAY) return "Tento týden";
+  if (age < 30 * DAY) return "Poslední měsíc";
+  return "Starší";
+}
+
+/** /co-k-poslechu — all recommendations, newest-first, grouped by recency bucket. */
+export async function recommendationsAllView(params: URLSearchParams): Promise<ViewResult> {
+  const page = params.get("page") ? Number(params.get("page")) : 1;
+  const res = await api.recommendations({ page }).catch(() => null);
+  if (!res || !res.items.length) {
+    return {
+      title: "Co k poslechu",
+      html: `<section class="recommendations recommendations--all"><h1>Co k poslechu</h1><p class="notice">Zatím žádná doporučení.</p></section>`,
+    };
+  }
+  let body = "";
+  let bucket = "";
+  for (const it of res.items) {
+    const b = recBucket(it.createdAt);
+    if (b !== bucket) {
+      if (bucket) body += `</div>`;
+      body += `<h2 class="kat-subhead">${esc(b)}</h2><div class="recommendations__list">`;
+      bucket = b;
+    }
+    body += recRow(it);
+  }
+  if (bucket) body += `</div>`;
+  return {
+    title: "Co k poslechu",
+    html: `
+      <section class="recommendations recommendations--all">
+        <h1>Co k poslechu</h1>
+        ${body}
+        ${pagination(res.page, res.pageSize, res.total, "/co-k-poslechu?")}
+      </section>`,
+  };
 }
 
 /** Dedicated page for one selection — its shows in the usual card grid. */
