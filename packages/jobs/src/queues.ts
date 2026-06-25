@@ -55,11 +55,14 @@ export interface JobData {
   "groq-backfill": Record<string, never>;
 }
 
-/** Sensible defaults: retry with backoff, keep history bounded for the dashboard. */
+/** Sensible defaults: retry with backoff, keep history bounded for the dashboard.
+ *  removeOnComplete age is in SECONDS — BullMQ trims the completed set as jobs finish,
+ *  dropping anything older than `age` (and keeping at most `count` as a hard ceiling).
+ *  Completed jobs are visible for ~24h in Bull Board, then auto-removed. */
 export const defaultJobOptions: JobsOptions = {
   attempts: 5,
   backoff: { type: "exponential", delay: 5_000 },
-  removeOnComplete: { age: 7 * 24 * 3600, count: 5_000 },
+  removeOnComplete: { age: 24 * 3600, count: 5_000 },
   removeOnFail: { age: 30 * 24 * 3600 },
 };
 
