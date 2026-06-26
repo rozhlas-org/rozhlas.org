@@ -3,7 +3,12 @@
 // audio: requests to the IPFS gateway are served from the IndexedDB blob saved by
 // offline.ts (range-capable via blob.slice) when the CID is downloaded, else from
 // the network. The API is never cached.
-const CACHE = "rozhlas-shell-v1";
+// __BUILD__ is replaced with a unique id at build time (stamp-sw.ts). That makes
+// THIS file's bytes change every deploy, so the browser detects a new SW and runs
+// activate → which deletes every cache whose name !== CACHE, clearing the previous
+// build's shell + assets. A static name would never invalidate, so a stale (or
+// half-broken) cache could stick forever. Falls back to the literal in dev.
+const CACHE = "rozhlas-shell-__BUILD__";
 const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg"];
 const FONT_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com"];
 
