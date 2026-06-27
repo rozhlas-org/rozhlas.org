@@ -432,7 +432,34 @@ button:active,
    the page sideways on mobile. min-width:0 lets it shrink so overflow:hidden /
    the marquee can clip and scroll the title instead. */
 .show-detail__body { min-width: 0; }
-.show-detail__art { border: var(--border); box-shadow: 7px 7px 0 var(--cyan); width: 100%; }
+.show-detail__art-wrap { position: relative; width: 100%; }
+.show-detail__art { border: var(--border); box-shadow: 7px 7px 0 var(--cyan); width: 100%; display: block; }
+/* Cover play badge — one-tap "resume the show", bottom-right of the cover. Magenta so it
+   reads as the primary action and stands clear of the cyan per-díl buttons + art shadow. */
+.show-detail__badge {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  min-width: 56px;
+  height: 56px;
+  padding: 0 14px;
+  background: var(--magenta);
+  color: var(--on-magenta);
+  border: var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: 3px 3px 0 var(--key);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.show-detail__badge:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--key); }
+.show-detail__badge:focus-visible { outline: 3px solid var(--key); outline-offset: 2px; }
+.show-detail__badge-pill { font-family: var(--font-mono); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
 .show-detail__programme {
   display: inline-block;
   font-family: var(--font-display);
@@ -1420,6 +1447,7 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 @media (max-width: 760px) {
   .site-header, .site-main, .site-footer { padding-left: 20px; padding-right: 20px; }
   .show-detail { grid-template-columns: 1fr; }
+  .show-detail__art-wrap { max-width: 320px; } /* cap the wrap so the badge anchors to the image edge */
   .show-detail__art { max-width: 320px; }
   .programme-list { columns: 1; }
   .search { width: 100%; margin-left: 0; }
