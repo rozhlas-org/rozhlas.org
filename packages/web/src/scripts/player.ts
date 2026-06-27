@@ -9,7 +9,7 @@
 
 import { api } from "./api.ts";
 import { attr, esc, formatDuration } from "./format.ts";
-import { getProgress } from "./progress.ts";
+import { getProgress, resumeStartIndex } from "./progress.ts";
 import { getSavedShow, savedToDetail } from "./offline.ts";
 import {
   initPlayerTranscript,
@@ -231,14 +231,25 @@ async function resolveShow(slug: string): Promise<Awaited<ReturnType<typeof api.
 // Set by a deep-link (e.g. a transcript hit) so load() seeks once metadata loads.
 let pendingSeek: number | null = null;
 
+/** Sentinel `idx` for playFromSlug → smart "resume the show" (a control char can't
+ *  collide with a real part idx, which is a positive number or "single"). */
+export const RESUME = " resume";
+
 export async function playFromSlug(
   slug: string,
   idx: string | number,
   seekSec?: number,
 ): Promise<boolean> {
   const wantSeek = seekSec != null && Number.isFinite(seekSec) ? seekSec : null;
+  // RESUME sentinel ("resume the show"): if THIS show is already loaded, resolve the
+  // target against the live queue (no refetch) so the toggle short-circuit can match —
+  // a badge click on the already-playing resume target should toggle, not restart.
+  let want = idx;
+  if (idx === RESUME && q && q.slug === slug) {
+    want = q.parts[resumeStartIndex(slug, q.parts)]?.idx ?? q.parts[q.index]?.idx ?? "";
+  }
   // Same track already loaded → seek if asked, else just toggle.
-  if (q && q.slug === slug && String(q.parts[q.index]?.idx) === String(idx)) {
+  if (q && q.slug === slug && String(q.parts[q.index]?.idx) === String(want)) {
     if (wantSeek != null) {
       try {
         audio.currentTime = wantSeek;
@@ -257,7 +268,8 @@ export async function playFromSlug(
   const parts = buildParts(show);
   if (!parts.length) return false;
 
-  let start = parts.findIndex((p) => String(p.idx) === String(idx));
+  // RESUME → smart start (last-played part, or advance past a finished one); else the named díl.
+  let start = idx === RESUME ? resumeStartIndex(slug, parts) : parts.findIndex((p) => String(p.idx) === String(idx));
   if (start < 0) start = 0;
   pendingSeek = wantSeek;
   if (q && q.slug !== slug) pushBack(); // leaving a different show → remember it
@@ -660,15 +672,17 @@ export function initPlayer(): void {
   // detail. Capture phase so we preventDefault BEFORE the SPA router's bubble-phase
   // link handler runs (it bails on e.defaultPrevented), so the card <a> never
   // navigates. Enter/Space on the focused badge does the same.
+  const BADGE_SEL = ".show-card__badge, .show-detail__badge";
   const playBadge = (badge: HTMLElement) => {
     const slug = badge.dataset.slug;
-    // data-idx set (a selection díl card) → play that díl; else "" = first streamable díl.
-    if (slug) void playFromSlug(slug, badge.dataset.idx ?? "");
+    // data-idx set (a selection díl card) → play that pinned díl; else → smart resume
+    // (last-played part of the show, or fresh from díl 1).
+    if (slug) void playFromSlug(slug, badge.dataset.idx ?? RESUME);
   };
   document.addEventListener(
     "click",
     (e) => {
-      const badge = (e.target as HTMLElement).closest<HTMLElement>(".show-card__badge");
+      const badge = (e.target as HTMLElement).closest<HTMLElement>(BADGE_SEL);
       if (!badge) return;
       e.preventDefault();
       e.stopPropagation();
@@ -678,7 +692,7 @@ export function initPlayer(): void {
   );
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
-    const badge = (e.target as HTMLElement).closest<HTMLElement>(".show-card__badge");
+    const badge = (e.target as HTMLElement).closest<HTMLElement>(BADGE_SEL);
     if (!badge) return;
     e.preventDefault();
     playBadge(badge);

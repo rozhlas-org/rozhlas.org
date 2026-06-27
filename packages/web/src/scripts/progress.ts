@@ -14,6 +14,7 @@ const PKEY = "pkey"; // dataset key → data-pkey attribute
 export interface PartProgress {
   t: number; // last position in seconds (0 once finished)
   done: boolean; // listened to the end
+  at?: number; // epoch ms of the last save — picks the most-recently-played part (legacy entries: 0)
 }
 
 type Store = Record<string, PartProgress>;
@@ -38,6 +39,41 @@ export function getProgress(key: string): PartProgress | undefined {
   return readAll()[key];
 }
 
+/** True if any of a show's parts has saved progress (drives the "Pokračovat" affordance). */
+export function showHasProgress(slug: string, parts: { idx: string | number }[]): boolean {
+  const s = readAll();
+  return parts.some((p) => s[`${slug}#${p.idx}`] != null);
+}
+
+/**
+ * Pick the start index into an ordered (streamable) parts list for a smart "resume the
+ * show" play: the most-recently-played part if it's unfinished; if that part is finished,
+ * the first not-yet-finished part; if nothing's been played or everything's finished, the
+ * first part. Position within the chosen part is restored separately (loadedmetadata resume).
+ */
+export function resumeStartIndex(slug: string, parts: { idx: string | number }[]): number {
+  const s = readAll();
+  // most-recently-saved part with progress (legacy entries: at=0; strict > keeps earliest on ties)
+  let bestPos = -1;
+  let bestAt = -Infinity;
+  for (let i = 0; i < parts.length; i++) {
+    const p = s[`${slug}#${parts[i]!.idx}`];
+    if (!p) continue;
+    const a = p.at ?? 0;
+    if (bestPos < 0 || a > bestAt) {
+      bestPos = i;
+      bestAt = a;
+    }
+  }
+  if (bestPos < 0) return 0; // never played → first part
+  if (!s[`${slug}#${parts[bestPos]!.idx}`]!.done) return bestPos; // resume where they were
+  // last-played part finished → first not-done part (ordered); all done → restart at 0
+  for (let i = 0; i < parts.length; i++) {
+    if (!s[`${slug}#${parts[i]!.idx}`]?.done) return i;
+  }
+  return 0;
+}
+
 function save(key: string, p: PartProgress): void {
   const s = readAll();
   s[key] = p;
@@ -51,7 +87,7 @@ function tracked(t: EventTarget | null): t is HTMLAudioElement {
 }
 
 function markDone(a: HTMLAudioElement): void {
-  save(a.dataset[PKEY]!, { t: 0, done: true });
+  save(a.dataset[PKEY]!, { t: 0, done: true, at: Date.now() });
   const li = a.closest(".part");
   if (li) {
     li.classList.add("part--played");
@@ -90,7 +126,7 @@ export function wireAudioProgress(): void {
       if (now - (lastSave.get(a) ?? 0) < SAVE_EVERY_MS) return;
       lastSave.set(a, now);
       if (getProgress(a.dataset[PKEY]!)?.done) return;
-      if (a.currentTime > 1) save(a.dataset[PKEY]!, { t: a.currentTime, done: false });
+      if (a.currentTime > 1) save(a.dataset[PKEY]!, { t: a.currentTime, done: false, at: now });
     },
     true,
   );
@@ -103,7 +139,7 @@ export function wireAudioProgress(): void {
       if (!tracked(a)) return;
       if (getProgress(a.dataset[PKEY]!)?.done) return;
       const nearEnd = a.duration > 0 && a.currentTime >= a.duration - 1;
-      if (a.currentTime > 1 && !nearEnd) save(a.dataset[PKEY]!, { t: a.currentTime, done: false });
+      if (a.currentTime > 1 && !nearEnd) save(a.dataset[PKEY]!, { t: a.currentTime, done: false, at: Date.now() });
     },
     true,
   );
