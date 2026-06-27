@@ -4,7 +4,7 @@
 
 import { api, type CategoryGroup, type ListResult, type RecommendationItem, type Selection, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
 import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
-import { getProgress } from "./progress.ts";
+import { getProgress, showHasProgress } from "./progress.ts";
 import { getHistory, logView, type HistoryEntry } from "./history.ts";
 import { getFavourites, isFavourite, refreshFavourite, type FavItem } from "./favourites.ts";
 import { getSavedShow, savedToDetail, listSavedShows, fmtBytes, type SavedShow } from "./offline.ts";
@@ -698,7 +698,21 @@ export async function showView(slug: string): Promise<ViewResult> {
   };
   refreshFavourite(favData); // keep a saved show's stored card fields fresh (no-op if not saved)
   const hasParts = show.parts.length > 0;
-  const art = show.artworkUrl ? `<img class="show-detail__art" src="${attr(show.artworkUrl)}" alt="" />` : "";
+  // Cover play badge: a one-tap "resume the show" on the artwork (same corner as the card
+  // badge). No data-idx → the player resolves the smart-resume target. Shown only when
+  // there's playable audio; a "Pokračovat" pill + aria when the show has saved progress.
+  const playIdxs: { idx: string | number }[] = hasParts
+    ? show.parts.filter((p) => p.audio?.streamable && p.audio.streamUrl).map((p) => ({ idx: p.idx }))
+    : show.audio.some((a) => a.streamable && a.streamUrl)
+      ? [{ idx: "single" }]
+      : [];
+  const resuming = playIdxs.length > 0 && showHasProgress(show.slug, playIdxs);
+  const coverBadge = playIdxs.length
+    ? `<button class="show-detail__badge" type="button" data-slug="${attr(show.slug)}" aria-label="${resuming ? "Pokračovat v poslechu" : "Přehrát pořad"}">▶${resuming ? `<span class="show-detail__badge-pill">Pokračovat</span>` : ""}</button>`
+    : "";
+  const art = show.artworkUrl
+    ? `<div class="show-detail__art-wrap"><img class="show-detail__art" src="${attr(show.artworkUrl)}" alt="" />${coverBadge}</div>`
+    : "";
   const programme = show.showName
     ? `<a class="show-detail__programme" href="/programme/${encodeURIComponent(show.showName)}">${esc(show.showName)}</a>`
     : "";
