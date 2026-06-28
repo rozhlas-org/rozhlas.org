@@ -1624,6 +1624,14 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
   border-bottom: var(--border);
   font-size: clamp(24px, 3vw, 34px);
 }
+/* skeleton placeholders while the (sometimes slow) similar fetch is in flight */
+.skel-card { display: flex; flex-direction: column; gap: 8px; }
+.skel { background: var(--line); border: var(--border-thin); animation: skel-pulse 1.2s ease-in-out infinite; }
+.skel-art { aspect-ratio: 1 / 1; width: 100%; }
+.skel-line { height: 14px; border: none; border-radius: 2px; }
+.skel-line--short { width: 60%; }
+@keyframes skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 
 /* ===== transcript on show detail ("Přepis") ===== */
 .transcript { margin-top: 1.5rem; }
