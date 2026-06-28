@@ -8,11 +8,13 @@ import {
   upsertChunkEmbedding,
   knnChunks,
   type ChunkKnnHit,
+  resetShowTranscriptVecTable,
+  recomputeShowTranscriptEmbedding,
 } from "@rozhlas/core";
 import type { EmbeddingProvider } from "./types.ts";
 
 const log = createLogger("embeddings:transcript");
-const { transcriptChunks } = schema;
+const { transcriptChunks, showTranscriptEmbeddings } = schema;
 
 /**
  * Embed transcript chunks into the chunk vector store (`vec_chunks`). Embeds only
@@ -36,6 +38,9 @@ export async function embedTranscriptChunks(
     log.warn("chunk embedding model changed — rebuilding vec_chunks", { to: provider.id });
     resetChunkVecTable(provider.dims);
     await db.update(transcriptChunks).set({ embedModel: null });
+    // pooled per-show transcript vectors derive from the chunks — invalidate them too.
+    resetShowTranscriptVecTable(provider.dims);
+    await db.delete(showTranscriptEmbeddings);
     force = true;
   } else {
     ensureChunkVecTable(provider.dims);
@@ -83,4 +88,36 @@ export async function chunkVectorSearch(
   const [vec] = await provider.embed([queryText], "query");
   if (!vec) return [];
   return knnChunks(vec, k);
+}
+
+/**
+ * (Re)compute the pooled transcript vector for every show that has embedded chunks. Local
+ * (no Voyage calls) — just mean-pools existing chunk vectors. `force` repools all; otherwise
+ * skips shows already pooled. Steady state pooling is wired into the embed-transcript job;
+ * this is the one-time backfill for the already-embedded archive.
+ */
+export async function poolShowTranscripts(
+  provider: EmbeddingProvider,
+  opts: { force?: boolean } = {},
+): Promise<{ pooled: number; cleared: number; total: number }> {
+  const showRows = await db
+    .selectDistinct({ showId: transcriptChunks.showId })
+    .from(transcriptChunks)
+    .where(isNotNull(transcriptChunks.embedModel));
+  let showIds = showRows.map((r) => r.showId);
+  if (!opts.force) {
+    const done = new Set(
+      (await db.select({ showId: showTranscriptEmbeddings.showId }).from(showTranscriptEmbeddings)).map(
+        (r) => r.showId,
+      ),
+    );
+    showIds = showIds.filter((id) => !done.has(id));
+  }
+  let pooled = 0;
+  let cleared = 0;
+  for (const showId of showIds) {
+    if (recomputeShowTranscriptEmbedding(showId, provider.id, provider.dims)) pooled++;
+    else cleared++;
+  }
+  return { pooled, cleared, total: showIds.length };
 }

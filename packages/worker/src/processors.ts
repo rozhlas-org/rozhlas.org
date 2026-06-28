@@ -1,5 +1,5 @@
 import type { Job } from "bullmq";
-import { config, createLogger } from "@rozhlas/core";
+import { config, createLogger, recomputeShowTranscriptEmbedding } from "@rozhlas/core";
 import { enqueue, type JobData, type QueueName } from "@rozhlas/jobs";
 import { getScraper, createScrapeCtx } from "@rozhlas/scrapers";
 import {
@@ -379,11 +379,17 @@ async function groqBackfillTick(_job: Job<JobData["groq-backfill"]>) {
   }
 }
 
-/** embed-transcript → embed a transcript's chunks into vec_chunks (Voyage). */
+/** embed-transcript → embed a transcript's chunks into vec_chunks (Voyage), then repool the
+ *  show's transcript vector (mean of all its embedded chunks) for transcript-based similarity. */
 async function embedTranscript(job: Job<JobData["embed-transcript"]>) {
   const { transcriptId } = job.data;
-  const r = await embedTranscriptChunks(getProvider(), { transcriptId });
-  log.info("embedded transcript", { transcriptId, ...r });
+  const provider = getProvider();
+  const r = await embedTranscriptChunks(provider, { transcriptId });
+  // Repool this show even when 0 new chunks embedded — a sibling part may have just finished,
+  // and the pool must reflect ALL the show's embedded chunks (atomic; safe under concurrency 2).
+  const showId = await repo.transcriptShowId(transcriptId);
+  if (showId != null) recomputeShowTranscriptEmbedding(showId, provider.id, provider.dims);
+  log.info("embedded transcript", { transcriptId, showId, ...r });
   return r;
 }
 
