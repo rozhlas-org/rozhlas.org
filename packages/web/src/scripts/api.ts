@@ -180,7 +180,8 @@ export const api = {
   show: (slug: string) => getJSON<ShowDetail>(`/api/shows/${encodeURIComponent(slug)}`),
   showTranscript: (slug: string) =>
     getJSON<{ parts: ShowTranscriptPart[] }>(`/api/shows/${encodeURIComponent(slug)}/transcript`),
-  similar: (slug: string) => getJSON<ShowListItem[]>(`/api/shows/${encodeURIComponent(slug)}/similar`),
+  similar: (slug: string, limit?: number) =>
+    getJSON<ShowListItem[]>(`/api/shows/${encodeURIComponent(slug)}/similar`, { limit }),
   omnisearch: (q: string, offset = 0) =>
     getJSON<OmniResult>("/api/omnisearch", offset ? { q, offset } : { q }),
   transcriptSearch: (q: string, programme?: string) =>

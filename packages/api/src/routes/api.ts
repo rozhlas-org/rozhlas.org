@@ -83,7 +83,8 @@ apiRoutes.get("/shows/:slug/transcript", async (c) => {
 // Stable results → cache. Lazy below-fold fetch from the detail page.
 apiRoutes.get("/shows/:slug/similar", async (c) => {
   const id = await showIdBySlug(c.req.param("slug"));
-  const items = id ? await similarShows(id) : [];
+  const limit = Math.min(12, Math.max(1, Math.trunc(Number(c.req.query("limit"))) || 8));
+  const items = id ? await similarShows(id, limit) : [];
   c.header("Cache-Control", "public, max-age=3600");
   return c.json(items);
 });

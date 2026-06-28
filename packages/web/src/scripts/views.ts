@@ -895,7 +895,7 @@ export async function loadSimilar(): Promise<void> {
   if (!mount || !slug) return;
   let items: ShowListItem[] = [];
   try {
-    items = await api.similar(slug);
+    items = await api.similar(slug, 8);
   } catch {
     return; // additive — never break the detail view
   }

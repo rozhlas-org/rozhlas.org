@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, count } from "drizzle-orm";
-import { config, db, schema, toFtsQuery, getEmbedding, knnShows } from "@rozhlas/core";
+import { config, db, schema, toFtsQuery, getEmbedding, knnShows, getShowTranscriptEmbedding, knnShowsByTranscript } from "@rozhlas/core";
 
 const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts, selections, selectionItems, categoryGroups, categoryGroupProgrammes, recommendations } =
   schema;
@@ -953,29 +953,47 @@ export async function adminSetGroupProgrammes(groupId: number, programmes: strin
 // distances run p50≈0.70, p90≈0.87, p99≈0.93 — so this is a gentle floor that
 // trims only genuine outliers (their section just shows fewer/no cards) without
 // emptying normal ones.
-const SIMILAR_MAX_DISTANCE = 0.95;
+const SIMILAR_MAX_DISTANCE = 0.95; // metadata (vec_shows) space — 4th-nbr p50≈0.70, p90≈0.87
+// Pooled-transcript (vec_show_transcripts) space. Calibrated on the live corpus: its 4th-nbr
+// distances track the metadata space almost exactly (p50≈0.71, p90≈0.88, p99≈0.99) — the
+// centroids stay discriminative — so the same ~p99 cutoff applies.
+const SIMILAR_TX_MAX_DISTANCE = 0.95;
+const SIMILAR_RRF_K = 60;
+const SIMILAR_TX_WEIGHT = 0.8; // down-weight the (newer, dilution-prone) transcript leg slightly
 
 /**
- * Shows most similar to `showId` by their stored Voyage embedding — a local
- * sqlite-vec KNN, no embedding API call. Over-fetches, then in JS: excludes the
- * show itself, non-streamable shows, applies a relevance cutoff, and caps each
- * programme to 2 so the rail isn't just "more of the same programme". Order
- * follows KNN distance (re-projected through the hydration Map). [] if the show
- * has no embedding yet (or sqlite-vec is unavailable).
+ * Shows most similar to `showId`, fusing two local sqlite-vec KNN legs via Reciprocal Rank
+ * Fusion: the metadata embedding (vec_shows) and the pooled transcript-content embedding
+ * (vec_show_transcripts). No embedding API call. Over-fetches each leg, RRF-combines, then in
+ * JS excludes the show itself + non-streamable shows, dedupes titles, and caps each programme
+ * to 2. Zero regression when a show has no transcript vector (the transcript leg is empty, so
+ * the order equals today's metadata-only ranking). [] if neither leg has hits.
  */
-export async function similarShows(showId: number, limit = 4): Promise<ShowListItem[]> {
-  const vec = getEmbedding(showId);
-  if (!vec) return [];
-  const hits = knnShows(vec, Math.max(24, limit * 6)).filter(
-    (h) => h.showId !== showId && h.distance <= SIMILAR_MAX_DISTANCE,
-  );
-  if (!hits.length) return [];
-  const map = await showItemsByIds(hits.map((h) => h.showId));
+export async function similarShows(showId: number, limit = 8): Promise<ShowListItem[]> {
+  const k = Math.max(24, limit * 6);
+  const metaVec = getEmbedding(showId);
+  const metaHits = metaVec
+    ? knnShows(metaVec, k).filter((h) => h.showId !== showId && h.distance <= SIMILAR_MAX_DISTANCE)
+    : [];
+  const txVec = getShowTranscriptEmbedding(showId);
+  const txHits = txVec
+    ? knnShowsByTranscript(txVec, k).filter((h) => h.showId !== showId && h.distance <= SIMILAR_TX_MAX_DISTANCE)
+    : [];
+  if (!metaHits.length && !txHits.length) return [];
+
+  // RRF fuse (rank-based → robust across the two different vector spaces).
+  const score = new Map<number, number>();
+  const add = (id: number, s: number) => score.set(id, (score.get(id) ?? 0) + s);
+  metaHits.forEach((h, i) => add(h.showId, 1 / (SIMILAR_RRF_K + i + 1)));
+  txHits.forEach((h, i) => add(h.showId, SIMILAR_TX_WEIGHT / (SIMILAR_RRF_K + i + 1)));
+  const ordered = [...score.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+
+  const map = await showItemsByIds(ordered);
   const out: ShowListItem[] = [];
   const perProgramme = new Map<string, number>();
   const seenTitles = new Set<string>();
-  for (const h of hits) {
-    const item = map.get(h.showId);
+  for (const id of ordered) {
+    const item = map.get(id);
     // never recommend something unplayable — but multi-part shows are playable
     // via their parts even though show-level `streamable` is false.
     if (!item || !(item.streamable || item.streamablePartCount > 0)) continue;
