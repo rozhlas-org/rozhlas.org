@@ -37,6 +37,7 @@ import { pribehySeveroceskychMestAObciScraper } from "./pribehy-severoceskych-me
 import { stredoceskePribehyScraper } from "./stredoceske-pribehy/index.ts";
 import { kriminalkaScraper } from "./kriminalka/index.ts";
 import { jihoceskeOdpoledneScraper } from "./jihoceske-odpoledne/index.ts";
+import { povidkaNaSobotuScraper } from "./povidka-na-sobotu/index.ts";
 import { korenyJihocestiScraper } from "./koreny-jihocesti/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
@@ -77,6 +78,7 @@ export const SCRAPERS: Record<string, Scraper> = {
   [stredoceskePribehyScraper.key]: stredoceskePribehyScraper, // Středočeské příběhy (Střední Čechy)
   [kriminalkaScraper.key]: kriminalkaScraper, // Kriminálka (true-crime podcast)
   [jihoceskeOdpoledneScraper.key]: jihoceskeOdpoledneScraper, // Jihočeské odpoledne (České Budějovice)
+  [povidkaNaSobotuScraper.key]: povidkaNaSobotuScraper, // Povídka na sobotu (regional short stories)
   [korenyJihocestiScraper.key]: korenyJihocestiScraper, // Kořeny – jihočeské rodiny (České Budějovice)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
