@@ -827,9 +827,9 @@ export async function showView(slug: string): Promise<ViewResult> {
           ${transcriptSection}
         </div>
       </article>
-      <section class="similar" id="similar-mount" data-slug="${attr(show.slug)}" hidden>
+      <section class="similar" id="similar-mount" data-slug="${attr(show.slug)}" aria-busy="true">
         <h2 class="similar__title">Podobné pořady</h2>
-        <div class="show-grid" id="similar-grid"></div>
+        <div class="show-grid" id="similar-grid">${skeletonCards(4)}</div>
       </section>`,
   };
 }
@@ -889,6 +889,16 @@ export async function transcriptSearchView(params: URLSearchParams): Promise<Vie
  * only if it returns something. Purely additive — any failure leaves the detail
  * untouched. Guards against the user navigating away mid-fetch.
  */
+/** Placeholder cards shown while "Podobné pořady" loads (it can take several seconds). */
+function skeletonCards(n: number): string {
+  return Array.from(
+    { length: n },
+    () =>
+      `<div class="skel-card" aria-hidden="true"><div class="skel skel-art"></div>` +
+      `<div class="skel skel-line"></div><div class="skel skel-line skel-line--short"></div></div>`,
+  ).join("");
+}
+
 export async function loadSimilar(): Promise<void> {
   const mount = document.getElementById("similar-mount");
   const slug = mount?.dataset.slug;
@@ -897,15 +907,20 @@ export async function loadSimilar(): Promise<void> {
   try {
     items = await api.similar(slug, 8);
   } catch {
-    return; // additive — never break the detail view
+    mount.hidden = true; // additive — never break the detail view
+    return;
   }
   // Bail if the view changed under us (different show, or navigated away).
   const live = document.getElementById("similar-mount");
-  if (!live || live.dataset.slug !== slug || !items.length) return;
+  if (!live || live.dataset.slug !== slug) return;
+  live.removeAttribute("aria-busy");
+  if (!items.length) {
+    live.hidden = true; // nothing similar → drop the section (and its skeletons)
+    return;
+  }
   const grid = live.querySelector<HTMLElement>("#similar-grid");
   if (!grid) return;
   grid.innerHTML = items.map((s) => showCard(s)).join("");
-  live.hidden = false;
 }
 
 /** One downloaded show on the Stažené page (links to its detail, plays offline). */
