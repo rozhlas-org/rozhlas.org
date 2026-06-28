@@ -215,6 +215,20 @@ export const showEmbeddings = sqliteTable("show_embeddings", {
     .notNull(),
 });
 
+/** Bookkeeping for a show's pooled transcript vector (mean of its chunk vectors; lives in
+ *  vec_show_transcripts). Derived from transcript_chunks → recomputed as parts get embedded. */
+export const showTranscriptEmbeddings = sqliteTable("show_transcript_embeddings", {
+  showId: integer("show_id")
+    .primaryKey()
+    .references(() => shows.id, { onDelete: "cascade" }),
+  model: text("model").notNull(),
+  dims: integer("dims").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date())
+    .notNull(),
+});
+
 /** Whisper transcript of one audio file — full text + segment-level timestamps. */
 export const transcripts = sqliteTable(
   "transcripts",

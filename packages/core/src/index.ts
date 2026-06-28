@@ -15,5 +15,11 @@ export {
   upsertChunkEmbedding,
   knnChunks,
   type ChunkKnnHit,
+  ensureShowTranscriptVecTable,
+  resetShowTranscriptVecTable,
+  getShowTranscriptEmbedding,
+  knnShowsByTranscript,
+  meanPool,
+  recomputeShowTranscriptEmbedding,
 } from "./db/vec.ts";
 export * as tables from "./db/schema.ts";

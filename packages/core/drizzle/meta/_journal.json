@@ -71,6 +71,13 @@
       "when": 1782386748317,
       "tag": "0009_flimsy_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1782622543208,
+      "tag": "0010_naive_queen_noir",
+      "breakpoints": true
     }
   ]
 }

@@ -401,6 +401,16 @@ export function saveTranscript(
   });
 }
 
+/** The show a transcript belongs to (for repooling its transcript vector after embedding). */
+export async function transcriptShowId(transcriptId: number): Promise<number | null> {
+  const [r] = await db
+    .select({ showId: transcripts.showId })
+    .from(transcripts)
+    .where(eq(transcripts.id, transcriptId))
+    .limit(1);
+  return r?.showId ?? null;
+}
+
 /** Queue transcription for every pinned, streamable audio that has no transcript yet. */
 export async function enqueuePendingTranscripts(): Promise<number> {
   const rows = await db
