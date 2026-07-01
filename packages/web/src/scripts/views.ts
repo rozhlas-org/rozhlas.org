@@ -13,7 +13,7 @@ import { locked, isAuthed, clearAuthed } from "./auth.ts";
 
 // When playback is gated, link out to the show on mujRozhlas (search by title — we don't
 // store a canonical URL). Single editable base; the exact search path is confirmed at build.
-const MUJROZHLAS_SEARCH = "https://www.mujrozhlas.cz/vyhledavani?query=";
+const MUJROZHLAS_SEARCH = "https://www.mujrozhlas.cz/vyhledavani?q=";
 function mujRozhlasLink(title: string): string {
   return (
     `<a class="detail-extern" href="${attr(MUJROZHLAS_SEARCH + encodeURIComponent(title))}" ` +
