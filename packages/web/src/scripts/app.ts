@@ -14,6 +14,7 @@ import {
   categoryGroupView,
   selectionView,
   recommendationsAllView,
+  authView,
   savedShowsView,
   showView,
   transcriptSearchView,
@@ -28,6 +29,7 @@ import { applyPartMarquees, initPlayer, syncNowPlaying } from "./player.ts";
 import { wireTranscript } from "./transcript.ts";
 import { initTheme } from "./theme.ts";
 import { initPwa } from "./pwa.ts";
+import { checkPassword, setAuthed } from "./auth.ts";
 
 const app = document.getElementById("app")!;
 
@@ -51,6 +53,7 @@ async function resolve(): Promise<ViewResult> {
   if (path === "/historie") return historyView(params);
   if (path === "/oblibene") return favouritesView();
   if (path === "/co-k-poslechu") return recommendationsAllView(params);
+  if (path === "/auth") return authView(params);
   if (path === "/stazene") return savedShowsView();
 
   const show = path.match(/^\/show\/(.+)$/);
@@ -101,6 +104,7 @@ async function render() {
     window.scrollTo(0, 0);
     void loadSimilar(); // lazily fill "Podobné pořady" if this view has the mount
     void mountOffline(); // lazily fill the detail page's "Uložit offline" control
+    document.getElementById("auth-pw")?.focus(); // /auth: focus the password field
   } catch (err) {
     if (mine !== token) return;
     app.innerHTML = `<section><h1>Chyba</h1><p class="notice">Nepodařilo se načíst data. Zkuste to prosím znovu.</p></section>`;
@@ -134,8 +138,29 @@ document.addEventListener("click", (e) => {
 });
 
 // Intercept GET forms (header search + omnisearch) for SPA navigation.
+// The unlock form (/auth): check the password client-side, unlock forever, go home.
 document.addEventListener("submit", (e) => {
   const form = e.target as HTMLFormElement;
+  if (form.id !== "auth-form") return;
+  e.preventDefault();
+  const input = form.querySelector<HTMLInputElement>("#auth-pw");
+  if (!input) return;
+  void checkPassword(input.value).then((ok) => {
+    if (ok) {
+      setAuthed(); // removes html.no-play
+      navigate("/"); // re-render restores the play controls (they read the flag live)
+    } else {
+      document.getElementById("auth-err")?.removeAttribute("hidden");
+      input.setAttribute("aria-invalid", "true");
+      input.select();
+      input.focus();
+    }
+  });
+});
+
+document.addEventListener("submit", (e) => {
+  const form = e.target as HTMLFormElement;
+  if (form.id === "auth-form") return; // handled above
   if (form.method.toLowerCase() !== "get") return;
   const action = new URL(form.getAttribute("action") || "/", location.href);
   if (action.origin !== location.origin) return;
@@ -235,5 +260,49 @@ initPwa();
 initOffline();
 // "Načíst další" on omnisearch — append the next page of results in place.
 wireOmniMore();
+
+// Hidden unlock entry: press-and-hold the logo for 3s → /auth. A short tap still goes
+// home. Pointer events cover mouse + touch; a capture-phase click swallows the click the
+// hold would otherwise turn into a home-nav.
+(function wireLogoUnlock() {
+  const brand = document.querySelector<HTMLElement>(".site-header__brand");
+  if (!brand) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let held = false;
+  let sx = 0;
+  let sy = 0;
+  const cancel = () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+  };
+  brand.addEventListener("pointerdown", (e) => {
+    held = false;
+    sx = e.clientX;
+    sy = e.clientY;
+    cancel();
+    timer = setTimeout(() => {
+      held = true;
+      navigate("/auth");
+    }, 3000);
+  });
+  brand.addEventListener("pointermove", (e) => {
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) cancel(); // a drag/scroll, not a hold
+  });
+  brand.addEventListener("pointerup", cancel);
+  brand.addEventListener("pointerleave", cancel);
+  brand.addEventListener("pointercancel", cancel);
+  brand.addEventListener(
+    "click",
+    (e) => {
+      if (held) {
+        e.preventDefault();
+        e.stopImmediatePropagation(); // don't also navigate home
+        held = false;
+      }
+    },
+    true,
+  );
+  brand.addEventListener("contextmenu", (e) => e.preventDefault());
+})();
 
 render();

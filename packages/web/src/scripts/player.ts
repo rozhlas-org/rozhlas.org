@@ -32,6 +32,7 @@ import {
   type QueuePart,
 } from "./queue.ts";
 import { logListen } from "./history.ts";
+import { locked } from "./auth.ts";
 
 interface Track {
   idx: string | number;
@@ -139,6 +140,7 @@ function syncBarHeight(): void {
 
 /** Skip ±15s within the current track (in-track seek, not a track/díl change). */
 function skip(delta: number): void {
+  if (locked()) return;
   if (!q || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
   // Clamp below the very end so +15 can't trip `ended` → an accidental advanceQueue.
   audio.currentTime = Math.max(0, Math.min(audio.currentTime + delta, audio.duration - 0.5));
@@ -240,6 +242,7 @@ export async function playFromSlug(
   idx: string | number,
   seekSec?: number,
 ): Promise<boolean> {
+  if (locked()) return false; // gate: no playback without unlock (belt; load() also guards)
   const wantSeek = seekSec != null && Number.isFinite(seekSec) ? seekSec : null;
   // RESUME sentinel ("resume the show"): if THIS show is already loaded, resolve the
   // target against the live queue (no refetch) so the toggle short-circuit can match —
@@ -256,7 +259,7 @@ export async function playFromSlug(
       } catch {
         /* not seekable yet */
       }
-      audio.play().catch(() => {});
+      play();
     } else {
       toggle();
     }
@@ -355,7 +358,7 @@ function initMediaSession(): void {
       /* this action is unsupported by the browser */
     }
   };
-  set("play", () => void audio.play().catch(() => {}));
+  set("play", () => play());
   set("pause", () => audio.pause());
   set("previoustrack", () => prev());
   set("nexttrack", () => next());
@@ -372,7 +375,15 @@ function initMediaSession(): void {
   });
 }
 
+/** The single guarded resume point — every raw audio.play() routes through here so the
+ *  gate can't be bypassed (Media Session, toggle, stall recovery, autoplay). */
+function play(): void {
+  if (locked()) return;
+  play();
+}
+
 function load(autoplay: boolean): void {
+  if (locked()) return; // gate: no track ever loads/plays for a locked visitor
   if (!q) return;
   const t = q.parts[q.index]!;
   listenLogged = false; // Historie: log this díl only after it actually plays ~6s
@@ -413,7 +424,7 @@ function load(autoplay: boolean): void {
   if (autoplay) {
     seek.value = "0";
     timeEl.textContent = `0:00 / ${clock(dur)}`;
-    audio.play().catch(() => {});
+    play();
     void api.recordPlay(q.slug); // count a play per track start (knows the slug)
   } else {
     // Restored after a reload: reflect the saved resume position right away.
@@ -433,7 +444,7 @@ function toggle(): void {
     void advanceQueue(); // nothing loaded but a queue exists → start it
     return;
   }
-  if (audio.paused) audio.play().catch(() => {});
+  if (audio.paused) play();
   else audio.pause();
 }
 
@@ -859,7 +870,7 @@ export function initPlayer(): void {
       } catch {
         /* not seekable yet */
       }
-      if (wasPlaying) audio.play().catch(() => {});
+      if (wasPlaying) play();
       recovering = false;
     };
     audio.addEventListener("loadedmetadata", onMeta);
