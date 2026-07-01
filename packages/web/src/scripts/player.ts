@@ -379,7 +379,7 @@ function initMediaSession(): void {
  *  gate can't be bypassed (Media Session, toggle, stall recovery, autoplay). */
 function play(): void {
   if (locked()) return;
-  play();
+  audio.play().catch(() => {});
 }
 
 function load(autoplay: boolean): void {
