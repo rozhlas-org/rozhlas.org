@@ -9,6 +9,35 @@ import { getHistory, logView, type HistoryEntry } from "./history.ts";
 import { getFavourites, isFavourite, refreshFavourite, type FavItem } from "./favourites.ts";
 import { getSavedShow, savedToDetail, listSavedShows, fmtBytes, type SavedShow } from "./offline.ts";
 import { applyPartMarquees } from "./player.ts";
+import { locked, isAuthed, clearAuthed } from "./auth.ts";
+
+// When playback is gated, link out to the show on mujRozhlas (search by title — we don't
+// store a canonical URL). Single editable base; the exact search path is confirmed at build.
+const MUJROZHLAS_SEARCH = "https://www.mujrozhlas.cz/vyhledavani?query=";
+function mujRozhlasLink(title: string): string {
+  return (
+    `<a class="detail-extern" href="${attr(MUJROZHLAS_SEARCH + encodeURIComponent(title))}" ` +
+    `target="_blank" rel="noopener noreferrer" title="Otevře vyhledávání pořadu na mujRozhlas.cz" ` +
+    `aria-label="Najít pořad na mujRozhlas (otevře nový web)">Najít na mujRozhlas ↗</a>`
+  );
+}
+
+/** The hidden unlock page (reached via the logo long-press or by typing /auth). */
+export function authView(params: URLSearchParams): ViewResult {
+  if (params.get("lock") === "1") clearAuthed(); // owner testing: re-lock this device
+  const body = isAuthed()
+    ? `<p class="notice">Přehrávání je odemčeno.</p><p><a href="/">← Zpět na pořady</a></p>`
+    : `<form class="omni__form" id="auth-form" autocomplete="off">
+        <input type="password" id="auth-pw" name="password" placeholder="Heslo" autocomplete="off"
+          autocapitalize="none" spellcheck="false" aria-label="Heslo" />
+        <button type="submit">Odemknout</button>
+      </form>
+      <p class="auth-err" id="auth-err" role="alert" aria-live="polite" hidden>Nesprávné heslo.</p>`;
+  return {
+    title: "Přístup",
+    html: `<section class="mood"><h1 class="mood__title">Přístup</h1>${body}</section>`,
+  };
+}
 
 export interface ViewResult {
   title: string;
@@ -75,7 +104,10 @@ function cardTxHit(s: ShowListItem): string {
   const h = s.transcriptHit!;
   const part = h.partIdx == null ? "single" : String(h.partIdx);
   const dil = h.partIdx == null ? "" : `<span class="tx-hit__dil">${h.partIdx}. díl</span>`;
-  return `<button class="tx-hit tx-hit--card" type="button" data-slug="${attr(s.slug)}" data-part="${attr(part)}" data-seek="${h.startSec}" aria-label="Přehrát od ${esc(formatDuration(h.startSec))}"><span class="tx-hit__time">▶ ${esc(formatDuration(h.startSec))}</span>${dil}<span class="tx-hit__snip">${h.snippet}…</span></button>`;
+  const snip = `${dil}<span class="tx-hit__snip">${h.snippet}…</span>`;
+  // Locked: keep the (valuable) snippet as text, drop the misleading ▶/timestamp play chip.
+  if (locked()) return `<div class="tx-hit tx-hit--card tx-hit--static">${snip}</div>`;
+  return `<button class="tx-hit tx-hit--card" type="button" data-slug="${attr(s.slug)}" data-part="${attr(part)}" data-seek="${h.startSec}" aria-label="Přehrát od ${esc(formatDuration(h.startSec))}"><span class="tx-hit__time">▶ ${esc(formatDuration(h.startSec))}</span>${snip}</button>`;
 }
 
 function showCard(s: ShowListItem): string {
@@ -804,6 +836,7 @@ export async function showView(slug: string): Promise<ViewResult> {
           <p class="show-detail__meta">${meta}</p>
           ${statsLine(show.plays, show.displays)}
           <div class="show-detail__actions">
+          ${locked() ? mujRozhlasLink(show.title) : ""}
           ${(() => {
             // Count streamable parts client-side from the loaded detail (no API
             // dependency). Adding the show queues ALL parts — the label says so.
@@ -823,6 +856,7 @@ export async function showView(slug: string): Promise<ViewResult> {
           </div>
           ${desc}
           ${people}
+          ${locked() ? `<p class="detail-locked-note">Přehrávání zde není dostupné — pořad si poslechnete na mujRozhlas.</p>` : ""}
           ${audioBlock}
           ${transcriptSection}
         </div>
@@ -840,14 +874,17 @@ function txResultCard(it: { show: ShowListItem; hits: TranscriptHit[] }): string
   const programme = s.showName
     ? `<a class="show-card__programme" href="/programme/${encodeURIComponent(s.showName)}">${esc(s.showName)}</a>`
     : "";
+  const gated = locked();
   const hits = it.hits
     .map((h) => {
       const part = h.partIdx == null ? "single" : String(h.partIdx);
       const dil = h.partIdx == null ? "" : `<span class="tx-hit__dil">${h.partIdx}. díl</span>`;
+      const snip = `${dil}<span class="tx-hit__snip">${esc(h.snippet)}…</span>`;
+      // Locked: static snippet (no ▶/timestamp play affordance), still shows the match.
+      if (gated) return `<div class="tx-hit tx-hit--static">${snip}</div>`;
       return `<button class="tx-hit" type="button" data-slug="${attr(s.slug)}" data-part="${attr(part)}" data-seek="${h.startSec}" aria-label="Přehrát od ${esc(formatDuration(h.startSec))}">
         <span class="tx-hit__time">▶ ${esc(formatDuration(h.startSec))}</span>
-        ${dil}
-        <span class="tx-hit__snip">${esc(h.snippet)}…</span>
+        ${snip}
       </button>`;
     })
     .join("");

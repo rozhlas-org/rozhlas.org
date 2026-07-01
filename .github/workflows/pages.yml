@@ -35,6 +35,10 @@ jobs:
         env:
           # Production API origin the frontend calls at runtime.
           PUBLIC_API_BASE: https://api.rozhlas.org
+          # Playback gate: SHA-256 of the unlock password (here: "123456"). Baked into the
+          # bundle → the public site hides all playback until unlocked at /auth. Not a secret
+          # (the hash ships in the JS; only the password is). Empty/unset → gate off.
+          PUBLIC_AUTH_HASH: 8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92
       - uses: actions/upload-pages-artifact@v3
         with:
           path: packages/web/dist

@@ -71,6 +71,18 @@ const jsonLd = {
         } catch (e) {}
       })();
     </script>
+    {/* Playback gate: hide all play UI before paint when the gate is on and this device
+        isn't unlocked (no flash of play buttons). `is:inline` can't read import.meta.env,
+        so the build-time boolean is injected via define:vars. */}
+    <script is:inline define:vars={{ gate: (import.meta.env.PUBLIC_AUTH_HASH ?? "").trim().length === 64 }}>
+      (function () {
+        try {
+          if (gate && localStorage.getItem("rozhlas:auth:v1") !== "1") {
+            document.documentElement.classList.add("no-play");
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta name="robots" content="index, follow" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

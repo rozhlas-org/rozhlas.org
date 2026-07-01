@@ -3,6 +3,7 @@
 // the service worker then plays saved shows with no network.
 
 import { api, type ShowDetail } from "./api.ts";
+import { locked } from "./auth.ts";
 import * as off from "./offline.ts";
 
 const details = new Map<string, ShowDetail>(); // cached detail per slug (for the save action)
@@ -26,6 +27,7 @@ function renderProgress(el: HTMLElement): void {
 
 /** Fill the detail page's offline control after the view renders (lazy, like Podobné). */
 export async function mountOffline(): Promise<void> {
+  if (locked()) return; // gate: offline save is a playback feature
   const el = document.querySelector<HTMLElement>(".offline[data-slug]");
   if (!el || el.dataset.ready) return;
   el.dataset.ready = "1";

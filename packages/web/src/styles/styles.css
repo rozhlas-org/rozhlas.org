@@ -1685,3 +1685,44 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 /* each whisper segment — click/Enter seeks the player to that second */
 .tx-seg { cursor: pointer; border-radius: 2px; transition: background 0.08s ease; }
 .tx-seg:hover, .tx-seg:focus-visible { background: var(--yellow); outline: none; }
+
+/* ===== playback gate (html.no-play) — hide every play/audio surface when locked ===== */
+html.no-play .show-card__badge,
+html.no-play .show-detail__badge,
+html.no-play .part__play,
+html.no-play .queue-add,
+html.no-play .offline,
+html.no-play #player,
+html.no-play #player-queue,
+html.no-play #player-transcript,
+html.no-play .site-nav a[href="/stazene"] { display: none !important; }
+html.no-play { --player-h: 0px; }
+html.no-play body.has-player { padding-bottom: 0; }
+/* locked detail: the "Najít na mujRozhlas" primary link + the muted note */
+.detail-extern {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 14px;
+  padding: 9px 16px;
+  background: var(--magenta);
+  color: var(--on-magenta);
+  border: var(--border-thin);
+  box-shadow: 3px 3px 0 var(--key);
+  text-decoration: none;
+  display: inline-block;
+}
+.detail-extern:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--key); }
+.detail-locked-note { color: var(--muted); font-size: 13px; margin: 8px 0 4px; }
+/* the hidden unlock target: no long-press callout/selection on the logo */
+.site-header__brand { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* /auth error line */
+.auth-err { color: var(--magenta); font-family: var(--font-mono); font-size: 13px; margin-top: 10px; }
+/* locked: non-interactive transcript snippet (keeps the text, no play affordance) */
+.tx-hit--static { cursor: default; background: none; border: none; text-align: left; width: 100%; }
+.tx-hit--static:hover { background: none; }
+/* locked: part rows are inert (the play button is hidden; the row click is guarded) */
+html.no-play .part--playable { cursor: default; }
+html.no-play .part--playable:hover { box-shadow: none; }
+html.no-play .part--playable:hover .part__title { color: inherit; }
