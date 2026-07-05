@@ -10,7 +10,7 @@
 # The frontend (rozhlas.org) is NOT served here — it's on GitHub Pages.
 
 {
-	email mail@janfabian.cz
+	email acme@rozhlas.org
 }
 
 (cf_tls) {
