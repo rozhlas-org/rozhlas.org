@@ -9,6 +9,7 @@ import { getHistory, logView, type HistoryEntry } from "./history.ts";
 import { getFavourites, isFavourite, refreshFavourite, type FavItem } from "./favourites.ts";
 import { getSavedShow, savedToDetail, listSavedShows, fmtBytes, type SavedShow } from "./offline.ts";
 import { applyPartMarquees } from "./player.ts";
+import { shareRow } from "./transcript.ts";
 import { locked, isAuthed, clearAuthed } from "./auth.ts";
 
 // When playback is gated, link out to the show on mujRozhlas (search by title — we don't
@@ -821,6 +822,7 @@ export async function showView(slug: string): Promise<ViewResult> {
   const transcriptSection = hasTranscript
     ? `<section class="transcript">
         <button class="transcript-toggle" type="button" data-slug="${attr(show.slug)}" aria-expanded="false">Zobrazit přepis</button>
+        ${shareRow(show.slug)}
         <div class="transcript-body" hidden></div>
       </section>`
     : "";

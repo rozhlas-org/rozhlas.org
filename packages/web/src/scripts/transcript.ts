@@ -37,8 +37,9 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** Tiny share row appended under the transcript: copy-link + native share (mobile). */
-function shareRow(slug: string): string {
+/** Tiny share row (copy-link + native share) — rendered under the transcript toggle
+ *  by views.showView so it's always visible without expanding the transcript. */
+export function shareRow(slug: string): string {
   const url = `${location.origin}/show/${encodeURIComponent(slug)}`;
   const copy = `<button class="tx-share__btn" type="button" data-share-copy data-url="${attr(url)}" aria-label="Kopírovat odkaz" title="Kopírovat odkaz">${LINK_SVG}<span class="tx-share__lbl">Odkaz</span></button>`;
   // Native share only where the OS sheet exists (mobile) — no dead button on desktop.
@@ -66,7 +67,7 @@ function renderTranscript(slug: string, parts: ShowTranscriptPart[]): string {
   if (!parts.length) return `<p class="empty">Přepis není k dispozici.</p>`;
   // Single audio (or only one díl transcribed) → just the text, no submenu.
   if (parts.length === 1) {
-    return `<div class="transcript-part">${renderSegments(slug, parts[0]!)}</div>${shareRow(slug)}`;
+    return `<div class="transcript-part">${renderSegments(slug, parts[0]!)}</div>`;
   }
   // Multi-part: a díl submenu; only the selected díl's transcript is shown, so the
   // page isn't a single huge wall of every part merged together.
@@ -83,7 +84,7 @@ function renderTranscript(slug: string, parts: ShowTranscriptPart[]): string {
         `<div class="transcript-panel" data-panel="${i}"${i === 0 ? "" : " hidden"}>${renderSegments(slug, p)}</div>`,
     )
     .join("");
-  return `<div class="transcript-nav" role="tablist" aria-label="Díly přepisu">${nav}</div><div class="transcript-panels">${panels}</div>${shareRow(slug)}`;
+  return `<div class="transcript-nav" role="tablist" aria-label="Díly přepisu">${nav}</div><div class="transcript-panels">${panels}</div>`;
 }
 
 /** Install the delegated handlers once at startup. */
