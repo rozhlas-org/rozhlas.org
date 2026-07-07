@@ -8,6 +8,47 @@ import { attr, esc, formatDuration } from "./format.ts";
 
 const cache = new Map<string, ShowTranscriptPart[]>();
 
+// Tiny inline glyphs (no icon font) — stroke uses currentColor so they invert.
+const LINK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 15l6-6M11 6l1-1a4 4 0 0 1 6 6l-1 1M13 18l-1 1a4 4 0 0 1-6-6l1-1"/></svg>`;
+const SHARE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg>`;
+
+/** Copy text with a secure-context clipboard API, falling back to execCommand. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to the legacy path */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Tiny share row appended under the transcript: copy-link + native share (mobile). */
+function shareRow(slug: string): string {
+  const url = `${location.origin}/show/${encodeURIComponent(slug)}`;
+  const copy = `<button class="tx-share__btn" type="button" data-share-copy data-url="${attr(url)}" aria-label="Kopírovat odkaz" title="Kopírovat odkaz">${LINK_SVG}<span class="tx-share__lbl">Odkaz</span></button>`;
+  // Native share only where the OS sheet exists (mobile) — no dead button on desktop.
+  const native =
+    typeof navigator !== "undefined" && "share" in navigator
+      ? `<button class="tx-share__btn" type="button" data-share-native data-url="${attr(url)}" aria-label="Sdílet" title="Sdílet">${SHARE_SVG}<span class="tx-share__lbl">Sdílet</span></button>`
+      : "";
+  return `<div class="transcript-share" aria-label="Sdílet">${copy}${native}</div>`;
+}
+
 /** Clickable, timestamped segments for one part's transcript text. */
 function renderSegments(slug: string, p: ShowTranscriptPart): string {
   const part = p.partIdx == null ? "single" : String(p.partIdx);
@@ -25,7 +66,7 @@ function renderTranscript(slug: string, parts: ShowTranscriptPart[]): string {
   if (!parts.length) return `<p class="empty">Přepis není k dispozici.</p>`;
   // Single audio (or only one díl transcribed) → just the text, no submenu.
   if (parts.length === 1) {
-    return `<div class="transcript-part">${renderSegments(slug, parts[0]!)}</div>`;
+    return `<div class="transcript-part">${renderSegments(slug, parts[0]!)}</div>${shareRow(slug)}`;
   }
   // Multi-part: a díl submenu; only the selected díl's transcript is shown, so the
   // page isn't a single huge wall of every part merged together.
@@ -42,7 +83,7 @@ function renderTranscript(slug: string, parts: ShowTranscriptPart[]): string {
         `<div class="transcript-panel" data-panel="${i}"${i === 0 ? "" : " hidden"}>${renderSegments(slug, p)}</div>`,
     )
     .join("");
-  return `<div class="transcript-nav" role="tablist" aria-label="Díly přepisu">${nav}</div><div class="transcript-panels">${panels}</div>`;
+  return `<div class="transcript-nav" role="tablist" aria-label="Díly přepisu">${nav}</div><div class="transcript-panels">${panels}</div>${shareRow(slug)}`;
 }
 
 /** Install the delegated handlers once at startup. */
@@ -101,6 +142,31 @@ export function wireTranscript(): void {
     panels.querySelectorAll<HTMLElement>(".transcript-panel").forEach((p) => {
       p.hidden = p.dataset.panel !== idx;
     });
+  });
+
+  // Share row under the transcript: copy-link (with feedback) + native OS share.
+  document.addEventListener("click", async (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-share-copy],[data-share-native]");
+    if (!b) return;
+    const url = b.dataset.url ?? location.href;
+    if (b.hasAttribute("data-share-native")) {
+      try {
+        await navigator.share({ title: document.title, url });
+      } catch {
+        /* user cancelled / unsupported — no-op */
+      }
+      return;
+    }
+    if (await copyText(url)) {
+      const lbl = b.querySelector<HTMLElement>(".tx-share__lbl");
+      const prev = lbl?.textContent ?? "";
+      if (lbl) lbl.textContent = "Zkopírováno ✓";
+      b.classList.add("is-done");
+      setTimeout(() => {
+        if (lbl) lbl.textContent = prev;
+        b.classList.remove("is-done");
+      }, 1500);
+    }
   });
 
   // Keyboard: Enter/Space on a focused segment seeks (it's role="button").
