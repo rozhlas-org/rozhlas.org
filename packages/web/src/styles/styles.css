@@ -1685,14 +1685,12 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 /* each whisper segment — click/Enter seeks the player to that second */
 .tx-seg { cursor: pointer; border-radius: 2px; transition: background 0.08s ease; }
 .tx-seg:hover, .tx-seg:focus-visible { background: var(--yellow); outline: none; }
-/* tiny share row under the transcript — copy link + native share (mobile) */
+/* tiny share row directly under the "Zobrazit přepis" toggle — always visible */
 .transcript-share {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: var(--border-thin);
+  margin-top: 10px;
 }
 .tx-share__btn {
   display: inline-flex;
