@@ -9,6 +9,7 @@
 
 const NS = "rozhlas:progress:v1";
 const SAVE_EVERY_MS = 5000;
+const DONE_LEAD_SEC = 60; // count a part "listened" this many seconds before the end
 const PKEY = "pkey"; // dataset key → data-pkey attribute
 
 export interface PartProgress {
@@ -126,6 +127,13 @@ export function wireAudioProgress(): void {
       if (now - (lastSave.get(a) ?? 0) < SAVE_EVERY_MS) return;
       lastSave.set(a, now);
       if (getProgress(a.dataset[PKEY]!)?.done) return;
+      // Count it listened once within ~1 min of the end — the listener needn't reach
+      // the very last second. For short parts fall back to ~90% so a brief clip isn't
+      // marked done almost at the start.
+      if (a.duration > 0 && a.currentTime >= Math.max(a.duration - DONE_LEAD_SEC, a.duration * 0.9)) {
+        markDone(a);
+        return;
+      }
       if (a.currentTime > 1) save(a.dataset[PKEY]!, { t: a.currentTime, done: false, at: now });
     },
     true,
