@@ -1685,6 +1685,34 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 /* each whisper segment — click/Enter seeks the player to that second */
 .tx-seg { cursor: pointer; border-radius: 2px; transition: background 0.08s ease; }
 .tx-seg:hover, .tx-seg:focus-visible { background: var(--yellow); outline: none; }
+/* tiny share row under the transcript — copy link + native share (mobile) */
+.transcript-share {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: var(--border-thin);
+}
+.tx-share__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px; /* keeps a tap target even though it reads small */
+  padding: 6px 11px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--key);
+  background: var(--paper);
+  border: var(--border-thin);
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease, color 0.08s ease;
+}
+.tx-share__btn:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--magenta); }
+.tx-share__btn:active { transform: translate(1px, 1px); box-shadow: none; }
+.tx-share__btn.is-done { background: var(--cyan); color: var(--paper); border-color: var(--cyan); }
+.tx-share__btn svg { width: 14px; height: 14px; display: block; }
 
 /* ===== playback gate (html.no-play) — hide every play/audio surface when locked ===== */
 html.no-play .show-card__badge,
