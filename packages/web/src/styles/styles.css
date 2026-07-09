@@ -1721,7 +1721,12 @@ html.no-play .offline,
 html.no-play #player,
 html.no-play #player-queue,
 html.no-play #player-transcript,
-html.no-play .site-nav a[href="/stazene"] { display: none !important; }
+html.no-play .site-nav a[href="/stazene"],
+/* transcripts are gated the same as playback (licensing): hide the show-detail
+   transcript, the transcript-search hits, and the "V přepisech" nav link. */
+html.no-play .transcript,
+html.no-play .tx-hit,
+html.no-play .site-nav a[href="/transcripts"] { display: none !important; }
 html.no-play { --player-h: 0px; }
 html.no-play body.has-player { padding-bottom: 0; }
 /* locked detail: the "Najít na mujRozhlas" primary link + the muted note */

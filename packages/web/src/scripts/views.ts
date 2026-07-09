@@ -106,8 +106,8 @@ function cardTxHit(s: ShowListItem): string {
   const part = h.partIdx == null ? "single" : String(h.partIdx);
   const dil = h.partIdx == null ? "" : `<span class="tx-hit__dil">${h.partIdx}. díl</span>`;
   const snip = `${dil}<span class="tx-hit__snip">${h.snippet}…</span>`;
-  // Locked: keep the (valuable) snippet as text, drop the misleading ▶/timestamp play chip.
-  if (locked()) return `<div class="tx-hit tx-hit--card tx-hit--static">${snip}</div>`;
+  // Locked: transcripts are licence-gated — hide the spoken-content snippet entirely.
+  if (locked()) return "";
   return `<button class="tx-hit tx-hit--card" type="button" data-slug="${attr(s.slug)}" data-part="${attr(part)}" data-seek="${h.startSec}" aria-label="Přehrát od ${esc(formatDuration(h.startSec))}"><span class="tx-hit__time">▶ ${esc(formatDuration(h.startSec))}</span>${snip}</button>`;
 }
 
@@ -816,11 +816,13 @@ export async function showView(slug: string): Promise<ViewResult> {
       : `<p class="notice">Audio se zpracovává…</p>`;
   }
 
-  // "Přepis" — shown only when a transcript exists; lazy-loaded on toggle.
+  // "Přepis" — shown only when a transcript exists AND playback isn't gated
+  // (transcripts are licence-gated the same as playback); lazy-loaded on toggle.
   const hasTranscript =
     show.parts.some((p) => p.audio?.hasTranscript) || show.audio.some((a) => a.hasTranscript);
-  const transcriptSection = hasTranscript
-    ? `<section class="transcript">
+  const transcriptSection =
+    hasTranscript && !locked()
+      ? `<section class="transcript">
         <button class="transcript-toggle" type="button" data-slug="${attr(show.slug)}" aria-expanded="false">Zobrazit přepis</button>
         ${shareRow(show.slug)}
         <div class="transcript-body" hidden></div>
@@ -899,6 +901,14 @@ function txResultCard(it: { show: ShowListItem; hits: TranscriptHit[] }): string
 
 /** "Hledat v přepisech" — full-text + semantic search inside the spoken content. */
 export async function transcriptSearchView(params: URLSearchParams): Promise<ViewResult> {
+  // Transcripts are licence-gated the same as playback — don't search or render
+  // spoken content for a locked visitor who reaches /transcripts directly.
+  if (locked()) {
+    return {
+      title: "Hledat v přepisech",
+      html: `<section class="tx-search"><h1>Hledat v přepisech</h1><p class="empty">Přepisy zde nejsou dostupné.</p></section>`,
+    };
+  }
   const q = (params.get("q") ?? "").trim();
   const result = q ? await api.transcriptSearch(q) : null;
   const body = result
