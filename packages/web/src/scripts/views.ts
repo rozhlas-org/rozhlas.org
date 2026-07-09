@@ -816,16 +816,16 @@ export async function showView(slug: string): Promise<ViewResult> {
       : `<p class="notice">Audio se zpracovává…</p>`;
   }
 
-  // "Přepis" — shown only when a transcript exists AND playback isn't gated
-  // (transcripts are licence-gated the same as playback); lazy-loaded on toggle.
+  // "Přepis" toggle + view are licence-gated (hidden when locked), but the share
+  // row shares the SHOW link (not transcript content), so it stays visible either way.
   const hasTranscript =
     show.parts.some((p) => p.audio?.hasTranscript) || show.audio.some((a) => a.hasTranscript);
-  const transcriptSection =
-    hasTranscript && !locked()
-      ? `<section class="transcript">
-        <button class="transcript-toggle" type="button" data-slug="${attr(show.slug)}" aria-expanded="false">Zobrazit přepis</button>
+  const showTx = hasTranscript && !locked(); // render the transcript toggle/view?
+  const transcriptSection = hasTranscript
+    ? `<section class="transcript">
+        ${showTx ? `<button class="transcript-toggle" type="button" data-slug="${attr(show.slug)}" aria-expanded="false">Zobrazit přepis</button>` : ""}
         ${shareRow(show.slug)}
-        <div class="transcript-body" hidden></div>
+        ${showTx ? `<div class="transcript-body" hidden></div>` : ""}
       </section>`
     : "";
 

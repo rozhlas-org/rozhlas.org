@@ -1722,9 +1722,9 @@ html.no-play #player,
 html.no-play #player-queue,
 html.no-play #player-transcript,
 html.no-play .site-nav a[href="/stazene"],
-/* transcripts are gated the same as playback (licensing): hide the show-detail
-   transcript, the transcript-search hits, and the "V přepisech" nav link. */
-html.no-play .transcript,
+/* transcripts are gated the same as playback (licensing): hide the transcript-search
+   hits and the "V přepisech" nav link. The show-detail transcript toggle/view are
+   gated in showView (JS); its share row stays visible (it shares the show link). */
 html.no-play .tx-hit,
 html.no-play .site-nav a[href="/transcripts"] { display: none !important; }
 html.no-play { --player-h: 0px; }
