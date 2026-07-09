@@ -142,6 +142,7 @@ async function hydrateShowItems(rows: ShowCardRow[]): Promise<ShowListItem[]> {
   const ids = rows.map((r) => r.id);
   const audioByShow = await audioForShows(ids);
   const partsByShow = await streamablePartsForShows(ids);
+  const partDurByShow = await partDurationSums(ids);
   const artByShow = await artworkForShows(ids);
   return rows.map((r) => {
     const a = audioByShow.get(r.id);
@@ -151,7 +152,7 @@ async function hydrateShowItems(rows: ShowCardRow[]): Promise<ShowListItem[]> {
       showName: r.showName,
       source: r.source,
       publishedAt: r.publishedAt,
-      durationSec: r.durationSec ?? a?.durationSec ?? null,
+      durationSec: partDurByShow.get(r.id) ?? a?.durationSec ?? r.durationSec ?? null,
       artworkUrl: artByShow.get(r.id) ?? null,
       streamable: a?.streamable ?? false,
       streamablePartCount: partsByShow.get(r.id) ?? 0,
@@ -175,6 +176,24 @@ async function audioForShows(ids: number[]) {
     .from(audioFiles)
     .where(and(inArray(audioFiles.showId, ids), isNull(audioFiles.partId)));
   for (const r of rows) if (!map.has(r.showId)) map.set(r.showId, r);
+  return map;
+}
+
+/**
+ * Sum of a show's part (díl) audio durations = the true multi-part show length. The stored
+ * `shows.duration_sec` is unreliable: an incremental (48h-window) re-scrape overwrites it with
+ * only the newly-seen díly, so it can be a partial sum (or a single part). Derive it from the
+ * parts instead. Empty for single-audio shows (their length comes from audioForShows).
+ */
+async function partDurationSums(ids: number[]): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (!ids.length) return map;
+  const rows = await db
+    .select({ showId: audioFiles.showId, total: sql<number>`sum(${audioFiles.durationSec})` })
+    .from(audioFiles)
+    .where(and(inArray(audioFiles.showId, ids), isNotNull(audioFiles.partId)))
+    .groupBy(audioFiles.showId);
+  for (const r of rows) if (r.total != null) map.set(r.showId, r.total);
   return map;
 }
 
@@ -237,6 +256,7 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
     .where(inArray(shows.id, ids));
   const audio = await audioForShows(ids);
   const partsByShow = await streamablePartsForShows(ids);
+  const partDurByShow = await partDurationSums(ids);
   const art = await artworkForShows(ids);
   for (const r of rows) {
     const a = audio.get(r.id);
@@ -246,7 +266,7 @@ export async function showItemsByIds(ids: number[]): Promise<Map<number, ShowLis
       showName: r.showName,
       source: r.source,
       publishedAt: r.publishedAt,
-      durationSec: r.durationSec ?? a?.durationSec ?? null,
+      durationSec: partDurByShow.get(r.id) ?? a?.durationSec ?? r.durationSec ?? null,
       artworkUrl: art.get(r.id) ?? null,
       streamable: a?.streamable ?? false,
       streamablePartCount: partsByShow.get(r.id) ?? 0,
@@ -380,6 +400,7 @@ async function hydrateItems(
   const showMap = new Map(showRows.map((r) => [r.id, r]));
   const audio = await audioForShows(showIds);
   const partsByShow = await streamablePartsForShows(showIds);
+  const partDurByShow = await partDurationSums(showIds);
   const art = await artworkForShows(showIds);
   const partIds = items.map((i) => i.partId).filter((x): x is number => x != null);
   const partMap = new Map<number, { idx: number; title: string | null }>();
@@ -402,7 +423,9 @@ async function hydrateItems(
       showName: r.showName,
       source: r.source,
       publishedAt: r.publishedAt,
-      durationSec: r.durationSec ?? a?.durationSec ?? null,
+      // whole-show item → sum of parts; a pinned díl keeps the show's stored value (its own
+      // part duration isn't fetched here — a separate, pre-existing concern).
+      durationSec: (it.partId == null ? partDurByShow.get(it.showId) : undefined) ?? a?.durationSec ?? r.durationSec ?? null,
       artworkUrl: art.get(it.showId) ?? null,
       streamable: a?.streamable ?? false,
       streamablePartCount: partsByShow.get(it.showId) ?? 0,
@@ -1080,6 +1103,12 @@ export async function getShowBySlug(slug: string) {
     durationSec: p.durationSec,
     audio: mapAudio(audioByPart.get(p.id)),
   }));
+  // True show length = sum of its parts' (ffmpeg-measured, falling back to metadata) durations.
+  // `show.duration_sec` is unreliable for multipart shows — an incremental re-scrape overwrites
+  // it with only the newly-seen díly. Single-audio shows have no parts → keep the stored value.
+  const partsDurationSec = parts.length
+    ? parts.reduce((n, p) => n + (p.audio?.durationSec ?? p.durationSec ?? 0), 0) || null
+    : null;
 
   return {
     slug: show.slug,
@@ -1088,7 +1117,7 @@ export async function getShowBySlug(slug: string) {
     showName: show.showName,
     source: show.sourceKey,
     publishedAt: show.publishedAt,
-    durationSec: show.durationSec,
+    durationSec: partsDurationSec ?? show.durationSec,
     artworkUrl: art.get(show.id) ?? null,
     plays: show.plays,
     displays: show.displays,
