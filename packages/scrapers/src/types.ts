@@ -19,6 +19,7 @@ export interface ScrapedPart {
   idx: number;
   title?: string;
   durationSec?: number;
+  publishedAt?: Date; // this díl's air date, when the source page exposes one
   media: MediaSource;
 }
 

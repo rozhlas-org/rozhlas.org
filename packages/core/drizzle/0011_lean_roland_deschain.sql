@@ -1,0 +1,1 @@
+ALTER TABLE `show_parts` ADD `published_at` integer;

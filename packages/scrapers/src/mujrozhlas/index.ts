@@ -108,7 +108,7 @@ export function makeApiScraper(cfg: ApiScraperConfig): Scraper {
                 serials.set(serialId, g);
               }
               const partIdx = idx ?? g.parts.length + 1;
-              g.parts.push({ idx: partIdx, title: a.title, durationSec: dur, media });
+              g.parts.push({ idx: partIdx, title: a.title, durationSec: dur, publishedAt: pub, media });
               // Serial-level description: take it from the earliest part that has one.
               if (a.description && partIdx < g.descPart) {
                 g.description = a.description;

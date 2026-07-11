@@ -42,3 +42,11 @@ export function formatDate(d?: string | null): string {
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleDateString("cs-CZ", { day: "numeric", month: "long", year: "numeric" });
 }
+
+/** Compact numeric Czech date, e.g. "11. 7. 2024" — for inline labels next to length. */
+export function formatDateShort(d?: string | null): string {
+  if (!d) return "";
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
+}

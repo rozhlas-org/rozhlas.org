@@ -1101,6 +1101,7 @@ export async function getShowBySlug(slug: string) {
     idx: p.idx,
     title: p.title,
     durationSec: p.durationSec,
+    publishedAt: p.publishedAt,
     audio: mapAudio(audioByPart.get(p.id)),
   }));
   // True show length = sum of its parts' (ffmpeg-measured, falling back to metadata) durations.

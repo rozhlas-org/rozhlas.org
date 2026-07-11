@@ -3,7 +3,7 @@
 // (plus the document <title>). The router in app.ts swaps the result into #app.
 
 import { api, type CategoryGroup, type ListResult, type RecommendationItem, type Selection, type ShowListItem, type SortKey, type TranscriptHit } from "./api.ts";
-import { attr, esc, formatDate, formatDuration, stripHtml } from "./format.ts";
+import { attr, esc, formatDate, formatDateShort, formatDuration, stripHtml } from "./format.ts";
 import { getProgress, showHasProgress } from "./progress.ts";
 import { getHistory, logView, type HistoryEntry } from "./history.ts";
 import { getFavourites, isFavourite, refreshFavourite, type FavItem } from "./favourites.ts";
@@ -778,6 +778,10 @@ export async function showView(slug: string): Promise<ViewResult> {
         const check = `<span class="part__check" aria-hidden="true">✓</span>`;
         const num = `<span class="part__idx">${esc(String(p.idx))}.</span>`;
         const dur = p.durationSec ? `<span class="part__dur">${esc(formatDuration(p.durationSec))}</span>` : "";
+        // This díl's air date, muted, right after the length (only when we have it).
+        const date = p.publishedAt
+          ? `<span class="part__date">(${esc(formatDateShort(p.publishedAt))})</span>`
+          : "";
         const resume = resumeAt
           ? `<span class="part__resume">pokračovat od ${esc(formatDuration(resumeAt))}</span>`
           : "";
@@ -801,7 +805,7 @@ export async function showView(slug: string): Promise<ViewResult> {
         // played ✓ sits inline at the line start (not a corner box) so it never
         // shifts the trailing ＋ — the row's cyan tint is the main "done" signal.
         const line = `<span class="part__line">${check}${num}<span class="part__title">${esc(p.title ?? "díl")}</span></span>`;
-        return `<li class="${cls}"${data}>${play}${line}${dur}${resume}${cid}${addPart}</li>`;
+        return `<li class="${cls}"${data}>${play}${line}${dur}${date}${resume}${cid}${addPart}</li>`;
       })
       .join("");
     audioBlock = `<ol class="parts">${items}</ol>`;
