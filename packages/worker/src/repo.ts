@@ -313,10 +313,10 @@ export async function upsertPart(
 ): Promise<AudioUpsertResult> {
   const [row] = await db
     .insert(showParts)
-    .values({ showId, idx: part.idx, title: part.title, durationSec: part.durationSec })
+    .values({ showId, idx: part.idx, title: part.title, durationSec: part.durationSec, publishedAt: part.publishedAt })
     .onConflictDoUpdate({
       target: [showParts.showId, showParts.idx],
-      set: { title: part.title, durationSec: part.durationSec, updatedAt: new Date() },
+      set: { title: part.title, durationSec: part.durationSec, publishedAt: part.publishedAt, updatedAt: new Date() },
     })
     .returning({ id: showParts.id });
   return upsertAudioRow(showId, part.media, row!.id);

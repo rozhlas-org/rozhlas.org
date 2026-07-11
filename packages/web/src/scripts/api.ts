@@ -100,6 +100,7 @@ export interface ShowPart {
   idx: number;
   title: string | null;
   durationSec: number | null;
+  publishedAt?: string | null; // this díl's air date (absent offline / for un-rescraped parts)
   audio: AudioFile | null;
 }
 

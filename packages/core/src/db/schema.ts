@@ -73,6 +73,7 @@ export const showParts = sqliteTable(
     idx: integer("idx").notNull(), // ordering within the show
     title: text("title"),
     durationSec: integer("duration_sec"),
+    publishedAt: integer("published_at", { mode: "timestamp_ms" }), // this díl's air date (null for un-rescraped parts)
     ...timestamps,
   },
   (t) => ({ partUnique: uniqueIndex("show_parts_unique").on(t.showId, t.idx) }),

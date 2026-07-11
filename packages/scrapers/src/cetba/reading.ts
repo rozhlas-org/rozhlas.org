@@ -51,6 +51,7 @@ export function parseReadingPage(
       idx: p.part ? Number(p.part) : i + 1,
       title: p.title ? decodeEntities(p.title) : undefined,
       durationSec: p.duration,
+      publishedAt: p.since ? new Date(p.since) : undefined,
       media: { kind: dash ? "dash" : "hls", url: link.url },
     });
   }

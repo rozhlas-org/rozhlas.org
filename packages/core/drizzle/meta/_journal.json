@@ -78,6 +78,13 @@
       "when": 1782622543208,
       "tag": "0010_naive_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1783764460464,
+      "tag": "0011_lean_roland_deschain",
+      "breakpoints": true
     }
   ]
 }
