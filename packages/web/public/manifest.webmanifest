@@ -7,7 +7,6 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "any",
   "background_color": "#161616",
   "theme_color": "#111111",
   "categories": ["music", "entertainment", "books"],
