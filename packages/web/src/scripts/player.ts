@@ -375,11 +375,39 @@ function initMediaSession(): void {
   });
 }
 
+/** Reflect the real <audio>.paused state onto the toggle icon + Media Session. The
+ *  icon is normally driven by `play`/`pause` events, but a *blocked* autoplay attempt
+ *  (mobile background auto-advance) fires `play` first and then never truly plays — this
+ *  re-syncs so the bar can't lie ("❚❚" showing while nothing is playing). */
+function syncPlayState(): void {
+  const playing = !audio.paused;
+  toggleBtn.textContent = playing ? "❚❚" : "▶";
+  toggleBtn.setAttribute("aria-label", playing ? "Pozastavit" : "Přehrát");
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+}
+
 /** The single guarded resume point — every raw audio.play() routes through here so the
  *  gate can't be bypassed (Media Session, toggle, stall recovery, autoplay). */
 function play(): void {
   if (locked()) return;
-  audio.play().catch(() => {});
+  // On mobile background auto-advance the (gesture-less) play() can be rejected; the
+  // `play` event may have already flipped the icon to "playing", so re-sync to reality.
+  audio.play().catch(() => syncPlayState());
+}
+
+/** After an auto-advance (`ended` → next díl), the first play() runs without a user
+ *  gesture and, on a backgrounded mobile PWA, can be dropped or stall before any bytes
+ *  arrive — the díl switches but never plays. Once the new díl actually has data, retry
+ *  the play once, then reflect the true state on the bar. */
+function resumeAfterAdvance(): void {
+  audio.addEventListener(
+    "canplay",
+    () => {
+      if (!locked() && audio.paused) play();
+      syncPlayState();
+    },
+    { once: true },
+  );
 }
 
 function load(autoplay: boolean): void {
@@ -388,6 +416,10 @@ function load(autoplay: boolean): void {
   const t = q.parts[q.index]!;
   listenLogged = false; // Historie: log this díl only after it actually plays ~6s
   audio.dataset.pkey = pkey(q.slug, t.idx); // progress.ts keys off this
+  // The shell's <audio> is preload="none". Auto-advance can fire while the PWA is
+  // backgrounded on mobile, where a lazy element won't fetch until foregrounded → the
+  // next díl shows "playing" but never buffers. Buffer eagerly whenever we mean to play.
+  if (autoplay) audio.preload = "auto";
   audio.src = t.streamUrl;
   audio.load();
   // Deep-link seek (transcript hit): jump to the timestamp once metadata loads,
@@ -934,6 +966,7 @@ export function initPlayer(): void {
       if (q.index < q.parts.length - 1) {
         q.index++;
         load(true);
+        resumeAfterAdvance(); // ensure the next díl actually starts (mobile background)
       } else {
         void advanceQueue(); // last díl done → play the next queued show (or stop)
       }
