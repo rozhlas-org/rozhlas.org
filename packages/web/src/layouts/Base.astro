@@ -13,6 +13,15 @@ interface Props {
   path?: string;
 }
 const SITE = "https://rozhlas.org";
+// Build/deploy stamp. GITHUB_SHA is present for every CI step (so it's available at
+// build time without being listed in the workflow env); empty on a local build → "dev".
+// new Date() is evaluated once per build → effectively the deploy time.
+const GH_SHA = process.env.GITHUB_SHA ?? "";
+const buildLabel = GH_SHA.slice(0, 7) || "dev";
+const commitUrl = GH_SHA ? `https://github.com/rozhlas-org/rozhlas.org/commit/${GH_SHA}` : null;
+const buildAt = new Date();
+const buildDateShort = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeZone: "Europe/Prague" }).format(buildAt);
+const buildDateFull = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Prague" }).format(buildAt);
 const DEFAULT_DESC =
   "Prohledávejte a poslouchejte archiv mluveného slova Českého rozhlasu — četba na pokračování, povídky, rozhlasové hry, pohádky a dokumenty. Univerzální vyhledávání i v přepisech namluvených pořadů.";
 const { title, description, path = "/" } = Astro.props;
@@ -144,6 +153,16 @@ const jsonLd = {
         <!-- Revealed by pwa.ts only when the browser offers installation. -->
         <button id="install-app" class="site-footer__install" type="button" hidden>⤓ Instalovat aplikaci</button>
       </p>
+      <!-- Deployed build: short SHA + deploy date; tap/click to reveal details. -->
+      <details class="site-footer__build">
+        <summary>verze {buildLabel} · {buildDateShort}</summary>
+        <dl class="site-footer__build-detail">
+          <dt>Commit</dt>
+          <dd>{commitUrl ? <a href={commitUrl} target="_blank" rel="noopener">{buildLabel}</a> : buildLabel}</dd>
+          <dt>Nasazeno</dt>
+          <dd>{buildDateFull}</dd>
+        </dl>
+      </details>
     </footer>
 
     <!-- Persistent player: lives in the shell (outside #app) so SPA navigation

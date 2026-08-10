@@ -286,6 +286,29 @@ button:active,
 }
 .site-footer__install:hover { text-decoration: underline; transform: none; box-shadow: none; }
 .site-footer__install[hidden] { display: none; }
+/* deployed-build stamp — tiny, muted; expands on click/touch via <details> */
+.site-footer__build { margin-top: 10px; font-size: 11px; opacity: 0.75; }
+.site-footer__build summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-block;
+  color: var(--muted);
+}
+.site-footer__build summary::-webkit-details-marker { display: none; }
+.site-footer__build summary:hover,
+.site-footer__build[open] summary { color: var(--cyan); }
+.site-footer__build-detail {
+  margin: 8px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.site-footer__build-detail dt { color: var(--muted); }
+.site-footer__build-detail dd { margin: 0; }
+.site-footer__build-detail a { color: var(--cyan); text-decoration: none; }
+.site-footer__build-detail a:hover { text-decoration: underline; }
 
 /* ===== show grid + cards ===== */
 .show-grid {
