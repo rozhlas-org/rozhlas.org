@@ -8,6 +8,7 @@
 // pick up — no extra wiring needed here.
 
 import { api } from "./api.ts";
+import { initPlayerDebug } from "./debug.ts";
 import { attr, esc, formatDuration } from "./format.ts";
 import { getProgress, resumeStartIndex } from "./progress.ts";
 import { getSavedShow, savedToDetail } from "./offline.ts";
@@ -704,6 +705,7 @@ export function initPlayer(): void {
   queueBadge = document.getElementById("player-queue-badge")!;
   queuePanel = document.getElementById("player-queue")!;
   if (!bar || !audio) return;
+  initPlayerDebug(audio); // no-op unless ?debug=1 — captures the auto-advance trace on real devices
 
   toggleBtn.addEventListener("click", toggle);
   back15.addEventListener("click", () => skip(-15));
