@@ -234,6 +234,16 @@ async function resolveShow(slug: string): Promise<Awaited<ReturnType<typeof api.
 // Set by a deep-link (e.g. a transcript hit) so load() seeks once metadata loads.
 let pendingSeek: number | null = null;
 
+// Bounded stall recovery. How many times in a row recover() has reloaded at the same
+// stuck position with no real progress. Reset on genuine playback progress or a fresh
+// user/auto play intent; once it exceeds the cap we stop looping and pause honestly.
+let recoverTries = 0;
+let recoverPos = -1;
+function resetRecover(): void {
+  recoverTries = 0;
+  recoverPos = -1;
+}
+
 /** Sentinel `idx` for playFromSlug → smart "resume the show" (a control char can't
  *  collide with a real part idx, which is a positive number or "single"). */
 export const RESUME = " resume";
@@ -359,7 +369,10 @@ function initMediaSession(): void {
       /* this action is unsupported by the browser */
     }
   };
-  set("play", () => play());
+  set("play", () => {
+    resetRecover(); // OS "play" → fresh recovery budget (may retry a stalled position)
+    play();
+  });
   set("pause", () => audio.pause());
   set("previoustrack", () => prev());
   set("nexttrack", () => next());
@@ -416,6 +429,7 @@ function load(autoplay: boolean): void {
   if (!q) return;
   const t = q.parts[q.index]!;
   listenLogged = false; // Historie: log this díl only after it actually plays ~6s
+  resetRecover(); // new track → fresh stall-recovery budget
   audio.dataset.pkey = pkey(q.slug, t.idx); // progress.ts keys off this
   // The shell's <audio> is preload="none". Auto-advance can fire while the PWA is
   // backgrounded on mobile, where a lazy element won't fetch until foregrounded → the
@@ -477,8 +491,10 @@ function toggle(): void {
     void advanceQueue(); // nothing loaded but a queue exists → start it
     return;
   }
-  if (audio.paused) play();
-  else audio.pause();
+  if (audio.paused) {
+    resetRecover(); // user tapped play → fresh recovery budget
+    play();
+  } else audio.pause();
 }
 
 function prev(): void {
@@ -893,9 +909,25 @@ export function initPlayer(): void {
   };
   const recover = () => {
     if (recovering || !audio.src) return;
+    const pos = audio.currentTime;
+    // Count consecutive recoveries stuck at the same position. If the source can't buffer
+    // past this point (e.g. a slow IPFS-gateway range request after a seek/auto-advance),
+    // reloading in a loop just aborts each play() ("interrupted by a new load") and
+    // re-stalls — leaving a "playing" icon over silent audio (the reported mobile bug).
+    // After a few no-progress tries, stop and pause honestly so the bar + OS reflect
+    // reality; the stall is often intermittent and a later user/OS retry succeeds.
+    if (Math.abs(pos - recoverPos) < 1) recoverTries++;
+    else {
+      recoverTries = 1;
+      recoverPos = pos;
+    }
+    if (recoverTries > 3) {
+      clearStall();
+      audio.pause(); // real pause → the `pause` handler restores ▶ + Media Session "paused"
+      return;
+    }
     recovering = true;
     clearStall();
-    const pos = audio.currentTime;
     const wasPlaying = !audio.paused;
     const onMeta = () => {
       audio.removeEventListener("loadedmetadata", onMeta);
@@ -924,6 +956,10 @@ export function initPlayer(): void {
 
   audio.addEventListener("timeupdate", () => {
     clearStall(); // real progress → not stuck
+    // Clear the stall-recovery budget only on a genuine advance PAST the stuck point —
+    // not the re-seek recover() itself performs (that also fires timeupdate, and would
+    // otherwise reset the counter every cycle so it could never give up).
+    if (audio.currentTime > recoverPos + 1) resetRecover();
     if (!seeking && audio.duration) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
     timeEl.textContent = `${clock(audio.currentTime)} / ${clock(audio.duration)}`;
     transcriptOnTime(audio.currentTime); // highlight + follow the speaking line
