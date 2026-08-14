@@ -825,13 +825,13 @@ export async function showView(slug: string): Promise<ViewResult> {
   const hasTranscript =
     show.parts.some((p) => p.audio?.hasTranscript) || show.audio.some((a) => a.hasTranscript);
   const showTx = hasTranscript && !locked(); // render the transcript toggle/view?
-  const transcriptSection = hasTranscript
-    ? `<section class="transcript">
+  // The share row shares the SHOW link (not transcript content), so it renders for
+  // every show — even one with no transcript. Only the toggle/body depend on showTx.
+  const transcriptSection = `<section class="transcript">
         ${showTx ? `<button class="transcript-toggle" type="button" data-slug="${attr(show.slug)}" aria-expanded="false">Zobrazit přepis</button>` : ""}
         ${shareRow(show.slug)}
         ${showTx ? `<div class="transcript-body" hidden></div>` : ""}
-      </section>`
-    : "";
+      </section>`;
 
   return {
     title: show.title,
