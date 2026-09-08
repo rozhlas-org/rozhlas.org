@@ -42,6 +42,7 @@ import { letniCteniScraper } from "./letni-cteni/index.ts";
 import { korenyJihocestiScraper } from "./koreny-jihocesti/index.ts";
 import { tipMujrozhlasScraper } from "./tip-mujrozhlas/index.ts";
 import { pokracovaniZaPetMinutScraper } from "./pokracovani-za-pet-minut/index.ts";
+import { rozhlasovaHraScraper } from "./rozhlasova-hra/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -86,6 +87,7 @@ export const SCRAPERS: Record<string, Scraper> = {
   [korenyJihocestiScraper.key]: korenyJihocestiScraper, // Kořeny – jihočeské rodiny (České Budějovice)
   [tipMujrozhlasScraper.key]: tipMujrozhlasScraper, // Tip mujRozhlas (cross-station curation)
   [pokracovaniZaPetMinutScraper.key]: pokracovaniZaPetMinutScraper, // Pokračování za pět minut (Vltava)
+  [rozhlasovaHraScraper.key]: rozhlasovaHraScraper, // Rozhlasová hra (Dvojka radio drama)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
