@@ -44,6 +44,7 @@ import { tipMujrozhlasScraper } from "./tip-mujrozhlas/index.ts";
 import { pokracovaniZaPetMinutScraper } from "./pokracovani-za-pet-minut/index.ts";
 import { rozhlasovaHraScraper } from "./rozhlasova-hra/index.ts";
 import { betonovyLidiScraper } from "./betonovy-lidi/index.ts";
+import { stopyFaktaTajemstviScraper } from "./stopy-fakta-tajemstvi/index.ts";
 
 /** page-key → strategy. Register new sources here (PLAN §5). */
 export const SCRAPERS: Record<string, Scraper> = {
@@ -90,6 +91,7 @@ export const SCRAPERS: Record<string, Scraper> = {
   [pokracovaniZaPetMinutScraper.key]: pokracovaniZaPetMinutScraper, // Pokračování za pět minut (Vltava)
   [rozhlasovaHraScraper.key]: rozhlasovaHraScraper, // Rozhlasová hra (Dvojka radio drama)
   [betonovyLidiScraper.key]: betonovyLidiScraper, // Vladimir 518: Betonový lidi (Vltava docuseries)
+  [stopyFaktaTajemstviScraper.key]: stopyFaktaTajemstviScraper, // Stopy, fakta, tajemství... (Dvojka, Stanislav Motl)
   [waveAudiobooksScraper.key]: waveAudiobooksScraper, // audiobooks (Radio Wave)
   [iradioScraper.key]: iradioScraper, // generic podcasts
 };
