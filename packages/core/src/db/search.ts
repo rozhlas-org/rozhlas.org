@@ -84,13 +84,56 @@ export function ensureTranscriptIndex(sqlite: Database): void {
   sqlite.exec("INSERT INTO transcript_fts(transcript_fts) VALUES('rebuild');");
 }
 
-/** Escape a user query into a safe FTS5 prefix match (each term ANDed). */
-export function toFtsQuery(input: string): string {
-  const terms = input
+// Czech diacritic fold (matches the FTS tokenizer's `remove_diacritics 2`).
+const FOLD: Record<string, string> = {
+  á: "a", č: "c", ď: "d", é: "e", ě: "e", í: "i", ň: "n", ó: "o", ř: "r",
+  š: "s", ť: "t", ú: "u", ů: "u", ý: "y", ž: "z", ä: "a", ö: "o", ü: "u",
+};
+
+// Function words that carry no topic; as FTS prefix terms ("s"*, "na"*) they match
+// nearly every row, so they only add noise to an AND query.
+const STOPWORDS = new Set([
+  "a", "i", "o", "u", "v", "ve", "s", "se", "z", "ze", "k", "ke", "na", "do", "od",
+  "po", "pro", "pri", "za", "je", "to", "ten", "ta", "ty", "co", "jak", "kdo",
+  "nebo", "ale", "aby", "by", "si", "mi", "the", "of", "and",
+]);
+
+// Inflectional endings (folded), longest first. Stripping one turns a declined form
+// into a prefix shared by its siblings: drakovi → drak* (drak, draka, drakem),
+// války → valk* (válka, válku), Sherlockem → sherlock*.
+const ENDINGS = [
+  "atech", "etem", "ovi", "ych", "ich", "ach", "ech", "ami", "emi", "imi", "ymi",
+  "eho", "ymu", "emu", "em", "om", "ou", "um", "ym", "im",
+  "y", "a", "e", "i", "u", "o",
+];
+const MIN_STEM = 4; // never cut below 4 chars — short stems match too much
+
+/** Light Czech stemmer for prefix search: fold, then strip one inflectional ending. */
+export function stemTerm(word: string): string {
+  let w = "";
+  for (const ch of word.toLowerCase()) w += FOLD[ch] ?? ch;
+  if (w.length <= MIN_STEM) return w;
+  for (const e of ENDINGS) {
+    if (w.endsWith(e) && w.length - e.length >= MIN_STEM) return w.slice(0, -e.length);
+  }
+  return w;
+}
+
+/** Significant search terms of a query: folded, stemmed, stopwords dropped. Falls
+ *  back to the plain words when the query is nothing but stopwords. */
+export function searchTerms(input: string): string[] {
+  const words = input
     .toLowerCase()
-    .replace(/["()*]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter(Boolean);
+  const content = words.filter((w) => !STOPWORDS.has(stemTerm(w)));
+  return [...new Set((content.length ? content : words).map(stemTerm))];
+}
+
+/** Escape a user query into a safe FTS5 prefix match (each stemmed term ANDed). */
+export function toFtsQuery(input: string): string {
+  const terms = searchTerms(input);
   if (!terms.length) return "";
   return terms.map((t) => `"${t}"*`).join(" AND ");
 }

@@ -152,7 +152,9 @@ function ftsChunkIds(text: string, limit = 120): number[] {
   if (!q) return [];
   try {
     const rows = sqlite
-      .prepare("SELECT rowid AS id FROM transcript_fts WHERE transcript_fts MATCH ? LIMIT ?")
+      // ORDER BY rank (bm25): without it FTS5 yields rowid order, so the LIMIT kept
+      // the oldest matching chunks rather than the best ones.
+      .prepare("SELECT rowid AS id FROM transcript_fts WHERE transcript_fts MATCH ? ORDER BY rank LIMIT ?")
       .all(q, limit) as { id: number }[];
     return rows.map((r) => r.id);
   } catch {

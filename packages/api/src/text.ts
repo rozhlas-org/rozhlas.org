@@ -1,7 +1,7 @@
 // Shared text utilities for search: Czech diacritic folding, query-term
 // extraction, and highlighted excerpts. Lives in its own module so both
 // omnisearch and transcript-search can use it without a circular import.
-import { stripHtml } from "@rozhlas/core";
+import { searchTerms, stripHtml } from "@rozhlas/core";
 
 // Czech diacritic fold, ONE code point in → one out, so a folded string stays
 // index-aligned with the original (lets us match diacritic-insensitively but
@@ -39,12 +39,11 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Significant query terms (folded, >2 chars) for boosting + snippet highlighting. */
+/** Significant query terms (folded, stemmed, >2 chars) for boosting + snippet
+ *  highlighting — the same stems the FTS legs prefix-match, so "drakovi" finds and
+ *  highlights "drak" in a title just as the index matched it. */
 export function queryTerms(q: string): string[] {
-  return fold(q)
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 2);
+  return searchTerms(q).filter((w) => w.length > 2);
 }
 
 /**
