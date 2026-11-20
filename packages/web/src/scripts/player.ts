@@ -11,7 +11,7 @@ import { api } from "./api.ts";
 import { initPlayerDebug } from "./debug.ts";
 import { attr, esc, formatDuration } from "./format.ts";
 import { getProgress, resumeStartIndex } from "./progress.ts";
-import { getSavedShow, savedToDetail } from "./offline.ts";
+import { getSavedShow, playUrl, savedCids, savedToDetail } from "./offline.ts";
 import {
   initPlayerTranscript,
   closeTranscript,
@@ -82,20 +82,23 @@ function forgetNow(): void {
   }
 }
 
-/** Streamable parts of a show as a play queue, in order. */
-function buildParts(show: Awaited<ReturnType<typeof api.show>>): Track[] {
+/** Streamable parts of a show as a play queue, in order. `saved` = CIDs downloaded on
+ *  this device; their URLs are marked so the SW serves them from the stored blob. */
+function buildParts(show: Awaited<ReturnType<typeof api.show>>, saved: Set<string>): Track[] {
   if (show.parts.length) {
     return show.parts
       .filter((p) => p.audio?.streamable && p.audio.streamUrl)
       .map((p) => ({
         idx: p.idx,
         title: p.title ?? `${p.idx}. díl`,
-        streamUrl: p.audio!.streamUrl!,
+        streamUrl: playUrl(p.audio!.streamUrl!, saved),
         durationSec: p.durationSec ?? p.audio!.durationSec ?? null,
       }));
   }
   const a = show.audio.find((x) => x.streamable && x.streamUrl);
-  return a ? [{ idx: "single", title: show.title, streamUrl: a.streamUrl!, durationSec: a.durationSec ?? null }] : [];
+  return a
+    ? [{ idx: "single", title: show.title, streamUrl: playUrl(a.streamUrl!, saved), durationSec: a.durationSec ?? null }]
+    : [];
 }
 
 /** The show's streamable díly as queue parts (idx + label) — what "add all" enqueues. */
@@ -243,6 +246,21 @@ function resetRecover(): void {
   recoverTries = 0;
   recoverPos = -1;
 }
+// Wired in initPlayer (the stall machinery lives there). cancelRecovery: drop an
+// in-flight recovery reload, so a track change can't have the old díl's pending
+// re-seek land on the new one. reloadAndPlay: reload the current src at its position
+// and play — what a manual play does on an element that errored or was given up on.
+let cancelRecovery = (): void => {};
+let reloadAndPlay = (): void => {};
+
+/** User/OS play intent: fresh recovery budget; an element that errored or that
+ *  recover() gave up on won't come back from play() alone, so reload it first. */
+function resume(): void {
+  const stuck = !!audio.error || recoverTries > 3;
+  resetRecover();
+  if (stuck) reloadAndPlay();
+  else play();
+}
 
 /** Sentinel `idx` for playFromSlug → smart "resume the show" (a control char can't
  *  collide with a real part idx, which is a positive number or "single"). */
@@ -276,10 +294,10 @@ export async function playFromSlug(
     }
     return true;
   }
-  const show = await resolveShow(slug);
+  const [show, saved] = await Promise.all([resolveShow(slug), savedCids()]);
   if (!show) return false;
 
-  const parts = buildParts(show);
+  const parts = buildParts(show, saved);
   if (!parts.length) return false;
 
   // RESUME → smart start (last-played part, or advance past a finished one); else the named díl.
@@ -300,9 +318,9 @@ export async function playFromSlug(
  * the back-stack so ⏮ can step back through played díly.
  */
 async function playQueuePart(item: QueueItem): Promise<boolean> {
-  const show = await resolveShow(item.slug);
+  const [show, saved] = await Promise.all([resolveShow(item.slug), savedCids()]);
   if (!show) return false;
-  const track = buildParts(show).find((t) => String(t.idx) === String(item.idx));
+  const track = buildParts(show, saved).find((t) => String(t.idx) === String(item.idx));
   if (!track) return false;
   pushBack(); // remember whatever we were on so ⏮ can return to it
   q = { slug: item.slug, showTitle: show.title, programme: show.showName, artwork: show.artworkUrl, parts: [track], index: 0 };
@@ -333,9 +351,9 @@ async function restoreNowPlaying(): Promise<void> {
     saved = null;
   }
   if (!saved?.slug) return;
-  const show = await resolveShow(saved.slug);
+  const [show, cids] = await Promise.all([resolveShow(saved.slug), savedCids()]);
   if (!show) return;
-  const parts = buildParts(show);
+  const parts = buildParts(show, cids);
   if (!parts.length) return;
   let start = parts.findIndex((p) => String(p.idx) === String(saved!.idx));
   if (start < 0) start = 0;
@@ -369,10 +387,7 @@ function initMediaSession(): void {
       /* this action is unsupported by the browser */
     }
   };
-  set("play", () => {
-    resetRecover(); // OS "play" → fresh recovery budget (may retry a stalled position)
-    play();
-  });
+  set("play", resume); // OS "play" → fresh recovery budget (may retry a stalled position)
   set("pause", () => audio.pause());
   set("previoustrack", () => prev());
   set("nexttrack", () => next());
@@ -429,6 +444,7 @@ function load(autoplay: boolean): void {
   if (!q) return;
   const t = q.parts[q.index]!;
   listenLogged = false; // Historie: log this díl only after it actually plays ~6s
+  cancelRecovery(); // the previous díl's pending recovery must not touch this one
   resetRecover(); // new track → fresh stall-recovery budget
   audio.dataset.pkey = pkey(q.slug, t.idx); // progress.ts keys off this
   // The shell's <audio> is preload="none". Auto-advance can fire while the PWA is
@@ -491,10 +507,8 @@ function toggle(): void {
     void advanceQueue(); // nothing loaded but a queue exists → start it
     return;
   }
-  if (audio.paused) {
-    resetRecover(); // user tapped play → fresh recovery budget
-    play();
-  } else audio.pause();
+  if (audio.paused) resume(); // user tapped play → fresh recovery budget
+  else audio.pause();
 }
 
 function prev(): void {
@@ -903,10 +917,49 @@ export function initPlayer(): void {
   // element self-heals — instead of needing a manual track switch to reset it.
   let stallTimer: ReturnType<typeof setTimeout> | undefined;
   let recovering = false;
+  let onMeta: (() => void) | null = null; // the in-flight reload's metadata handler
+  let reloadGuard: ReturnType<typeof setTimeout> | undefined;
   const clearStall = () => {
     if (stallTimer) clearTimeout(stallTimer);
     stallTimer = undefined;
   };
+  const endReload = () => {
+    if (onMeta) audio.removeEventListener("loadedmetadata", onMeta);
+    onMeta = null;
+    if (reloadGuard) clearTimeout(reloadGuard);
+    reloadGuard = undefined;
+    recovering = false;
+  };
+  /** Reload the src and restore `pos` once metadata is back (then play if asked). If the
+   *  reload itself never yields metadata, `recovering` would otherwise stay set forever
+   *  and silence every later stall/error recovery — so a guard ends it and counts a try. */
+  const reloadAt = (pos: number, thenPlay: boolean) => {
+    endReload();
+    clearStall();
+    recovering = true;
+    const handler = () => {
+      endReload();
+      try {
+        if (pos > 0 && audio.duration) audio.currentTime = Math.min(pos, audio.duration - 0.5);
+      } catch {
+        /* not seekable yet */
+      }
+      if (thenPlay) play();
+    };
+    onMeta = handler;
+    audio.addEventListener("loadedmetadata", handler);
+    reloadGuard = setTimeout(() => {
+      if (onMeta !== handler) return;
+      endReload();
+      if (thenPlay) recover();
+    }, 15_000);
+    audio.load();
+  };
+  cancelRecovery = () => {
+    clearStall();
+    endReload();
+  };
+  reloadAndPlay = () => reloadAt(audio.currentTime, true);
   const recover = () => {
     if (recovering || !audio.src) return;
     const pos = audio.currentTime;
@@ -926,21 +979,7 @@ export function initPlayer(): void {
       audio.pause(); // real pause → the `pause` handler restores ▶ + Media Session "paused"
       return;
     }
-    recovering = true;
-    clearStall();
-    const wasPlaying = !audio.paused;
-    const onMeta = () => {
-      audio.removeEventListener("loadedmetadata", onMeta);
-      try {
-        if (pos > 0 && audio.duration) audio.currentTime = Math.min(pos, audio.duration - 0.5);
-      } catch {
-        /* not seekable yet */
-      }
-      if (wasPlaying) play();
-      recovering = false;
-    };
-    audio.addEventListener("loadedmetadata", onMeta);
-    audio.load();
+    reloadAt(pos, !audio.paused);
   };
   const armStall = () => {
     if (recovering) return;
@@ -952,7 +991,12 @@ export function initPlayer(): void {
   audio.addEventListener("stalled", armStall);
   audio.addEventListener("playing", clearStall);
   audio.addEventListener("pause", clearStall);
-  audio.addEventListener("error", recover);
+  // A failed load mid-recovery ends that recovery (its metadata will never come) and
+  // counts as another try, so errors stay bounded instead of being ignored.
+  audio.addEventListener("error", () => {
+    endReload();
+    recover();
+  });
 
   audio.addEventListener("timeupdate", () => {
     clearStall(); // real progress → not stuck
