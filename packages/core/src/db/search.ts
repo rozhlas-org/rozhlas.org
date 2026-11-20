@@ -39,17 +39,23 @@ DROP TRIGGER IF EXISTS shows_fts_au;
 DROP TABLE IF EXISTS shows_fts;
 `;
 
-/** (Re)create the FTS table + triggers and rebuild from existing rows. */
-export function ensureSearchIndex(sqlite: Database): void {
+/**
+ * Create the FTS table + triggers, and rebuild from existing rows only when the index
+ * is new (or was reset for a column change) or `force` is set. The triggers keep an
+ * existing index in sync, and a full rebuild of the 3 GB DB takes minutes — run on
+ * every API start it kept the API down for the whole deploy.
+ */
+export function ensureSearchIndex(sqlite: Database, force = false): void {
   // If an older index (without parts_text) exists, drop it so the new columns
-  // take effect. Rebuild is a full re-index regardless, so the drop is ~free.
+  // take effect.
   const cols = sqlite
     .prepare("SELECT name FROM pragma_table_info('shows_fts')")
     .all()
     .map((r) => (r as { name: string }).name);
-  if (cols.length && !cols.includes("parts_text")) sqlite.exec(RESET_SQL);
+  const stale = cols.length > 0 && !cols.includes("parts_text");
+  if (stale) sqlite.exec(RESET_SQL);
   sqlite.exec(FTS_SQL);
-  sqlite.exec("INSERT INTO shows_fts(shows_fts) VALUES('rebuild');");
+  if (force || stale || !cols.length) sqlite.exec("INSERT INTO shows_fts(shows_fts) VALUES('rebuild');");
 }
 
 /**
@@ -78,10 +84,12 @@ CREATE TRIGGER IF NOT EXISTS transcript_fts_au AFTER UPDATE ON transcript_chunks
 END;
 `;
 
-/** (Re)create the transcript FTS table + triggers and rebuild from existing chunks. */
-export function ensureTranscriptIndex(sqlite: Database): void {
+/** Create the transcript FTS table + triggers; rebuild from existing chunks only when
+ *  the index is new or `force` is set (triggers keep it in sync — see ensureSearchIndex). */
+export function ensureTranscriptIndex(sqlite: Database, force = false): void {
+  const exists = sqlite.prepare("SELECT 1 FROM sqlite_master WHERE name = 'transcript_fts'").get();
   sqlite.exec(TRANSCRIPT_FTS_SQL);
-  sqlite.exec("INSERT INTO transcript_fts(transcript_fts) VALUES('rebuild');");
+  if (force || !exists) sqlite.exec("INSERT INTO transcript_fts(transcript_fts) VALUES('rebuild');");
 }
 
 // Czech diacritic fold (matches the FTS tokenizer's `remove_diacritics 2`).

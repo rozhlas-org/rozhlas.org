@@ -1,11 +1,10 @@
-import { createLogger, knnShows, sqlite, toFtsQuery, type KnnHit } from "@rozhlas/core";
-import { getProvider } from "@rozhlas/embeddings";
+import { sqlite, toFtsQuery, type KnnHit } from "@rozhlas/core";
+import { embedQuery } from "./query-embed.ts";
+import { knnShowsAsync } from "./vec-pool.ts";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
-import { transcriptLegs, refineStartSec } from "./transcript-search.ts";
+import { transcriptLegs, refineStartSec, type TranscriptShowHit } from "./transcript-search.ts";
 import { parseIntent, type Intent } from "./intent.ts";
 import { buildExcerpt, fold, queryTerms } from "./text.ts";
-
-const log = createLogger("api:omnisearch");
 
 // bm25 column weights (title, description, show_name, parts_text): a term in the
 // title says far more about what a show is than one buried in a long description.
@@ -79,37 +78,55 @@ export interface OmniResult {
   ftsHits: number;
 }
 
-/**
- * Universal search: parse intent → four retrieval legs (show vector + show FTS,
- * transcript-chunk vector + transcript-chunk FTS) fused with Reciprocal Rank
- * Fusion, then nudged by obvious signals (exact title hit, popularity). Shows
- * surfaced by spoken content carry a timestamped transcript hit; others get a
- * highlighted description snippet.
- */
-export async function omnisearch(
-  query: string,
-  opts: { limit?: number; offset?: number } = {},
-): Promise<OmniResult> {
-  const limit = Math.min(Math.max(opts.limit ?? 24, 1), 48);
-  const offset = Math.max(opts.offset ?? 0, 0);
-  query = query.trim().replace(/\s+/g, " "); // strip surrounding / collapse repeated whitespace
+/** The fully ranked, diversified result for one query — everything paging needs. */
+interface Ranked {
+  intent: Intent;
+  diversified: number[];
+  map: Map<number, ShowListItem>;
+  txBest: Map<number, TranscriptShowHit>;
+  terms: string[];
+  vectorHits: number;
+  ftsHits: number;
+}
+
+// Ranking costs an embedding call plus vector scans; "Načíst další" and repeat
+// searches reuse it instead of recomputing for every page.
+const RANK_CACHE_TTL_MS = 10 * 60_000;
+const RANK_CACHE_MAX = 200;
+const rankCache = new Map<string, { at: number; ranked: Promise<Ranked> }>();
+
+function rankCached(query: string): Promise<Ranked> {
+  const key = query.toLowerCase();
+  const hit = rankCache.get(key);
+  if (hit && Date.now() - hit.at < RANK_CACHE_TTL_MS) {
+    rankCache.delete(key); // LRU: re-insert as most recent
+    rankCache.set(key, hit);
+    return hit.ranked;
+  }
+  // Cache the promise so concurrent identical searches share one computation;
+  // drop it on failure so the next attempt retries.
+  const ranked = rank(query);
+  rankCache.set(key, { at: Date.now(), ranked });
+  ranked.catch(() => rankCache.delete(key));
+  while (rankCache.size > RANK_CACHE_MAX) rankCache.delete(rankCache.keys().next().value!);
+  return ranked;
+}
+
+async function rank(query: string): Promise<Ranked> {
   const intent = await parseIntent(query);
-  const provider = getProvider();
   // What to embed: an LLM-rewritten phrase when one ran (claude/ollama), else the
   // RAW query — Voyage is multilingual and matches a full Czech sentence better than
   // keyword soup. FTS legs use the (diacritic-preserving, prefix) keyword list.
   const vectorText = intent.provider === "heuristic" ? query : intent.searchText;
   // Embed the query ONCE and feed both the show- and transcript-chunk vector legs.
   // Best-effort: if Voyage is down/429, degrade to the keyword legs instead of failing.
-  let queryVec: Float32Array | undefined;
-  try {
-    [queryVec] = await provider.embed([vectorText], "query");
-  } catch (err) {
-    log.warn("query embedding unavailable; using keyword search only", { err: String(err) });
-  }
-  const knn: KnnHit[] = queryVec ? knnShows(queryVec, 60) : [];
+  const queryVec = await embedQuery(vectorText);
+  // Vector legs run off the main thread (vec-pool) — and concurrently with each other.
+  const [knn, tx] = await Promise.all([
+    queryVec ? knnShowsAsync(queryVec, 60) : Promise.resolve([] as KnnHit[]),
+    transcriptLegs(queryVec, intent.searchText),
+  ]);
   const fIds = ftsIds(intent.searchText, 100);
-  const tx = await transcriptLegs(queryVec, intent.searchText);
 
   // Reciprocal Rank Fusion: each leg contributes 1/(K+rank), so a show ranking in
   // several legs rises. Transcript legs are slightly down-weighted — a passing
@@ -125,8 +142,9 @@ export async function omnisearch(
   tx.ftsShowIds.forEach((id, i) => add(id, TX_WEIGHT / (RRF_K + i)));
 
   // Generous candidate pool so paging + the per-programme diversity cap below have
-  // depth (we rank/diversify the whole pool, then slice the requested page).
-  const POOL = Math.max(300, (offset + limit) * 6);
+  // depth (we rank/diversify the whole pool once, cache it, then slice pages). The
+  // legs return at most ~400 distinct shows, so this keeps every candidate.
+  const POOL = 400;
   const pool = [...rrf.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, POOL)
@@ -189,6 +207,33 @@ export async function omnisearch(
     diversified.push(id);
   }
 
+  return {
+    intent,
+    diversified,
+    map,
+    txBest: tx.best,
+    terms,
+    vectorHits: knn.length,
+    ftsHits: fIds.length,
+  };
+}
+
+/**
+ * Universal search: parse intent → four retrieval legs (show vector + show FTS,
+ * transcript-chunk vector + transcript-chunk FTS) fused with Reciprocal Rank
+ * Fusion, then nudged by obvious signals (exact title hit, popularity). Shows
+ * surfaced by spoken content carry a timestamped transcript hit; others get a
+ * highlighted description snippet.
+ */
+export async function omnisearch(
+  query: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<OmniResult> {
+  const limit = Math.min(Math.max(opts.limit ?? 24, 1), 48);
+  const offset = Math.max(opts.offset ?? 0, 0);
+  query = query.trim().replace(/\s+/g, " "); // strip surrounding / collapse repeated whitespace
+  const { intent, diversified, map, txBest, terms, vectorHits, ftsHits } = await rankCached(query);
+
   const total = diversified.length;
   const pageIds = diversified.slice(offset, offset + limit);
   const snips = descriptionSnippets(pageIds, terms);
@@ -196,7 +241,7 @@ export async function omnisearch(
     const it = map.get(id)!;
     // Prefer the (actionable, timestamped) transcript hit when the show matched on
     // spoken content; otherwise fall back to the highlighted description snippet.
-    const hit = tx.best.get(id);
+    const hit = txBest.get(id);
     if (hit) {
       return {
         ...it,
@@ -214,5 +259,5 @@ export async function omnisearch(
     const snip = snips.get(id);
     return snip ? { ...it, snippet: snip } : it;
   });
-  return { intent, items, total, hasMore: offset + limit < total, vectorHits: knn.length, ftsHits: fIds.length };
+  return { intent, items, total, hasMore: offset + limit < total, vectorHits, ftsHits };
 }
