@@ -1,6 +1,7 @@
-import { createLogger, db, knnChunks, schema, sqlite, toFtsQuery, type ChunkKnnHit } from "@rozhlas/core";
+import { createLogger, db, schema, searchTerms, sqlite, toFtsQuery, type ChunkKnnHit } from "@rozhlas/core";
 import { eq, inArray } from "drizzle-orm";
-import { getProvider, chunkVectorSearch } from "@rozhlas/embeddings";
+import { embedQuery } from "./query-embed.ts";
+import { knnChunksAsync } from "./vec-pool.ts";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
 import { buildExcerpt, fold, queryTerms } from "./text.ts";
 
@@ -36,7 +37,7 @@ export async function transcriptLegs(
   let knn: ChunkKnnHit[] = [];
   if (queryVec) {
     try {
-      knn = knnChunks(queryVec, 60);
+      knn = await knnChunksAsync(queryVec, 60);
     } catch (err) {
       log.warn("chunk vector search unavailable; keyword only", { err: String(err) });
     }
@@ -148,6 +149,9 @@ export function refineStartSec(
 }
 
 function ftsChunkIds(text: string, limit = 120): number[] {
+  // 1–2 letter prefixes ("a"*) match nearly every one of ~240k chunks, and ranking them
+  // all takes most of a second on the main thread — for no useful hit.
+  if (!searchTerms(text).some((t) => t.length >= 3)) return [];
   const q = toFtsQuery(text);
   if (!q) return [];
   try {
@@ -173,13 +177,13 @@ export async function transcriptSearch(
 ): Promise<TranscriptSearchResult> {
   query = query.trim().replace(/\s+/g, " "); // strip surrounding / collapse repeated whitespace
   const k = opts.k ?? 24;
-  const provider = getProvider();
   const terms = queryTerms(query);
 
-  // Semantic leg is best-effort (Voyage 429 → keyword only), same as omnisearch.
+  // Semantic leg is best-effort (Voyage 429/slow → keyword only), same as omnisearch.
   let knn: ChunkKnnHit[] = [];
   try {
-    knn = await chunkVectorSearch(provider, query, 60);
+    const vec = await embedQuery(query);
+    if (vec) knn = await knnChunksAsync(vec, 60);
   } catch (err) {
     log.warn("chunk vector search unavailable; keyword only", { err: String(err) });
   }

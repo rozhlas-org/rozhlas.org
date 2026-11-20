@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, count } from "drizzle-orm";
-import { config, db, schema, toFtsQuery, getEmbedding, knnShows, getShowTranscriptEmbedding, knnShowsByTranscript } from "@rozhlas/core";
+import { config, db, schema, toFtsQuery, getEmbedding, getShowTranscriptEmbedding } from "@rozhlas/core";
+import { knnShowsAsync, knnShowsByTranscriptAsync } from "./vec-pool.ts";
 
 const { shows, showParts, audioFiles, artworks, people, showPeople, categories, showCategories, sources, transcripts, selections, selectionItems, categoryGroups, categoryGroupProgrammes, recommendations } =
   schema;
@@ -995,13 +996,14 @@ const SIMILAR_TX_WEIGHT = 0.8; // down-weight the (newer, dilution-prone) transc
 export async function similarShows(showId: number, limit = 8): Promise<ShowListItem[]> {
   const k = Math.max(24, limit * 6);
   const metaVec = getEmbedding(showId);
-  const metaHits = metaVec
-    ? knnShows(metaVec, k).filter((h) => h.showId !== showId && h.distance <= SIMILAR_MAX_DISTANCE)
-    : [];
   const txVec = getShowTranscriptEmbedding(showId);
-  const txHits = txVec
-    ? knnShowsByTranscript(txVec, k).filter((h) => h.showId !== showId && h.distance <= SIMILAR_TX_MAX_DISTANCE)
-    : [];
+  // Both KNN scans run off the main thread (vec-pool), concurrently.
+  const [metaKnn, txKnn] = await Promise.all([
+    metaVec ? knnShowsAsync(metaVec, k) : [],
+    txVec ? knnShowsByTranscriptAsync(txVec, k) : [],
+  ]);
+  const metaHits = metaKnn.filter((h) => h.showId !== showId && h.distance <= SIMILAR_MAX_DISTANCE);
+  const txHits = txKnn.filter((h) => h.showId !== showId && h.distance <= SIMILAR_TX_MAX_DISTANCE);
   if (!metaHits.length && !txHits.length) return [];
 
   // RRF fuse (rank-based → robust across the two different vector spaces).
