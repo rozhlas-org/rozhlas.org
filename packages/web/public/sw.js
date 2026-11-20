@@ -1,8 +1,8 @@
 // rozhlas.org service worker. App shell: network-first for navigations (never
 // stale after a deploy), cache-first for immutable hashed assets + fonts. Offline
-// audio: requests to the IPFS gateway are served from the IndexedDB blob saved by
-// offline.ts (range-capable via blob.slice) when the CID is downloaded, else from
-// the network. The API is never cached.
+// audio: gateway requests the player marked `?offline=1` (CID saved on this device)
+// are served from the IndexedDB blob saved by offline.ts (range-capable via
+// blob.slice). All other gateway traffic bypasses the SW. The API is never cached.
 // __BUILD__ is replaced with a unique id at build time (stamp-sw.ts). That makes
 // THIS file's bytes change every deploy, so the browser detects a new SW and runs
 // activate → which deletes every cache whose name !== CACHE, clearing the previous
@@ -14,17 +14,26 @@ const FONT_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com"];
 
 // --- offline audio: read the blob the page stored in IndexedDB (same DB as offline.ts) ---
 const ODB = "rozhlas-offline";
+// Bounded: if IndexedDB doesn't answer (it can wedge on a mobile PWA resumed from the
+// background) fall back to the network rather than leave the audio request hanging.
+const IDB_TIMEOUT_MS = 2000;
 function offlineAudioBlob(cid) {
   return new Promise((resolve) => {
+    setTimeout(() => resolve(null), IDB_TIMEOUT_MS);
     const r = indexedDB.open(ODB, 1);
     r.onsuccess = () => {
       const db = r.result;
-      if (!db.objectStoreNames.contains("audio")) return resolve(null);
+      if (!db.objectStoreNames.contains("audio")) {
+        db.close();
+        return resolve(null);
+      }
       const g = db.transaction("audio", "readonly").objectStore("audio").get(cid);
       g.onsuccess = () => resolve(g.result ? g.result.blob : null);
       g.onerror = () => resolve(null);
+      g.transaction.oncomplete = () => db.close();
     };
     r.onerror = () => resolve(null);
+    r.onblocked = () => resolve(null);
     // Create the same schema the page uses, in case the SW opens the DB first (e.g.
     // serving cover art from the gateway) — otherwise it'd leave a store-less DB and
     // the page's same-version open could never add the stores.
@@ -86,9 +95,12 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // IPFS audio gateway: serve a saved blob (offline) if we have it, else network.
+  // IPFS gateway: answer only URLs the player marked as saved offline, from the blob.
+  // Normal streaming (and cover art) never goes through the SW: proxying every media
+  // range request via respondWith put an IndexedDB open in front of each one, and when
+  // that hung, no díl could load again until the app was reloaded.
   if (url.hostname === "ipfs.rozhlas.org") {
-    const cid = url.pathname.split("/ipfs/")[1]?.split("/")[0];
+    const cid = url.searchParams.has("offline") && url.pathname.split("/ipfs/")[1]?.split("/")[0];
     if (cid) e.respondWith(serveAudio(req, cid));
     return;
   }

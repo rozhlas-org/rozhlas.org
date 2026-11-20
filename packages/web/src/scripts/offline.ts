@@ -1,7 +1,8 @@
 // Offline downloads: store a show's audio (one Blob per part, keyed by IPFS CID)
-// + the show's metadata in IndexedDB. The service worker (sw.js) serves the stored
-// bytes for ipfs.rozhlas.org/ipfs/<cid> requests, so saved shows play with no
-// network and the player needs no changes. The Stažené page reads the metadata.
+// + the show's metadata in IndexedDB. The player marks a saved part's gateway URL with
+// `?offline=1` (playUrl) and the service worker (sw.js) serves exactly those requests
+// from the stored bytes, so saved shows play with no network. Unmarked audio streams
+// straight from the gateway without touching the SW. The Stažené page reads the metadata.
 
 import type { ShowDetail } from "./api.ts";
 
@@ -61,6 +62,31 @@ const idbPut = (store: string, key: IDBValidKey, val: unknown) =>
   idbReq<void>(store, "readwrite", (s) => s.put(val, key));
 const idbDel = (store: string, key: IDBValidKey) => idbReq<void>(store, "readwrite", (s) => s.delete(key));
 const idbAll = <T>(store: string) => idbReq<T[]>(store, "readonly", (s) => s.getAll());
+const idbKeys = (store: string) => idbReq<IDBValidKey[]>(store, "readonly", (s) => s.getAllKeys());
+
+/** Query flag sw.js keys off: only gateway URLs carrying it are served from a saved blob.
+ *  The gateway ignores it, so a marked URL still streams if the blob has gone. */
+const OFFLINE_PARAM = "offline";
+
+/** CIDs whose audio is saved on this device. Bounded: IndexedDB can stop answering on a
+ *  mobile PWA resumed from the background, and playback must never wait on it — on
+ *  timeout or failure assume nothing is saved and stream from the network. */
+export function savedCids(timeoutMs = 1500): Promise<Set<string>> {
+  const keys = idbKeys(AUDIO)
+    .then((k) => new Set(k.map(String)))
+    .catch(() => new Set<string>());
+  const timeout = new Promise<Set<string>>((res) => setTimeout(() => res(new Set()), timeoutMs));
+  return Promise.race([keys, timeout]);
+}
+
+/** The URL to play a gateway `streamUrl` from: marked for the SW when its CID is saved. */
+export function playUrl(streamUrl: string, saved: Set<string>): string {
+  const cid = /\/ipfs\/([^/?#]+)/.exec(streamUrl)?.[1];
+  if (!cid || !saved.has(cid)) return streamUrl;
+  const u = new URL(streamUrl);
+  u.searchParams.set(OFFLINE_PARAM, "1");
+  return u.toString();
+}
 
 /** The streamable parts of a show that we'd download (díly, or the single audio). */
 export function showParts(detail: ShowDetail): SavedPart[] {
