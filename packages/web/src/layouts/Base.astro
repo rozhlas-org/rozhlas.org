@@ -82,9 +82,24 @@ const jsonLd = {
     </script>
     {/* Playback gate: hide all play UI before paint when the gate is on and this device
         isn't unlocked (no flash of play buttons). `is:inline` can't read import.meta.env,
-        so the build-time boolean is injected via define:vars. */}
-    <script is:inline define:vars={{ gate: (import.meta.env.PUBLIC_AUTH_HASH ?? "").trim().length === 64 }}>
+        so the build-time values are injected via define:vars. A share link "s odemčením"
+        (`?u=<key>`, see auth.ts withUnlock) unlocks this device first; the param is then
+        stripped so it isn't re-shared from the address bar. */}
+    <script is:inline define:vars={{
+      gate: (import.meta.env.PUBLIC_AUTH_HASH ?? "").trim().length === 64,
+      unlockKey: (import.meta.env.PUBLIC_AUTH_HASH ?? "").trim().toLowerCase().slice(0, 16),
+    }}>
       (function () {
+        try {
+          var sp = new URLSearchParams(location.search);
+          var key = sp.get("u");
+          if (key !== null) {
+            if (gate && key.toLowerCase() === unlockKey) localStorage.setItem("rozhlas:auth:v1", "1");
+            sp.delete("u");
+            var qs = sp.toString();
+            history.replaceState(history.state, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
+          }
+        } catch (e) {}
         try {
           if (gate && localStorage.getItem("rozhlas:auth:v1") !== "1") {
             document.documentElement.classList.add("no-play");

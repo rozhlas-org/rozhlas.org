@@ -1740,6 +1740,8 @@ body.has-player { padding-bottom: calc(var(--player-h, 168px) + 8px); }
 .tx-share__btn:active { transform: translate(1px, 1px); box-shadow: none; }
 .tx-share__btn.is-done { background: var(--cyan); color: var(--paper); border-color: var(--cyan); }
 .tx-share__btn svg { width: 14px; height: 14px; display: block; }
+/* "Odemčený" toggle: lit while the share buttons hand out the unlocking link */
+.tx-share__unlock[aria-pressed="true"] { background: var(--yellow); color: var(--on-yellow); }
 
 /* ===== playback gate (html.no-play) — hide every play/audio surface when locked ===== */
 html.no-play .show-card__badge,
