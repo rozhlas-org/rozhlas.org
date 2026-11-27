@@ -14,6 +14,21 @@ export function authActive(): boolean {
   return /^[0-9a-f]{64}$/.test(HASH);
 }
 
+// Share links "s odemčením" carry `?u=<key>`; Base.astro's pre-paint script unlocks the
+// recipient (same forever flag) and strips the param. The key is a prefix of the baked
+// hash — already public in the bundle — so the link unlocks without revealing the
+// password (which an unlocked device doesn't even keep).
+export const UNLOCK_PARAM = "u";
+const UNLOCK_KEY_LEN = 16;
+
+/** `url` with the unlock key appended — the gate's share-link form. */
+export function withUnlock(url: string): string {
+  if (!authActive()) return url;
+  const u = new URL(url, location.href);
+  u.searchParams.set(UNLOCK_PARAM, HASH.slice(0, UNLOCK_KEY_LEN));
+  return u.toString();
+}
+
 /** Has this browser unlocked playback (forever)? */
 export function isAuthed(): boolean {
   try {

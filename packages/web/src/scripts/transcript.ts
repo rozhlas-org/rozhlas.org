@@ -5,11 +5,13 @@
 
 import { api, type ShowTranscriptPart } from "./api.ts";
 import { attr, esc, formatDuration } from "./format.ts";
+import { authActive, isAuthed, withUnlock } from "./auth.ts";
 
 const cache = new Map<string, ShowTranscriptPart[]>();
 
 // Tiny inline glyphs (no icon font) — stroke uses currentColor so they invert.
 const LINK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 15l6-6M11 6l1-1a4 4 0 0 1 6 6l-1 1M13 18l-1 1a4 4 0 0 1-6-6l1-1"/></svg>`;
+const LOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="1"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>`;
 const SHARE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg>`;
 
 /** Copy text with a secure-context clipboard API, falling back to execCommand. */
@@ -47,7 +49,13 @@ export function shareRow(slug: string): string {
     typeof navigator !== "undefined" && "share" in navigator
       ? `<button class="tx-share__btn" type="button" data-share-native data-url="${attr(url)}" aria-label="Sdílet" title="Sdílet">${SHARE_SVG}<span class="tx-share__lbl">Sdílet</span></button>`
       : "";
-  return `<div class="transcript-share" aria-label="Sdílet">${copy}${native}</div>`;
+  // Gate on + this device unlocked → offer the link "s odemčením": when pressed, both
+  // buttons above share a URL that unlocks playback for the recipient straight away.
+  const unlock =
+    authActive() && isAuthed()
+      ? `<button class="tx-share__btn tx-share__unlock" type="button" data-share-unlock aria-pressed="false" title="Odkaz příjemci rovnou odemkne přehrávání">${LOCK_SVG}<span class="tx-share__lbl">Odemčený</span></button>`
+      : "";
+  return `<div class="transcript-share" aria-label="Sdílet">${copy}${native}${unlock}</div>`;
 }
 
 /** Clickable, timestamped segments for one part's transcript text. */
@@ -145,11 +153,20 @@ export function wireTranscript(): void {
     });
   });
 
-  // Share row under the transcript: copy-link (with feedback) + native OS share.
+  // Share row under the transcript: copy-link (with feedback) + native OS share, and the
+  // "Odemčený" toggle that switches both to the unlocking link.
   document.addEventListener("click", async (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-share-copy],[data-share-native]");
+    const t = e.target as HTMLElement;
+    const toggle = t.closest<HTMLButtonElement>("[data-share-unlock]");
+    if (toggle) {
+      toggle.setAttribute("aria-pressed", String(toggle.getAttribute("aria-pressed") !== "true"));
+      return;
+    }
+    const b = t.closest<HTMLButtonElement>("[data-share-copy],[data-share-native]");
     if (!b) return;
-    const url = b.dataset.url ?? location.href;
+    const unlocked = b.closest(".transcript-share")?.querySelector('[data-share-unlock][aria-pressed="true"]');
+    const base = b.dataset.url ?? location.href;
+    const url = unlocked ? withUnlock(base) : base;
     if (b.hasAttribute("data-share-native")) {
       try {
         await navigator.share({ title: document.title, url });
