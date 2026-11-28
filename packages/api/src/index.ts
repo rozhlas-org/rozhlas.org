@@ -10,6 +10,7 @@ import { adminDashboard } from "./admin/dashboard.tsx";
 import { adminSelections } from "./admin/selections.tsx";
 import { adminCategoryGroups } from "./admin/category-groups.tsx";
 import { adminRecommendations } from "./admin/recommendations.tsx";
+import { startCacheWarmer } from "./cache-warm.ts";
 
 const log = createLogger("api");
 const app = new Hono();
@@ -73,5 +74,6 @@ app.get(`${config.BULL_BOARD_PATH}/`, (c) => c.redirect(config.BULL_BOARD_PATH))
 mountBullBoard(app, config.BULL_BOARD_PATH, serveStatic);
 
 log.info("api listening", { port: config.API_PORT, board: config.BULL_BOARD_PATH });
+startCacheWarmer(); // keep the DB in the page cache so searches don't hit the disk
 
 export default { port: config.API_PORT, fetch: app.fetch };
