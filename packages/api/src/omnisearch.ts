@@ -1,30 +1,14 @@
 import { sqlite, toFtsQuery, type KnnHit } from "@rozhlas/core";
 import { embedQuery } from "./query-embed.ts";
-import { knnShowsAsync } from "./vec-pool.ts";
+import { ftsMatchAsync, knnShowsAsync } from "./vec-pool.ts";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
 import { transcriptLegs, refineStartSec, type TranscriptShowHit } from "./transcript-search.ts";
 import { parseIntent, type Intent } from "./intent.ts";
 import { buildExcerpt, fold, queryTerms } from "./text.ts";
 
-// bm25 column weights (title, description, show_name, parts_text): a term in the
-// title says far more about what a show is than one buried in a long description.
-const FTS_WEIGHTS = "10.0, 3.0, 2.0, 2.0";
-
-function ftsIds(text: string, limit = 100): number[] {
+async function ftsIds(text: string, limit = 100): Promise<number[]> {
   const q = toFtsQuery(text);
-  if (!q) return [];
-  try {
-    // ORDER BY relevance — without it FTS5 returns rowid order, so the RRF rank of
-    // this leg (and which 100 rows survive the LIMIT) was effectively arbitrary.
-    const rows = sqlite
-      .prepare(
-        `SELECT rowid AS id FROM shows_fts WHERE shows_fts MATCH ? ORDER BY bm25(shows_fts, ${FTS_WEIGHTS}) LIMIT ?`,
-      )
-      .all(q, limit) as { id: number }[];
-    return rows.map((r) => r.id);
-  } catch {
-    return [];
-  }
+  return q ? ftsMatchAsync("shows", q, limit) : [];
 }
 
 /** Description snippets for shows whose description contains a query term. */
@@ -67,6 +51,14 @@ function allTermsAt(folded: string, terms: string[]): number {
     last = Math.max(last, m.index);
   }
   return last;
+}
+
+/** Every query word occurs as a whole word in `folded`, in exactly the typed form. Stems
+ *  make "kometa" match "kometě"/"komety" equally; the literal form is the tie-breaker. */
+function allWordsExact(folded: string, words: string[]): boolean {
+  return words.every((w) =>
+    new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "u").test(folded),
+  );
 }
 
 export interface OmniResult {
@@ -120,13 +112,14 @@ async function rank(query: string): Promise<Ranked> {
   const vectorText = intent.provider === "heuristic" ? query : intent.searchText;
   // Embed the query ONCE and feed both the show- and transcript-chunk vector legs.
   // Best-effort: if Voyage is down/429, degrade to the keyword legs instead of failing.
-  const queryVec = await embedQuery(vectorText);
-  // Vector legs run off the main thread (vec-pool) — and concurrently with each other.
-  const [knn, tx] = await Promise.all([
-    queryVec ? knnShowsAsync(queryVec, 60) : Promise.resolve([] as KnnHit[]),
-    transcriptLegs(queryVec, intent.searchText),
+  // All four legs run off the main thread (vec-pool) and concurrently; the keyword legs
+  // don't need the embedding, so they start while Voyage is still answering.
+  const vecP = embedQuery(vectorText);
+  const [fIds, knn, tx] = await Promise.all([
+    ftsIds(intent.searchText, 100),
+    vecP.then((v) => (v ? knnShowsAsync(v, 60) : ([] as KnnHit[]))),
+    transcriptLegs(vecP, intent.searchText),
   ]);
-  const fIds = ftsIds(intent.searchText, 100);
 
   // Reciprocal Rank Fusion: each leg contributes 1/(K+rank), so a show ranking in
   // several legs rises. Transcript legs are slightly down-weighted — a passing
@@ -158,9 +151,17 @@ async function rank(query: string): Promise<Ranked> {
   const metaHit = new Set(fIds);
   const lexical = new Set([...fIds, ...tx.ftsShowIds]);
   const titlePos = new Map<number, number>();
+  const exactTitle = new Set<number>();
+  const words = fold(query)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length > 2);
   for (const id of pool) {
     const it = map.get(id);
-    if (it && terms.length) titlePos.set(id, allTermsAt(fold(it.title), terms));
+    if (!it || !terms.length) continue;
+    const folded = fold(it.title);
+    const pos = allTermsAt(folded, terms);
+    titlePos.set(id, pos);
+    if (pos >= 0 && words.length && allWordsExact(folded, words)) exactTitle.add(id);
   }
   const headline = (id: number) => {
     const p = titlePos.get(id) ?? -1;
@@ -172,6 +173,7 @@ async function rank(query: string): Promise<Ranked> {
     if (metaHit.has(id)) s += 1.5 * UNIT;
     if ((titlePos.get(id) ?? -1) >= 0) s += 2 * UNIT;
     if (headline(id)) s += 2 * UNIT;
+    if (exactTitle.has(id)) s += UNIT; // the typed word form itself, not just its stem
     if (it) s += 0.2 * UNIT * Math.min(1, Math.log10(1 + it.plays) / 3); // gentle popularity
     return s;
   };

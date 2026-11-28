@@ -1,7 +1,7 @@
 import { createLogger, db, schema, searchTerms, sqlite, toFtsQuery, type ChunkKnnHit } from "@rozhlas/core";
 import { eq, inArray } from "drizzle-orm";
 import { embedQuery } from "./query-embed.ts";
-import { knnChunksAsync } from "./vec-pool.ts";
+import { ftsMatchAsync, knnChunksAsync } from "./vec-pool.ts";
 import { showItemsByIds, type ShowListItem } from "./queries.ts";
 import { buildExcerpt, fold, queryTerms } from "./text.ts";
 
@@ -27,22 +27,21 @@ export interface TranscriptLegs {
 
 /**
  * Transcript retrieval as show-level ranked lists (+ the best chunk per show),
- * for the universal search to fuse alongside metadata. Takes a precomputed query
- * vector so the caller embeds the query once for both the show and chunk legs.
+ * for the universal search to fuse alongside metadata. Takes the caller's (pending)
+ * query embedding so the query is embedded once for both the show and chunk legs —
+ * and the keyword leg starts without waiting for it.
  */
 export async function transcriptLegs(
-  queryVec: Float32Array | undefined,
+  queryVec: Promise<Float32Array | undefined>,
   ftsText: string,
 ): Promise<TranscriptLegs> {
-  let knn: ChunkKnnHit[] = [];
-  if (queryVec) {
-    try {
-      knn = await knnChunksAsync(queryVec, 60);
-    } catch (err) {
+  const knnP = queryVec
+    .then((v) => (v ? knnChunksAsync(v, 60) : []))
+    .catch((err) => {
       log.warn("chunk vector search unavailable; keyword only", { err: String(err) });
-    }
-  }
-  const fIds = ftsChunkIds(ftsText, 120);
+      return [] as ChunkKnnHit[];
+    });
+  const [knn, fIds] = await Promise.all([knnP, ftsChunkIds(ftsText, 120)]);
   const empty: TranscriptLegs = {
     vectorShowIds: [],
     ftsShowIds: [],
@@ -148,22 +147,12 @@ export function refineStartSec(
   return chunkStart;
 }
 
-function ftsChunkIds(text: string, limit = 120): number[] {
+async function ftsChunkIds(text: string, limit = 120): Promise<number[]> {
   // 1–2 letter prefixes ("a"*) match nearly every one of ~240k chunks, and ranking them
   // all takes most of a second on the main thread — for no useful hit.
   if (!searchTerms(text).some((t) => t.length >= 3)) return [];
   const q = toFtsQuery(text);
-  if (!q) return [];
-  try {
-    const rows = sqlite
-      // ORDER BY rank (bm25): without it FTS5 yields rowid order, so the LIMIT kept
-      // the oldest matching chunks rather than the best ones.
-      .prepare("SELECT rowid AS id FROM transcript_fts WHERE transcript_fts MATCH ? ORDER BY rank LIMIT ?")
-      .all(q, limit) as { id: number }[];
-    return rows.map((r) => r.id);
-  } catch {
-    return [];
-  }
+  return q ? ftsMatchAsync("chunks", q, limit) : [];
 }
 
 /**
@@ -179,15 +168,15 @@ export async function transcriptSearch(
   const k = opts.k ?? 24;
   const terms = queryTerms(query);
 
-  // Semantic leg is best-effort (Voyage 429/slow → keyword only), same as omnisearch.
-  let knn: ChunkKnnHit[] = [];
-  try {
-    const vec = await embedQuery(query);
-    if (vec) knn = await knnChunksAsync(vec, 60);
-  } catch (err) {
-    log.warn("chunk vector search unavailable; keyword only", { err: String(err) });
-  }
-  const fIds = ftsChunkIds(query, 120);
+  // Semantic leg is best-effort (Voyage 429/slow → keyword only), same as omnisearch;
+  // the keyword leg runs alongside it.
+  const knnP = embedQuery(query)
+    .then((vec) => (vec ? knnChunksAsync(vec, 60) : []))
+    .catch((err) => {
+      log.warn("chunk vector search unavailable; keyword only", { err: String(err) });
+      return [] as ChunkKnnHit[];
+    });
+  const [knn, fIds] = await Promise.all([knnP, ftsChunkIds(query, 120)]);
 
   const scores = new Map<number, number>();
   for (const h of knn) scores.set(h.chunkId, (scores.get(h.chunkId) ?? 0) + 1 / (1 + h.distance));
